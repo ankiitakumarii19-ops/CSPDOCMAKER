@@ -9,16 +9,18 @@ Two owners, confirmed:
 
   CSP   — the CSP's own identity and whereabouts. Only they can supply these,
           so a blank one is chased with the CSP directly.
-  ORG   — the bank and Eko hierarchy around them. The CSP does not know these
-          and must never be asked to invent them.
+  ORG   — the bank and Eko hierarchy around them. Filled from INFO first;
+          only what INFO cannot answer is asked of the CSP.
 
 The order of resort for an ORG field is fixed:
 
-  1. The INFO tab, which states who covers which territory. Eight of the
-     ten are answered here and never reach a human.
-  2. The CSP's designated RM.
-  3. Every RM, when no RM can be determined. An unowned CSP is never
-     stranded — the same rule rm_resolution already applies.
+  1. The INFO tab, which states who covers which territory. AO and RBO are
+     answered here too once those columns are added to INFO.
+  2. The CSP, on WhatsApp — for whatever INFO still could not fill.
+
+  Changed 11 Oct 2026 (tracker No. 53): an RM is never asked for anything.
+  Their job is to search a CSP and choose documents; every missing detail
+  goes to the CSP, and the answer is written to the sheet.
 
 Nothing here decides whether a document can be generated; that stays derived
 from the templates. This decides only who is asked.
@@ -144,6 +146,17 @@ LABELS_HI: Dict[str, str] = {
     "has_csp_certificate": "क्या आपके पास CSP प्रमाणपत्र है?",
     "has_training_certificate": "क्या आपके पास प्रशिक्षण प्रमाणपत्र है?",
     "has_bcp": "क्या आपके पास बिजनेस निरंतरता योजना (BCP) है?",
+    # The hierarchy fields, now that a CSP may be asked for them.
+    "ao": "AO (प्रशासनिक कार्यालय)",
+    "rbo_name": "RBO का नाम",
+    "dc": "DC का नाम",
+    "dc_email": "DC की ईमेल आईडी",
+    "dc_contact": "DC का मोबाइल नंबर",
+    "lho": "LHO",
+    "rm_name": "RM का नाम",
+    "asm_name": "ASM का नाम",
+    "asm_email": "ASM की ईमेल आईडी",
+    "asm_contact": "ASM का मोबाइल नंबर",
 }
 
 # What an upload button says, when the answer was Yes.
@@ -274,6 +287,14 @@ def form_fields() -> List[str]:
     gap, so a wrong value already on file gets a chance to be fixed.
     """
     return list(CSP_EDITABLE) + list(DOCUMENTS_HELD)
+
+
+def request_fields(record) -> List[str]:
+    """Everything a CSP's link asks: their own details (all of them, for
+    checking), what they already hold, and any ORG detail INFO could not
+    fill. INFO is applied on every sync, so an ORG field still blank on the
+    record is one INFO could not answer."""
+    return form_fields() + [f for f in ORG_OWNED if _is_blank(record, f)]
 
 
 def unfillable_by_info(fields) -> List[str]:

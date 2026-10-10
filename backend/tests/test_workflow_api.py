@@ -90,7 +90,10 @@ async def test_process_creates_persisted_job_and_awaits_confirmation(client, db,
                             ValidationType.EMAIL_VALIDATION.value])
 
 
-async def test_missing_data_returns_structured_422_and_fails_job(client, db):
+async def test_missing_data_keeps_the_request_pending(client, db):
+    """Changed 11 Oct 2026 (tracker No. 53): the RM fills nothing. A
+    request with missing details is kept as PENDING_DATA, with the
+    documents chosen, and finished automatically later."""
     rm = await _user(db, "rm1@eko.co.in")
     db.add(CSPRecord(csp_id="TESTCSP002", name="No Code Csp", email="x@example.com",
                      district="Testdistrict", state="Teststate"))
@@ -99,13 +102,14 @@ async def test_missing_data_returns_structured_422_and_fails_job(client, db):
         "/api/workflows/process", headers=_auth(rm),
         json={"csp_id": "TESTCSP002", "document_types": ["csp_certificate"]},
     )
-    assert r.status_code == 422
-    detail = r.json()["detail"]
-    missing = {f["field_name"] for d in detail["missing_data"]["documents"]
-               for f in d["missing_fields"]}
-    assert missing == {"csp_code", "address"}
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["status"] == "pending_data"
+    assert body["ready_to_send"] is False
+    assert set(body["missing_fields"]) == {"CSP Code", "Address"}
     job = (await db.execute(select(ProcessingJob))).scalar_one()
-    assert job.current_state == JobState.FAILED_DATA_VALIDATION
+    assert job.current_state == JobState.PENDING_DATA
+    assert job.requested_documents == ["csp_certificate"]
 
 
 async def test_confirm_sends_only_this_jobs_documents_and_persists_email(client, db, csp):

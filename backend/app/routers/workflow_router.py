@@ -139,17 +139,33 @@ async def process_workflow(
         issues=missing_check.model_dump(mode="json") if missing_check.has_missing_data else None,
     ))
     if missing_check.has_missing_data:
-        job.current_state = JobState.FAILED_DATA_VALIDATION
-        job.error_message = f"{missing_check.total_missing_fields} required field(s) are missing."
+        # The RM's part is done: they chose the CSP and the documents. The
+        # missing details are the CSP's to supply (tracker No. 53), so the
+        # request is KEPT, not failed, and finished automatically by
+        # workers.complete_pending_requests once the sheet has the data.
+        job.current_state = JobState.PENDING_DATA
+        job.requested_documents = [dt.value for dt in request.document_types]
+        job.error_message = (
+            f"{missing_check.total_missing_fields} detail(s) missing — "
+            f"waiting for the CSP.")
         await session.commit()
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "message": job.error_message,
-                "job_id": job_id,
-                "missing_data": missing_check.model_dump(mode="json"),
-            },
-        )
+        return {
+            "job_id": job_id,
+            "csp_id": csp_id,
+            "csp_name": csp.name,
+            "status": "pending_data",
+            "message": (
+                "Some details are missing. The CSP will be asked for them on "
+                "WhatsApp. The documents will be made and sent automatically "
+                "once the details are in the sheet."),
+            "missing_fields": sorted({
+                f.field_label for d in missing_check.documents
+                for f in d.missing_fields}),
+            # The same detail the RM's card shows: what is missing, and for
+            # which document. Read-only — the RM fills nothing.
+            "missing_data": missing_check.model_dump(mode="json"),
+            "ready_to_send": False,
+        }
 
     # 3. Generate documents
     job.current_state = JobState.DOCUMENT_GENERATING

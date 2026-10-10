@@ -104,6 +104,7 @@ it — you said so.
 | 52 | 11 Oct | **Read the Authorization sheet for Super Admins:** the SuperAdmins tab says only Ankita is Super Admin; Ganesh is only an Admin. Admin and Super Admin are different | **Done** — the app now reads the SuperAdmins tab (it used a settings-file list that named Ganesh). Ganesh, who signed up on 11 Oct at 3:14 am and was wrongly made Super Admin, corrected to Admin. Checked live |
 | 53 | 11 Oct | **The RM's only job is to search an agent and choose which documents to make. The RM fills in no data — missing details go to the agent by WhatsApp** | **Decided 11 Oct:** (a) RM sees a "details missing — agent asked" message and the request stays **Pending**; when the data arrives and the sheet is updated, the documents are made automatically, **emailed and WhatsApped** to the agent. (b) Bank/organisation details (AO, RBO Name, DC/ASM where INFO can't fill) come from **new columns in the INFO sheet**. (c) **Nothing is sent to agents until WhatsApp works** — requests wait. Replaces No. 18 and the RM part of the 1 Oct field-ownership rule. Status: **To do** — tasks M1–M6; 2 questions open (M5, M6) |
 | 54 | 11 Oct | Where are the workspace changes on the login/sign-up pages? | **Built 11 Oct** — sign-up box, workspace chooser, Super Admin in the Add form. Pages compile and load; **you have not tested them yet** |
+| 55 | 11 Oct | Build the RM change. You will add AO and RBO to the INFO sheet yourself. If something is missing and INFO can't fill it, ask the agent on WhatsApp and write the answer into the sheet | **Built 11 Oct** (M1, M2, and asking the agent for everything INFO can't fill). All 777 tests pass. WhatsApp sending itself still blocked |
 
 ---
 
@@ -168,10 +169,10 @@ it — you said so.
 
 | No. | What | Status |
 |---|---|---|
-| M1 | RM screen: replace the "Data Required" form with a "details missing" message; request shows **Pending** | To do — approved 11 Oct |
-| M2 | Keep pending requests and finish them automatically when the sheet has the data: make documents, email, WhatsApp | To do |
+| M1 | RM screen: replace the "Data Required" form with a "details missing" message; request shows **Pending** | **Built 11 Oct** — read-only card, no inputs; waiting for your test |
+| M2 | Keep pending requests and finish them automatically when the sheet has the data: make documents, email, WhatsApp | **Built 11 Oct** — runs every 3 min; 5 new tests incl. no double-send. Email works; the WhatsApp message waits for WhatsApp |
 | M3 | Ask the agent for missing details on WhatsApp | **Stuck** — WhatsApp not working yet (needs B and C); you chose to wait rather than use email |
-| M4 | Read AO / RBO Name from new INFO columns | **Waiting for you** — you add the columns; Claude reads them |
+| M4 | Read AO / RBO Name from new INFO columns | **Waiting for you** — you said you'll add them (11 Oct); then Claude connects them. Until then the agent is asked for AO/RBO |
 | M5 | Where in INFO should the AO / RBO columns go, and matched by what (district? LHO?) | **Waiting for you** |
 | M6 | Certificate date for **existing** agents — INFO can't hold a per-agent date. Who gives it? | **Waiting for you** |
 
@@ -221,3 +222,4 @@ it — you said so.
 | 11 Oct 2026 | Added No. 52 (done), 53 (waiting for you), 54 (in progress) |
 | 11 Oct 2026 | Workspace screens built (W3–W5, No. 54) |
 | 11 Oct 2026 | Your answers on No. 53 recorded; tasks M1–M6 added |
+| 11 Oct 2026 | Added No. 55; RM change built (M1, M2) |

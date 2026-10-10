@@ -57,6 +57,9 @@ class JobState(str, enum.Enum):
     EMAIL_VALIDATED = "email_validated"
     READY_TO_SEND = "ready_to_send"
     AWAITING_CONFIRMATION = "awaiting_confirmation"
+    # An RM's request whose CSP is still missing details. Kept, not failed:
+    # it is finished automatically once the sheet has the data.
+    PENDING_DATA = "pending_data"
     EMAIL_SENDING = "email_sending"
     EMAIL_SENT = "email_sent"
     SMS_SENDING = "sms_sending"

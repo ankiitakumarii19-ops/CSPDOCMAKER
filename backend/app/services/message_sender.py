@@ -28,6 +28,7 @@ from typing import Dict, List, Optional, Tuple
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models.data_request import VIA_EMAIL, VIA_WHATSAPP, DataRequest
 from app.models.messaging import (
     EMAIL, PURPOSE_DATA_REQUEST, WHATSAPP, MessageChannel, MessageTemplate,
@@ -193,6 +194,14 @@ def ask_for_details(session: Session, record, *,
     channel = channel or choose_channel(session)
     template = template or choose_template(session)
 
+    if (channel.kind != WHATSAPP
+            and not get_settings().csp_data_requests_by_email):
+        # Decided 11 Oct 2026 (tracker No. 53): CSPs are asked on WhatsApp
+        # only. Until WhatsApp sending works, nobody is asked by email; the
+        # request simply waits. CSP_DATA_REQUESTS_BY_EMAIL turns email on.
+        return {"csp_id": record.csp_id, "sent": False,
+                "reason": "waiting for WhatsApp — CSPs are not asked by email"}
+
     existing = drs.open_request_for(session, record.csp_id)
     if existing is not None and existing.sent_to:
         return {"csp_id": record.csp_id, "sent": False,
@@ -211,14 +220,16 @@ def ask_for_details(session: Session, record, *,
     if existing is not None:
         request, token = existing, None
     else:
-        request, token = drs.create(session, record.csp_id, fo.form_fields())
+        request, token = drs.create(session, record.csp_id,
+                                    fo.request_fields(record))
 
     if token is None:
         # An open request whose link was never delivered. The token cannot
         # be recovered — it was only ever in the link — so a fresh one is
         # issued and the old one closed.
         drs.cancel(session, record.csp_id, "its link was never delivered")
-        request, token = drs.create(session, record.csp_id, fo.form_fields())
+        request, token = drs.create(session, record.csp_id,
+                                    fo.request_fields(record))
 
     link = drs.link_for(token)
     if not link_is_reachable(link):

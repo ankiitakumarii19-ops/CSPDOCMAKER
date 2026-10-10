@@ -56,6 +56,15 @@ def db(_engine):
 
 
 @pytest.fixture(autouse=True)
+def _email_allowed_for_these_tests(monkeypatch):
+    """These tests exercise the sending machinery through an email channel.
+    In production email is OFF for CSP requests (tracker No. 53) — see
+    test_by_default_a_csp_is_not_asked_by_email."""
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "csp_data_requests_by_email", True)
+
+
+@pytest.fixture(autouse=True)
 def _reachable(monkeypatch):
     """A link nobody can open is refused, and the default is localhost.
 
@@ -163,10 +172,15 @@ async def test_nobody_is_asked_twice_while_being_waited_on(db, sent):
 
 
 async def test_a_csp_missing_nothing_is_not_asked(db, sent):
-    # Every field the CSP owns, including the branch name and code — those
-    # are the CSP's to answer now, so a record without them is not complete.
+    # Every field the CSP owns, including the branch name and code — and,
+    # since 11 Oct 2026 (tracker No. 53), the bank/organisation details too,
+    # because the CSP is now asked for those when INFO cannot fill them.
     record = _csp(db, gender="Female", address="A", district="D", state="S",
-                  branch_name="B", branch_code="BR01", photo_url="p.png")
+                  branch_name="B", branch_code="BR01", photo_url="p.png",
+                  ao="AO", dc="DC", dc_email="dc@eko.co.in",
+                  dc_contact="9000000000", lho="Patna", rm_name="RM",
+                  asm_name="ASM", asm_email="asm@eko.co.in",
+                  asm_contact="9000000001", rbo_name="RBO")
     result = sender.ask_for_details(db, record)
     assert result["sent"] is False
     assert "nothing is missing" in result["reason"]
@@ -309,3 +323,20 @@ async def test_a_real_address_sends_normally(db, sent, monkeypatch):
     result = sender.ask_for_details(db, _csp(db))
     assert result["sent"] is True
     assert "https://csp.eko.co.in/csp/details/" in sent[0]["body"]
+
+
+
+def test_by_default_a_csp_is_not_asked_by_email(db, monkeypatch):
+    """Tracker No. 53: CSPs wait for WhatsApp rather than being emailed."""
+    from app.config import get_settings
+    from app.models.csp_record import CSPRecord
+    from app.services import message_sender
+
+    monkeypatch.setattr(get_settings(), "csp_data_requests_by_email", False)
+    record = CSPRecord(csp_id="1A-WAIT-1", name="Waiting", origin="new",
+                       email="csp@example.com", mobile="")
+    db.add(record)
+    db.commit()
+    result = message_sender.ask_for_details(db, record)
+    assert result["sent"] is False
+    assert "WhatsApp" in result["reason"]

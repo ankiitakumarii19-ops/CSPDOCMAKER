@@ -67,6 +67,14 @@ celery_app.conf.update(
                 "expires": (settings.csp_sync_interval_minutes + 2) * 60 - 5
             },
         },
+        # RM requests that were waiting for the CSP's details (No. 53).
+        "complete-pending-requests": {
+            "task": "workers.complete_pending_requests",
+            "schedule": (settings.csp_sync_interval_minutes + 2) * 60,
+            "options": {
+                "expires": (settings.csp_sync_interval_minutes + 2) * 60 - 5
+            },
+        },
         # The agents are added below, from the registry.
     },
 )
@@ -107,5 +115,6 @@ celery_app.conf.include = [
     "app.workers.auth_sync_worker",
     "app.workers.csp_sync_worker",
     "app.workers.new_csp_worker",
+    "app.workers.pending_request_worker",
     "app.workers.agent_worker",
 ]

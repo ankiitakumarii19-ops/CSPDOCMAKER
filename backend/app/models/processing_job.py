@@ -9,6 +9,7 @@ import uuid
 from datetime import datetime
 from sqlalchemy import String, Integer, DateTime, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base
 from app.workspace_context import default_workspace_id
@@ -46,6 +47,11 @@ class ProcessingJob(Base):
     requested_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id"), nullable=True,
         comment="User who initiated the job. NULL for automated new-CSP jobs."
+    )
+    # The documents the RM chose. Needed only while PENDING_DATA, so the
+    # automatic finish makes exactly what was asked for.
+    requested_documents: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True,
     )
     error_message: Mapped[str | None] = mapped_column(
         String(2000), nullable=True,

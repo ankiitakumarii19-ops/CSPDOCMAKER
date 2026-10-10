@@ -202,9 +202,11 @@ def cancel(session: Session, csp_id: str, reason: str = "") -> int:
 
 
 def fields_to_ask(record) -> List[str]:
-    """The CSP-owned fields this record is still missing.
+    """Every field this record is still missing — the CSP's own details and
+    any bank/organisation detail INFO could not fill.
 
-    Only the CSP's own details. The hierarchy around them is their RM's to
-    supply, and a CSP invited to type their own RBO would invent one.
+    Changed 11 Oct 2026 (tracker No. 53): the RM supplies nothing, so the
+    CSP is asked for AO, RBO and the rest when INFO has no answer.
     """
-    return fo.missing(record)[fo.CSP]
+    missing = fo.missing(record)
+    return missing[fo.CSP] + missing[fo.ORG]

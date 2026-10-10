@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
@@ -43,12 +43,6 @@ type Step =
   | "confirm_email"
   | "success";
 
-const INPUT_TYPE: Record<string, string> = {
-  date: "date",
-  email: "email",
-  phone: "tel",
-};
-
 function uniqueFields(data: MissingData): MissingField[] {
   const seen = new Map<string, MissingField>();
   for (const doc of data.documents) {
@@ -88,11 +82,6 @@ export default function RMDashboard() {
   const [busy, setBusy] = useState(false);
 
   const [missing, setMissing] = useState<MissingData | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [missingError, setMissingError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const photoInput = useRef<HTMLInputElement>(null);
 
   const [rmAlerts, setRmAlerts] = useState<AlertItem[]>([]);
 
@@ -143,9 +132,6 @@ export default function RMDashboard() {
     setJobId("");
     setProcessingError("");
     setMissing(null);
-    setValues({});
-    setPhoto(null);
-    setMissingError("");
   }, []);
 
   const searchCSP = async (term?: string) => {
@@ -222,6 +208,13 @@ export default function RMDashboard() {
       });
       setJobId(res.job_id);
       setRecipient(res.email_recipient ?? target.email ?? "");
+      if (res.status === "pending_data" && res.missing_data) {
+        // The RM fills nothing (tracker No. 53): the CSP is asked, and the
+        // documents are made and sent automatically once the data is in.
+        setMissing(res.missing_data as MissingData);
+        setRmStep("missing_data");
+        return;
+      }
       if (res.ready_to_send) {
         setRmStep("validating");
       } else {
@@ -229,55 +222,10 @@ export default function RMDashboard() {
         setRmStep("success");
       }
     } catch (err) {
-      const apiErr = err as ApiError;
-      const body = apiErr.data as { missing_data?: MissingData } | undefined;
-      if (apiErr.status === 422 && body?.missing_data) {
-        setMissing(body.missing_data);
-        setValues({});
-        setPhoto(null);
-        setMissingError("");
-        setRmStep("missing_data");
-      } else {
-        setProcessingError(apiErr.detail || "Processing failed.");
-        setRmStep("success");
-      }
+      setProcessingError((err as ApiError).detail || "Processing failed.");
+      setRmStep("success");
     } finally {
       setBusy(false);
-    }
-  };
-
-  const resumeGeneration = async () => {
-    if (!csp || !missing) return;
-    const fields = uniqueFields(missing);
-    const updates: Record<string, string> = {};
-    for (const field of fields) {
-      if (field.field_type === "photo") continue;
-      const value = (values[field.field_name] ?? "").trim();
-      if (value) updates[field.field_name] = value;
-    }
-    const blank = fields.filter((f) =>
-      f.field_type === "photo" ? !photo : !updates[f.field_name]
-    );
-    if (blank.length > 0) {
-      setMissingError(
-        `Still required: ${blank.map((f) => f.field_label).join(", ")}.`
-      );
-      return;
-    }
-
-    setSaving(true);
-    setMissingError("");
-    try {
-      if (photo) await api.uploadPhoto(csp.csp_id, photo);
-      if (Object.keys(updates).length > 0) {
-        await api.updateCsp(csp.csp_id, updates);
-      }
-      setMissing(null);
-      await startGeneration();
-    } catch (err) {
-      setMissingError((err as ApiError).detail || "Could not save.");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -676,7 +624,7 @@ export default function RMDashboard() {
             </div>
           )}
 
-          {/* State 3: Missing Data Form */}
+          {/* State 3: Details missing — Pending (the RM fills nothing) */}
           {rmStep === "missing_data" && missing && csp && (
             <div className="max-w-2xl mx-auto">
               <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-orange-200 dark:border-orange-900 overflow-hidden">
@@ -685,11 +633,12 @@ export default function RMDashboard() {
                     <i className="fas fa-exclamation-triangle"></i>
                   </div>
                   <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-                    Data Required
+                    Details Missing
                   </h2>
                   <p className="text-gray-600 dark:text-gray-300 mt-2 text-sm">
-                    We cannot generate the selected documents because some
-                    information is missing.
+                    The CSP will be asked for these on WhatsApp. The documents
+                    will be made and sent to them automatically once the
+                    details are in the sheet. Nothing else is needed from you.
                   </p>
                 </div>
 
@@ -716,84 +665,40 @@ export default function RMDashboard() {
                     </div>
                   </div>
                   <span className="px-2.5 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] uppercase tracking-wider rounded font-bold border border-orange-200 dark:border-orange-800">
-                    Pending Upload
+                    Pending
                   </span>
                 </div>
 
-                <div className="p-6 md:p-8 space-y-6">
-                  {missingError && (
-                    <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
-                      {missingError}
-                    </div>
-                  )}
-
+                <div className="p-6 md:p-8 space-y-3">
                   {uniqueFields(missing).map((field) => (
-                    <div className="space-y-2" key={field.field_name}>
-                      <label className="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
-                        <span>
-                          {field.field_label} <span className="text-red-500">*</span>
-                        </span>
-                        <span className="text-xs text-orange-500">
-                          <i className="fas fa-info-circle"></i> Required for{" "}
-                          {blockedBy(missing, field.field_name).join(", ")}
-                        </span>
-                      </label>
-
-                      {field.field_type === "photo" ? (
-                        <>
-                          <input
-                            ref={photoInput}
-                            type="file"
-                            accept="image/png,image/jpeg,image/webp"
-                            onChange={(e) => setPhoto(e.target.files?.[0] ?? null)}
-                            className="hidden"
-                          />
-                          <div
-                            onClick={() => photoInput.current?.click()}
-                            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors cursor-pointer"
-                          >
-                            <i className="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {photo
-                                ? photo.name
-                                : "Click to upload or drag and drop"}
-                            </p>
-                            <p className="text-xs text-gray-500 mt-1">
-                              {photo
-                                ? `${Math.round(photo.size / 1024)} KB — click to replace`
-                                : "PNG, JPG up to 5MB"}
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <input
-                          type={INPUT_TYPE[field.field_type] ?? "text"}
-                          value={values[field.field_name] ?? ""}
-                          onChange={(e) =>
-                            setValues({ ...values, [field.field_name]: e.target.value })
-                          }
-                          className="w-full px-4 py-2.5 rounded-lg border border-orange-300 dark:border-orange-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none"
-                          placeholder={`Enter ${field.field_label.toLowerCase()}`}
-                        />
-                      )}
+                    <div
+                      key={field.field_name}
+                      className="flex justify-between items-center gap-4 text-sm py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                    >
+                      <span className="font-medium text-gray-700 dark:text-gray-300">
+                        {field.field_label}
+                      </span>
+                      <span className="text-xs text-orange-500 text-right">
+                        <i className="fas fa-info-circle"></i> Needed for{" "}
+                        {blockedBy(missing, field.field_name).join(", ")}
+                      </span>
                     </div>
                   ))}
                 </div>
 
                 <div className="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
                   <div className="text-sm text-gray-500">
-                    Responsible RM:{" "}
-                    <strong className="text-gray-700 dark:text-gray-300">
-                      {user.name}
+                    Status:{" "}
+                    <strong className="text-orange-600 dark:text-orange-400">
+                      Pending — waiting for the CSP
                     </strong>
                   </div>
                   <button
-                    onClick={resumeGeneration}
-                    disabled={saving}
-                    className="px-6 py-2.5 bg-eko hover:bg-eko-dark disabled:opacity-50 text-white font-medium rounded-lg shadow-sm transition-all flex items-center gap-2"
+                    onClick={resetRM}
+                    className="px-6 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg shadow-sm transition-all flex items-center gap-2"
                   >
-                    <span>{saving ? "Saving..." : "Save & Continue"}</span>
-                    <i className="fas fa-arrow-right"></i>
+                    <i className="fas fa-arrow-left"></i>
+                    <span>Back to search</span>
                   </button>
                 </div>
               </div>

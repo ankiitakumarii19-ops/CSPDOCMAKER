@@ -100,12 +100,23 @@ async def test_a_request_for_nothing_is_refused(db_session, csp):
         svc.create(db_session, csp.csp_id, [])
 
 
-async def test_only_the_csps_own_details_are_asked_of_them(db_session):
-    """The hierarchy is the RM's to supply; a CSP would invent an RBO."""
+async def test_the_csp_is_asked_for_everything_info_could_not_fill(
+        db_session):
+    """Changed 11 Oct 2026 (tracker No. 53): an RM is never asked, so a
+    bank detail INFO cannot answer (AO, RBO) goes to the CSP."""
     blank = CSPRecord(csp_id="1A900002", name="", origin="new")
     asked = svc.fields_to_ask(blank)
-    assert set(asked) <= set(fo.CSP_OWNED)
-    assert "rbo_name" not in asked and "ao" not in asked
+    assert "rbo_name" in asked and "ao" in asked
+    assert "gender" in asked
+
+
+async def test_a_detail_info_already_filled_is_not_asked(db_session):
+    record = CSPRecord(csp_id="1A900003", name="X", origin="new",
+                       ao="Patna AO", rbo_name="RBO 1", dc="Anish Kumar")
+    asked = svc.fields_to_ask(record)
+    assert not {"ao", "rbo_name", "dc"} & set(asked)
+    link_fields = fo.request_fields(record)
+    assert "ao" not in link_fields and "lho" in link_fields
 
 
 # ---- it answers once, and expires ---------------------------------------

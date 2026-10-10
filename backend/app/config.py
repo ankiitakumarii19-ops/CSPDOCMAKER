@@ -73,6 +73,11 @@ class Settings(BaseSettings):
     google_sheets_id: str = Field(default="", alias="GOOGLE_SHEETS_ID")
     google_sheets_rm_sheet_name: str = Field(default="RMs", alias="GOOGLE_SHEETS_RM_SHEET_NAME")
     google_sheets_admin_sheet_name: str = Field(default="Admins", alias="GOOGLE_SHEETS_ADMIN_SHEET_NAME")
+    # Decided 11 Oct 2026 (tracker No. 53): a CSP is asked for missing
+    # details on WhatsApp only, and waits until WhatsApp works rather than
+    # being asked by email. Switching this on allows the email fallback.
+    csp_data_requests_by_email: bool = Field(
+        default=False, alias="CSP_DATA_REQUESTS_BY_EMAIL")
     google_sheets_super_admin_sheet_name: str = Field(
         default="SuperAdmins", alias="GOOGLE_SHEETS_SUPER_ADMIN_SHEET_NAME")
     google_sheets_sync_interval_minutes: int = Field(default=15, alias="GOOGLE_SHEETS_SYNC_INTERVAL_MINUTES")

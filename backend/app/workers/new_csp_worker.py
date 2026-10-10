@@ -163,8 +163,12 @@ def _try_photo(csp) -> bool:
     return False
 
 
-def _process_one(session, csp, document_types) -> None:
-    """Generate, store and send one complete CSP's documents."""
+def _process_one(session, csp, document_types, job=None) -> None:
+    """Generate, store and send one complete CSP's documents.
+
+    `job` is an RM's request that was waiting for data (PENDING_DATA). When
+    it is given, that job is finished; otherwise a new-CSP job is created.
+    """
     import uuid
 
     from app.models.email_document import EmailDocument
@@ -181,15 +185,20 @@ def _process_one(session, csp, document_types) -> None:
     # The automated run is a processing job like any other. Without this row
     # the admin dashboard — which counts jobs and emails — would show nothing
     # for CSPs handled automatically, understating what the system did.
-    job = ProcessingJob(
-        job_id=f"JOB-{datetime.now(timezone.utc).strftime('%Y%m%d')}-"
-               f"{uuid.uuid4().hex[:6]}",
-        csp_id=csp.csp_id,
-        workflow_type=WorkflowType.NEW_CSP,
-        current_state=JobState.DOCUMENT_GENERATING,
-        requested_by=None,   # nobody asked: the sync detected the CSP
-    )
-    session.add(job)
+    finishing_request = job is not None
+    if finishing_request:
+        job.current_state = JobState.DOCUMENT_GENERATING
+        job.error_message = None
+    else:
+        job = ProcessingJob(
+            job_id=f"JOB-{datetime.now(timezone.utc).strftime('%Y%m%d')}-"
+                   f"{uuid.uuid4().hex[:6]}",
+            csp_id=csp.csp_id,
+            workflow_type=WorkflowType.NEW_CSP,
+            current_state=JobState.DOCUMENT_GENERATING,
+            requested_by=None,   # nobody asked: the sync detected the CSP
+        )
+        session.add(job)
     session.flush()
 
     made_on = csp_mapping.effective_certificate_date(csp)
@@ -225,7 +234,8 @@ def _process_one(session, csp, document_types) -> None:
         session.flush()
 
     job.current_state = JobState.EMAIL_SENDING
-    csp.new_csp_processed_at = datetime.now(timezone.utc)
+    if not finishing_request:
+        csp.new_csp_processed_at = datetime.now(timezone.utc)
     alert_service.resolve_alerts(session, csp.csp_id)
     session.commit()
 

@@ -26,6 +26,8 @@ from app.models.sync_run import SyncRun
 from app.services import field_ownership as fo
 from app.services.agent_runner import Finding, Outcome, performs
 
+from app.services.data_request_service import fields_to_ask as drs_fields_to_ask
+
 logger = logging.getLogger(__name__)
 
 
@@ -150,15 +152,17 @@ def data_agent(session) -> Outcome:
         ))
     if need_rm:
         findings.append(Finding(
-            title=f"{len(need_rm)} record(s) need details from an RM",
-            detail="Branch, AO and RBO are bank facts the directory has no "
-                   "column for.",
+            title=f"{len(need_rm)} record(s) need details INFO could not fill",
+            detail="The CSP is asked for these on WhatsApp (an RM is never "
+                   "asked). Adding AO and RBO columns to INFO fills them "
+                   "automatically instead.",
             severity=INFO,
         ))
 
     return Outcome(
         summary=f"{len(records)} record(s): {complete} complete, "
-                f"{len(need_csp)} waiting on a CSP, {len(need_rm)} on an RM.",
+                f"{len(need_csp)} missing their own details, {len(need_rm)} "
+                f"missing details INFO could not fill.",
         findings=findings,
         detail={"total": len(records), "complete": complete,
                 "need_csp": len(need_csp), "need_rm": len(need_rm),
@@ -329,7 +333,7 @@ def communication_agent(session) -> Outcome:
     for record in records:
         if record.csp_id in asked:
             continue
-        if not fo.missing(record)[fo.CSP]:
+        if not drs_fields_to_ask(record):
             continue
         if normalize_mobile(record.mobile or ""):
             to_ask.append(record.csp_id)

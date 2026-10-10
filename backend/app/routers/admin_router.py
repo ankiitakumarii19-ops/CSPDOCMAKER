@@ -155,6 +155,8 @@ async def get_dashboard(
                 JobState.EMAIL_VALIDATED,
                 JobState.READY_TO_SEND,
                 JobState.AWAITING_CONFIRMATION,
+                # An RM request waiting for the CSP's details (No. 53).
+                JobState.PENDING_DATA,
             ])
         )
     )
