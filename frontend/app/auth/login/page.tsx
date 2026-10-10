@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 
 import BrandLogo from "../../components/BrandLogo";
 import { api } from "../../lib/api";
-import type { ApiError } from "../../lib/api";
+import type { ApiError, SignInResult, WorkspaceChoice } from "../../lib/api";
 
 /**
  * Authentication — the supplied design: navy branding panel on the left,
@@ -44,6 +44,13 @@ export default function AuthPage() {
   const [regName, setRegName] = useState("");
   const [regPassword, setRegPassword] = useState("");
   const [regRole, setRegRole] = useState("rm");
+  // Only for a Super Admin creating their own workspace.
+  const [regWorkspace, setRegWorkspace] = useState("");
+
+  // Someone in more than one workspace chooses one at every login.
+  const [choices, setChoices] = useState<WorkspaceChoice[] | null>(null);
+  const [chosen, setChosen] = useState("");
+  const [selectionToken, setSelectionToken] = useState("");
 
   // Password reset. The supplied design has a "Forgot password?" link but no
   // screen behind it; these two steps are that screen, in the same markup.
@@ -159,6 +166,9 @@ export default function AuthPage() {
         name: regName,
         password: regPassword,
         requested_role: regRole,
+        ...(regRole === "super_admin" && regWorkspace.trim()
+          ? { workspace_name: regWorkspace.trim() }
+          : {}),
       });
       setEmail(regEmail);
       setDigits(Array(6).fill(""));
@@ -227,32 +237,71 @@ export default function AuthPage() {
     setLoading(true);
     try {
       const res = await api.verifyOtp({ email, otp });
+      if (res.verified && res.choose_workspace && res.workspaces) {
+        setChoices(res.workspaces);
+        setChosen(res.workspaces[0]?.id ?? "");
+        setSelectionToken(res.selection_token ?? "");
+        return;
+      }
       if (!res.verified || !res.access_token) {
         setError("That code was not accepted.");
         return;
       }
-      api.setToken(res.access_token);
-      try {
-        if (res.refresh_token) {
-          sessionStorage.setItem("refresh_token", res.refresh_token);
-        }
-        sessionStorage.setItem(
-          "user",
-          JSON.stringify({ email, role: res.role, name: res.name })
-        );
-      } catch {
-        /* private browsing */
-      }
-      router.replace(
-        res.role === "admin" || res.role === "super_admin"
-          ? "/admin"
-          : "/rm"
-      );
+      finishSignIn(res);
     } catch (err) {
       setError((err as ApiError).detail || "Verification failed.");
     } finally {
       setLoading(false);
     }
+  };
+
+  const enterWorkspace = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const res = await api.selectWorkspace({
+        selection_token: selectionToken,
+        workspace_id: chosen,
+      });
+      if (!res.access_token) {
+        setError("Could not open that workspace.");
+        return;
+      }
+      finishSignIn(res);
+    } catch (err) {
+      setError((err as ApiError).detail || "Could not open that workspace.");
+      // An expired choice cannot be retried: start the login again.
+      if ((err as ApiError).status === 401) {
+        setChoices(null);
+        setOtpStep(false);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const finishSignIn = (res: SignInResult) => {
+    api.setToken(res.access_token!);
+    try {
+      if (res.refresh_token) {
+        sessionStorage.setItem("refresh_token", res.refresh_token);
+      }
+      sessionStorage.setItem(
+        "user",
+        JSON.stringify({
+          email,
+          role: res.role,
+          name: res.name,
+          workspace_id: res.workspace_id,
+          workspace_name: res.workspace_name,
+        })
+      );
+    } catch {
+      /* private browsing */
+    }
+    router.replace(
+      res.role === "admin" || res.role === "super_admin" ? "/admin" : "/rm"
+    );
   };
 
   const otpBoxes = (
@@ -370,8 +419,66 @@ export default function AuthPage() {
             </div>
           )}
 
+          {/* Choose a workspace — only for someone in more than one */}
+          {choices && (
+            <div>
+              <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
+                Choose a workspace
+              </h2>
+              <div className="space-y-3">
+                {choices.map((w) => (
+                  <label
+                    key={w.id}
+                    className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                      chosen === w.id
+                        ? "border-eko bg-eko-light dark:bg-eko/10"
+                        : "border-gray-300 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="workspace"
+                      checked={chosen === w.id}
+                      onChange={() => setChosen(w.id)}
+                      className="accent-eko"
+                    />
+                    <span className="flex-1 text-gray-900 dark:text-white font-medium">
+                      {w.name}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {w.role === "super_admin"
+                        ? "Super Admin"
+                        : w.role === "admin"
+                        ? "Administrator"
+                        : "RM"}
+                    </span>
+                  </label>
+                ))}
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setChoices(null);
+                      setOtpStep(false);
+                      setRegisterStep(1);
+                    }}
+                    className="w-1/3 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-all"
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={enterWorkspace}
+                    disabled={loading || !chosen}
+                    className="w-2/3 py-2.5 bg-eko hover:bg-eko-dark disabled:opacity-50 text-white font-medium rounded-lg transition-all"
+                  >
+                    {loading ? "Opening..." : "Continue"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Login Form */}
-          {authTab === "login" && !otpStep && resetStep === 0 && (
+          {!choices && authTab === "login" && !otpStep && resetStep === 0 && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
                 Welcome back
@@ -432,7 +539,7 @@ export default function AuthPage() {
           )}
 
           {/* Forgot password — ask for the address */}
-          {authTab === "login" && resetStep === 1 && (
+          {!choices && authTab === "login" && resetStep === 1 && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
                 Reset your password
@@ -475,7 +582,7 @@ export default function AuthPage() {
           )}
 
           {/* Forgot password — code and new password */}
-          {authTab === "login" && resetStep === 2 && (
+          {!choices && authTab === "login" && resetStep === 2 && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
                 Choose a new password
@@ -529,7 +636,7 @@ export default function AuthPage() {
           )}
 
           {/* Login — OTP */}
-          {authTab === "login" && otpStep && resetStep === 0 && (
+          {!choices && authTab === "login" && otpStep && resetStep === 0 && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
                 Verify it&apos;s you
@@ -583,7 +690,7 @@ export default function AuthPage() {
           )}
 
           {/* Register Form */}
-          {authTab === "register" && (
+          {!choices && authTab === "register" && (
             <div>
               <h2 className="text-2xl font-bold mb-6 text-gray-900 dark:text-white">
                 Create an account
@@ -643,6 +750,26 @@ export default function AuthPage() {
                       </option>
                     </select>
                   </div>
+                  {regRole === "super_admin" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Workspace name
+                      </label>
+                      <input
+                        type="text"
+                        value={regWorkspace}
+                        onChange={(e) => setRegWorkspace(e.target.value)}
+                        maxLength={100}
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none dark:text-white"
+                        placeholder="e.g. Patna Pilot"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        A new, empty workspace is created for you. Leave this
+                        blank only if you are listed as a Super Admin of Eko
+                        SBI Kiosk CSP.
+                      </p>
+                    </div>
+                  )}
                   <button
                     onClick={doRegister}
                     disabled={loading}

@@ -57,7 +57,7 @@ export default function AccessControl() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
-  const [role, setRole] = useState<"rm" | "admin">("rm");
+  const [role, setRole] = useState<"rm" | "admin" | "super_admin">("rm");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -90,7 +90,10 @@ export default function AccessControl() {
       setNotice(
         r.action === "reactivated"
           ? `${r.email} was already listed and has been reactivated.`
-          : `${r.email} added as ${r.role.toUpperCase()}. ${r.note ?? ""}`
+          : `${r.email} added as ${r.role.toUpperCase()}. ${r.note ?? ""}` +
+              (r.sheet === "not updated"
+                ? ` They can sign up now. The Authorization sheet was not updated: ${r.sheet_note ?? ""}`
+                : "")
       );
       setEmail("");
       setName("");
@@ -242,11 +245,16 @@ export default function AccessControl() {
               </label>
               <select
                 value={role}
-                onChange={(e) => setRole(e.target.value as "rm" | "admin")}
+                onChange={(e) =>
+                  setRole(e.target.value as "rm" | "admin" | "super_admin")
+                }
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-eko"
               >
                 <option value="rm">RM — works their own CSPs</option>
                 <option value="admin">Admin — dashboards only</option>
+                <option value="super_admin">
+                  Super Admin — runs this workspace, adds people
+                </option>
               </select>
             </div>
           </div>
