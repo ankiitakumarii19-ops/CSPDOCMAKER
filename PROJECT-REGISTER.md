@@ -100,6 +100,7 @@ it — you said so.
 | 48 | 11 Oct | **Super Admins create workspaces.** A Super Admin creates a workspace and adds other Super Admins, Admins or RMs to it. Anyone new who signs up as a Super Admin gets their **own empty workspace**, and cannot see any other workspace unless a Super Admin there adds them. | **Decided 11 Oct:** (a) Yes, turn workspaces on — **replaces the "no separation" part of No. 47**. (b) The present workspace is renamed **"Eko SBI Kiosk CSP"**; every new Super Admin is asked to **name their own** workspace. (c) Anyone with an @eko.co.in or @ekosupport.in email may sign up as a Super Admin and get a new workspace — **changes No. 11** for Super Admins only. (d) Super Admins add Super Admins, Admins and RMs **inside the app**; the Authorization sheet keeps working for Eko SBI Kiosk CSP only. Status: **Waiting for you** — screen designs shown 11 Oct, need approval (W1–W8) |
 | 49 | 11 Oct | Give me the login page so I can test everything myself | **Done** — app started on this laptop: http://localhost:3000/auth/login. Workspace screens not built yet, so those can't be tested on screen |
 | 50 | 11 Oct | You reported: Access screen crashes ("Cannot read properties of undefined (reading 'length')") | **Fixed** — Claude's mistake: the access data was changed for workspaces without the screen. Data put back in the shape the screen expects; a test now guards it. Checked live |
+| 51 | 11 Oct | The two Ganesh Kumar rows (ganesh.kumar@eko.co.in and ganesh.kumar@ekosupport.in) are **different and both correct** | Noted — not a duplicate; nothing to change |
 
 ---
 
@@ -202,3 +203,4 @@ it — you said so.
 | 11 Oct 2026 | Workspaces built behind the scenes and tested (W1, W2, W6, W7, W8 done). Screens still to do |
 | 11 Oct 2026 | Added No. 49: app started for your own testing |
 | 11 Oct 2026 | Added No. 50: Access screen crash fixed |
+| 11 Oct 2026 | Added No. 51: the two Ganesh Kumar entries are both correct |
