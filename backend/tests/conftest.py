@@ -82,7 +82,8 @@ async def db(migrated_db):
         await session.execute(text(
             "TRUNCATE audit_logs, validation_results, sms_jobs, email_jobs, "
             "stored_documents, document_jobs, processing_jobs, csp_records, "
-            "users, authorization_records RESTART IDENTITY CASCADE"
+            "users, authorization_records, workspace_members "
+            "RESTART IDENTITY CASCADE"
         ))
         await session.commit()
         yield session
@@ -127,6 +128,63 @@ def stub_pdf_conversion(monkeypatch):
 
 @pytest.fixture
 async def client(migrated_db):
+    import httpx
+    from app.main import app
+    transport = httpx.ASGITransport(app=_AutoMember(app))
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        yield c
+
+
+# ---- signed-in test users are members of the test workspace -------------
+#
+# Every request is now checked against `workspace_members`. Most tests mint
+# a token for a made-up user and care about something else entirely, so the
+# `client` fixture makes that user a member of the default workspace, with
+# the role on their token — exactly what signing up would have done.
+# Tests about membership itself use `strict_client`, which does none of this.
+
+class _AutoMember:
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            auth = dict(scope.get("headers") or []).get(b"authorization", b"")
+            if auth.lower().startswith(b"bearer "):
+                await _ensure_member(auth.split(b" ", 1)[1].decode().strip())
+        await self.app(scope, receive, send)
+
+
+async def _ensure_member(token: str) -> None:
+    from sqlalchemy import select
+    from app.database import async_session_factory
+    from app.models.enums import UserRole
+    from app.models.workspace_member import WorkspaceMember
+    from app.services import jwt_service
+    from app.workspace_context import all_workspaces
+
+    claims = jwt_service.decode_token(token) or {}
+    email, role = (claims.get("sub") or "").lower(), claims.get("role")
+    if not email or role not in {r.value for r in UserRole} or claims.get("ws"):
+        return
+    async with async_session_factory() as session:
+        with all_workspaces():
+            row = (await session.execute(select(WorkspaceMember).where(
+                WorkspaceMember.workspace_id == DEFAULT_WORKSPACE_ID,
+                WorkspaceMember.email == email))).scalars().first()
+            if row is None:
+                session.add(WorkspaceMember(
+                    workspace_id=DEFAULT_WORKSPACE_ID, email=email,
+                    role=UserRole(role), active=True))
+            elif row.role.value != role or not row.active:
+                row.role, row.active = UserRole(role), True
+            else:
+                return
+            await session.commit()
+
+
+@pytest.fixture
+async def strict_client(migrated_db):
     import httpx
     from app.main import app
     transport = httpx.ASGITransport(app=app)

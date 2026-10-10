@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.models.user import User
+from app.workspace_context import all_workspaces
 from app.models.enums import UserRole, AccountStatus
 from app.services import google_sheets_service
 
@@ -47,8 +48,11 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
     """Fetch a user by email from the database."""
     try:
-        result = await db.execute(select(User).where(User.email == email))
-        return result.scalar_one_or_none()
+        # An email is unique across ALL workspaces, and at sign-in nobody
+        # has chosen a workspace yet — so this lookup is never filtered.
+        with all_workspaces():
+            result = await db.execute(select(User).where(User.email == email))
+            return result.scalar_one_or_none()
     except Exception as e:
         logger.error(
             "auth_service.get_user_by_email: DB query failed for %s: %s: %s",
@@ -57,12 +61,29 @@ async def get_user_by_email(db: AsyncSession, email: str) -> Optional[User]:
         raise
 
 
+async def _ensure_eko_member(db, email: str, name: str, role) -> None:
+    """Make sure this person is a member of Eko SBI Kiosk CSP."""
+    from app.models.workspace_member import WorkspaceMember
+    from app.services import workspace_service
+
+    eko = await workspace_service.eko_workspace(db)
+    if eko is None:
+        return
+    if await workspace_service.membership(db, email, eko.id) is None:
+        db.add(WorkspaceMember(
+            workspace_id=eko.id, email=email.strip().lower(), name=name,
+            role=role, active=True,
+        ))
+        await db.flush()
+
+
 async def signup_user(
     db: AsyncSession,
     email: str,
     name: str,
     password: str,
     requested_role: str,
+    workspace_name: Optional[str] = None,
 ) -> Tuple[bool, str, Optional[User]]:
     """Create a new user account after verifying Google Sheet authorization.
 
@@ -98,49 +119,67 @@ async def signup_user(
         )
         return False, "An account with this email already exists.", None
 
-    # 3. Authorization.
-    #
-    # A Super Admin is authorized by configuration, not by the sheet: they
-    # are the person who connects a workspace's sheets in the first place,
-    # so requiring them to already be listed in one is circular.
+    # 3. Authorization. Four ways in, checked in this order.
+    from app.services import workspace_service
+
+    home_workspace_id = None   # None = the Eko workspace (the default)
+    new_workspace_name = None
+    invited = None
+    authorized, sheet_data = False, None
+
     if settings.is_super_admin(email):
+        # (a) A configured Super Admin runs Eko SBI Kiosk CSP, as before.
         requested_role = "super_admin"
-        authorized, sheet_data = True, None
+        authorized = True
         logger.info(
             "auth_service.signup_user: %s is a configured Super Admin", email,
         )
+    elif requested_role == "super_admin":
+        # (b) Anyone on an allowed domain may create their OWN workspace.
+        # It starts empty and sees nothing of any other workspace.
+        problem = workspace_service.name_problem(workspace_name or "")
+        if problem:
+            return False, problem, None
+        if await workspace_service.name_taken(db, workspace_name):
+            return False, (
+                "A workspace with that name already exists. Please choose "
+                "another name."
+            ), None
+        new_workspace_name = workspace_service.clean_name(workspace_name)
+        authorized = True
     else:
-        if requested_role == "super_admin":
-            # Nobody talks their way into this role through the signup form.
-            logger.warning(
-                "auth_service.signup_user: %s asked for super_admin and is "
-                "not configured as one", email,
-            )
-            return False, (
-                "Your email is not configured as a Super Admin."
-            ), None
-        try:
-            authorized, sheet_data = google_sheets_service.check_authorization(
-                email, requested_role,
-            )
-        except RuntimeError as e:
-            logger.error(
-                "auth_service.signup_user: Google Sheets authorization check "
-                "failed for %s: %s", email, e,
-            )
-            return False, (
-                "Authorization verification is temporarily unavailable. "
-                "Please try again later or contact your administrator."
-            ), None
+        # (c) A Super Admin added them in the app, to any workspace.
+        for member, ws in await workspace_service.memberships(db, email):
+            if member.role.value == requested_role:
+                invited = (member, ws)
+                break
+        if invited:
+            authorized = True
+            home_workspace_id = invited[1].id
+        else:
+            # (d) Listed in Eko's Authorization sheet, exactly as before.
+            try:
+                authorized, sheet_data = (
+                    google_sheets_service.check_authorization(
+                        email, requested_role))
+            except RuntimeError as e:
+                logger.error(
+                    "auth_service.signup_user: Google Sheets authorization "
+                    "check failed for %s: %s", email, e,
+                )
+                return False, (
+                    "Authorization verification is temporarily unavailable. "
+                    "Please try again later or contact your administrator."
+                ), None
 
     if not authorized:
         logger.info(
-            "auth_service.signup_user: %s not authorized as %s in Google Sheet",
+            "auth_service.signup_user: %s not authorized as %s",
             email, requested_role,
         )
         return False, (
-            f"Your email ({email}) is not authorized for the '{requested_role}' role. "
-            f"Please contact your administrator to be added to the authorization sheet."
+            f"Your email ({email}) has not been added as '{requested_role}'. "
+            f"Please ask a Super Admin to add you."
         ), None
 
     # 4. Get the mobile number from the sheet row. The authorization sheet
@@ -165,8 +204,21 @@ async def signup_user(
             account_status=AccountStatus.PENDING,
             password_hash=hash_password(password),
         )
-        db.add(user)
-        await db.flush()  # Get the ID assigned without committing
+        if new_workspace_name:
+            ws = await workspace_service.create_workspace(
+                db, new_workspace_name, email, name)
+            home_workspace_id = ws.id
+        if home_workspace_id is None:
+            eko = await workspace_service.eko_workspace(db)
+            home_workspace_id = eko.id if eko else None
+        if home_workspace_id is not None:
+            user.workspace_id = home_workspace_id
+        with all_workspaces():
+            db.add(user)
+            await db.flush()  # Get the ID assigned without committing
+            if not new_workspace_name and not invited:
+                # Configured Super Admin or sheet-listed: a member of Eko.
+                await _ensure_eko_member(db, email, name, role)
 
         logger.info(
             "auth_service.signup_user: user created: %s (role=%s, id=%s)",

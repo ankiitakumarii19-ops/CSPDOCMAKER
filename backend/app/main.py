@@ -150,7 +150,7 @@ _UNSCOPED_PATHS = ("/api/csp-form", "/api/auth", "/health", "/docs", "/openapi")
 async def _set_workspace(request, call_next):
     from app.database import async_session_factory
     from app.services import jwt_service
-    from app.workspace_context import resolve_for_email, workspace
+    from app.workspace_context import workspace
 
     path = request.url.path
     if any(path.startswith(prefix) for prefix in _UNSCOPED_PATHS):
@@ -170,18 +170,42 @@ async def _set_workspace(request, call_next):
     if not email:
         return await call_next(request)
 
+    # The token names the workspace chosen at sign-in, and the role held
+    # there. Both are re-checked against the database on EVERY request, so
+    # removing someone, or changing their role, takes effect at once rather
+    # than when their token expires.
+    #
+    # A signed-in request that cannot be placed in a workspace is REFUSED.
+    # Letting it through would run it unfiltered — across every workspace.
+    from fastapi.responses import JSONResponse
+    from app.services import workspace_service
+
+    def refuse(code: int, message: str):
+        return JSONResponse(status_code=code, content={"detail": message})
+
     try:
         async with async_session_factory() as session:
-            workspace_id = await resolve_for_email(session, email)
+            chosen = claims.get("ws")
+            if chosen:
+                member = await workspace_service.membership(
+                    session, email, chosen)
+            else:
+                # A token from before workspaces were chosen at sign-in.
+                # Accepted only when there is exactly one place it can mean.
+                found = await workspace_service.memberships(session, email)
+                member = found[0][0] if len(found) == 1 else None
     except Exception as e:
-        logger.warning("Could not resolve a workspace for %s: %s: %s",
-                       email, type(e).__name__, e)
-        workspace_id = None
+        logger.error("Could not check workspace membership for %s: %s: %s",
+                     email, type(e).__name__, e)
+        return refuse(503, "Please try again in a moment.")
 
-    if workspace_id is None:
-        return await call_next(request)
+    if member is None:
+        return refuse(403, "You no longer have access to this workspace. "
+                           "Please log in again.")
+    if member.role.value != claims.get("role"):
+        return refuse(401, "Your role has changed. Please log in again.")
 
-    with workspace(workspace_id):
+    with workspace(member.workspace_id):
         return await call_next(request)
 
 

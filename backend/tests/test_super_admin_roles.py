@@ -138,8 +138,10 @@ async def test_an_empty_list_makes_nobody_a_super_admin(monkeypatch):
     assert not settings.is_super_admin("anyone@eko.co.in")
 
 
-async def test_signup_refuses_to_hand_out_the_role(db, monkeypatch):
-    """Nobody talks their way into Super Admin through the signup form."""
+async def test_signup_as_super_admin_needs_a_workspace_name(db, monkeypatch):
+    """Changed 11 Oct 2026 (tracker No. 48). Anyone on an allowed domain may
+    sign up as a Super Admin — but only of a NEW workspace they name. Without
+    a name there is nothing to be Super Admin of, so it is refused."""
     from app.services import auth_service
 
     settings = get_settings()
@@ -150,7 +152,7 @@ async def test_signup_refuses_to_hand_out_the_role(db, monkeypatch):
         password="x", requested_role="super_admin",
     )
     assert ok is False
-    assert "not configured as a Super Admin" in message
+    assert "workspace name" in message
     assert user is None
 
 

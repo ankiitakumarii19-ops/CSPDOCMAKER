@@ -63,12 +63,12 @@ class GrantRequest(BaseModel):
     email: EmailStr
     name: str = Field(..., min_length=1)
     mobile: str = ""
-    role: str = Field(..., pattern="^(rm|admin)$")
+    role: str = Field(..., pattern="^(rm|admin|super_admin)$")
 
 
 class RevokeRequest(BaseModel):
     email: EmailStr
-    role: str = Field(..., pattern="^(rm|admin)$")
+    role: str = Field("rm", pattern="^(rm|admin|super_admin)$")
 
 
 def _tab(role: str) -> str:
@@ -144,8 +144,7 @@ def _write_cell(tab: str, row_number: int, column: int, value: str) -> None:
 
 # ---- endpoints -----------------------------------------------------------
 
-@router.get("")
-async def list_access(
+async def _sheet_people(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("super_admin")),
 ):
@@ -217,8 +216,7 @@ async def login_history_for(
     }
 
 
-@router.post("/grant", status_code=status.HTTP_201_CREATED)
-async def grant_access(
+async def _grant_in_sheet(
     request: GrantRequest,
     user=Depends(require_role("super_admin")),
 ):
@@ -293,8 +291,7 @@ async def grant_access(
                     f"or immediately after a sync."}
 
 
-@router.post("/revoke")
-async def revoke_access(
+async def _revoke_in_sheet(
     request: RevokeRequest,
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("super_admin")),
@@ -355,3 +352,172 @@ async def sync_now(user=Depends(require_role("super_admin"))):
             status.HTTP_502_BAD_GATEWAY,
             f"Could not start a sync: {type(e).__name__}. Is the worker "
             f"running?")
+
+
+# ---- workspace membership: the source of truth for who may sign in --------
+#
+# Adding and removing people now happens here, per workspace. For Eko SBI
+# Kiosk CSP the Authorization sheet is ALSO updated, as before — but a sheet
+# that cannot be written no longer stops the person being added; the answer
+# says so instead.
+
+from app.models.enums import UserRole  # noqa: E402
+from app.models.workspace import Workspace  # noqa: E402
+from app.models.workspace_member import WorkspaceMember  # noqa: E402
+from app.services import workspace_service  # noqa: E402
+from app.workspace_context import require_workspace_id  # noqa: E402
+
+CARRIED_OVER = "Created the workspace, or carried over"
+
+
+def _role(value: str) -> UserRole:
+    return {"rm": UserRole.RM, "admin": UserRole.ADMIN,
+            "super_admin": UserRole.SUPER_ADMIN}[value]
+
+
+@router.get("")
+async def list_access(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("super_admin")),
+):
+    """Everyone in this workspace, grouped by the Super Admin who added them."""
+    workspace_id = require_workspace_id()
+    ws = (await session.execute(
+        select(Workspace).where(Workspace.id == workspace_id))).scalars().one()
+    members = (await session.execute(
+        select(WorkspaceMember).order_by(
+            WorkspaceMember.role, WorkspaceMember.email))).scalars().all()
+    accounts = {
+        u.email.lower(): u for u in
+        (await session.execute(select(User))).scalars().all()
+    }
+    people = []
+    for m in members:
+        account = accounts.get(m.email)
+        people.append({
+            "email": m.email,
+            "name": m.name or (account.name if account else None),
+            "mobile": account.mobile if account else None,
+            "role": m.role.value,
+            "active": m.active,
+            "added_by": m.added_by_email,
+            "added_at": m.created_at.isoformat() if m.created_at else None,
+            "registered": account is not None,
+            "last_login": account.last_login_at.isoformat()
+                          if account and account.last_login_at else None,
+        })
+
+    groups: dict = {}
+    for p in people:
+        groups.setdefault(p["added_by"] or CARRIED_OVER, []).append(p["email"])
+
+    result = {
+        "workspace": {"id": str(ws.id), "name": ws.name},
+        "people": people,
+        "total": len(people),
+        "by_super_admin": groups,
+        "source": "This workspace",
+    }
+    if await workspace_service.is_eko(session, workspace_id):
+        # Still shown: who the Authorization sheet lists, as before.
+        result["sheet"] = await _sheet_people(session=session, user=user)
+    return result
+
+
+@router.post("/grant", status_code=status.HTTP_201_CREATED)
+async def grant_access(
+    request: GrantRequest,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("super_admin")),
+):
+    """Add someone to THIS workspace as a Super Admin, Admin or RM."""
+    settings = get_settings()
+    if not settings.email_domain_allowed(request.email):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            f"Only {settings.allowed_email_domains_text} addresses can be "
+            f"given access.",
+        )
+    workspace_id = require_workspace_id()
+    email = str(request.email).strip().lower()
+    by = _who(user).lower()
+    existing = (await session.execute(
+        select(WorkspaceMember).where(WorkspaceMember.email == email)
+    )).scalars().first()
+    if existing is not None:
+        action = "reactivated" if not existing.active else "updated"
+        existing.active = True
+        existing.role = _role(request.role)
+        existing.name = request.name.strip() or existing.name
+        existing.added_by_email = by
+    else:
+        action = "added"
+        session.add(WorkspaceMember(
+            workspace_id=workspace_id, email=email,
+            name=request.name.strip(), role=_role(request.role),
+            active=True, added_by_email=by,
+        ))
+    await session.commit()
+    logger.info("access_router.grant_access: %s %s as %s by %s",
+                email, action, request.role, by)
+
+    answer = {"email": email, "role": request.role, "active": True,
+              "action": action, "added_by": by}
+    if (request.role in ("rm", "admin")
+            and await workspace_service.is_eko(session, workspace_id)):
+        try:
+            await _grant_in_sheet(request=request, user=user)
+            answer["sheet"] = "updated"
+        except HTTPException as e:
+            answer["sheet"] = "not updated"
+            answer["sheet_note"] = e.detail
+    return answer
+
+
+@router.post("/revoke")
+async def revoke_access(
+    request: RevokeRequest,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("super_admin")),
+):
+    """Remove someone's access to THIS workspace. Their record is kept."""
+    email = str(request.email).strip().lower()
+    if email == _who(user).lower():
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "You cannot remove your own access.")
+    workspace_id = require_workspace_id()
+    member = (await session.execute(
+        select(WorkspaceMember).where(WorkspaceMember.email == email)
+    )).scalars().first()
+    if member is None or not member.active:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"{email} is not an active member here.")
+    if member.role is UserRole.SUPER_ADMIN:
+        others = (await session.execute(
+            select(WorkspaceMember).where(
+                WorkspaceMember.role == UserRole.SUPER_ADMIN,
+                WorkspaceMember.active.is_(True),
+                WorkspaceMember.email != email))).scalars().all()
+        if not others:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "This is the workspace's only Super Admin. Add another "
+                "before removing them.")
+    member.active = False
+    await session.commit()
+    logger.info("access_router.revoke_access: %s removed by %s",
+                email, _who(user))
+
+    answer = {"email": email, "role": member.role.value, "active": False,
+              "action": "revoked"}
+    if (member.role in (UserRole.RM, UserRole.ADMIN)
+            and await workspace_service.is_eko(session, workspace_id)):
+        try:
+            await _revoke_in_sheet(
+                request=RevokeRequest(email=email, role=member.role.value),
+                session=session, user=user)
+            answer["sheet"] = "updated"
+        except HTTPException as e:
+            answer["sheet"] = "not updated"
+            answer["sheet_note"] = e.detail
+    return answer

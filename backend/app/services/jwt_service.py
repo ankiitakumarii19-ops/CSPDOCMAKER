@@ -116,3 +116,29 @@ def verify_access_token(token: str) -> Optional[dict]:
         logger.debug("jwt_service.verify_access_token: 'sub' claim missing")
         return None
     return payload
+
+
+# ---- choosing a workspace at sign-in -------------------------------------
+#
+# Someone in more than one workspace has proved who they are (password and
+# OTP) but not yet said where they are going. This token records only the
+# first half. It is good for nothing except POST /api/auth/select-workspace,
+# and only for a few minutes.
+
+SELECTION_MINUTES = 5
+
+
+def create_selection_token(email: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=SELECTION_MINUTES)
+    return jwt.encode(
+        {"sub": email, "exp": expire, "type": "workspace-select"},
+        settings.jwt_secret_key, algorithm=settings.jwt_algorithm,
+    )
+
+
+def verify_selection_token(token: str) -> Optional[str]:
+    """The email the token was issued to, or None if it is not valid."""
+    payload = decode_token(token)
+    if not payload or payload.get("type") != "workspace-select":
+        return None
+    return payload.get("sub")

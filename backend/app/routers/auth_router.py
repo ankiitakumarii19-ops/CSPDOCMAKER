@@ -29,8 +29,12 @@ from app.schemas.auth import (
     PasswordResetConfirm,
     PasswordResetRequest,
     PasswordResetResponse,
+    WorkspaceChoice,
+    WorkspaceSelectRequest,
 )
 from app.models.enums import AccountStatus, UserRole
+from app.models.workspace_member import WorkspaceMember
+from app.services import workspace_service
 from app.services import auth_service, jwt_service, otp_service
 from app.services import login_throttle
 from app.services import email_service
@@ -73,6 +77,7 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             name=request.name,
             password=request.password,
             requested_role=request.requested_role.value,
+            workspace_name=request.workspace_name,
         )
     except Exception as e:
         logger.error(
@@ -263,47 +268,117 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
         db, user,
         address=http_request.client.host if http_request.client else None)
 
-    # Configuration decides who is a Super Admin, and it is read at every
-    # login rather than only at signup — so adding someone to the list, or
-    # removing them, takes effect the next time they sign in rather than
-    # requiring the account to be recreated.
+    # Configuration decides who is a Super Admin OF EKO SBI KIOSK CSP, and
+    # it is read at every login — so adding someone to the list, or removing
+    # them, takes effect the next time they sign in. It says nothing about
+    # any other workspace: a Super Admin who created their own workspace is
+    # one there because they created it, not because of this list.
     settings = get_settings()
-    if settings.is_super_admin(user.email):
-        if user.role is not UserRole.SUPER_ADMIN:
-            logger.info(
-                "auth_router.verify_otp: %s promoted to Super Admin by "
-                "configuration", user.email,
-            )
-            user.role = UserRole.SUPER_ADMIN
-    elif user.role is UserRole.SUPER_ADMIN:
-        # Taken off the list: they stop being one immediately.
-        logger.info(
-            "auth_router.verify_otp: %s is no longer a configured Super "
-            "Admin — demoted to Admin", user.email,
-        )
-        user.role = UserRole.ADMIN
+    eko = await workspace_service.eko_workspace(db)
+    if eko is not None:
+        eko_member = await workspace_service.membership(db, user.email, eko.id)
+        if settings.is_super_admin(user.email):
+            if eko_member is None:
+                db.add(WorkspaceMember(
+                    workspace_id=eko.id, email=user.email.lower(),
+                    name=user.name, role=UserRole.SUPER_ADMIN, active=True))
+            elif eko_member.role is not UserRole.SUPER_ADMIN:
+                logger.info("auth_router.verify_otp: %s promoted to Super "
+                            "Admin of Eko by configuration", user.email)
+                eko_member.role = UserRole.SUPER_ADMIN
+        elif (eko_member is not None
+              and eko_member.role is UserRole.SUPER_ADMIN
+              and eko_member.added_by_email is None):
+            # Taken off the list: they stop being one immediately. A Super
+            # Admin who was ADDED in the app (added_by_email set) is not
+            # governed by the list, so is left alone.
+            logger.info("auth_router.verify_otp: %s is no longer a "
+                        "configured Super Admin — demoted to Admin in Eko",
+                        user.email)
+            eko_member.role = UserRole.ADMIN
+        await db.flush()
 
-    # Issue tokens
+    if (user.workspace_id is not None
+            and not await workspace_service.has_any_membership(
+                db, user.email)):
+        # An account older than memberships. Removed people still have an
+        # (inactive) row, so this can never bring someone back.
+        db.add(WorkspaceMember(
+            workspace_id=user.workspace_id, email=user.email.lower(),
+            name=user.name, role=user.role, active=True))
+        await db.flush()
+
+    choices = await workspace_service.memberships(db, user.email)
+    if not choices:
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of any workspace. Please ask a "
+                   "Super Admin to add you.",
+        )
+    await db.commit()
+
+    if len(choices) > 1:
+        # Asked every time, as agreed: no workspace is assumed.
+        return OTPVerifyResponse(
+            verified=True,
+            name=user.name,
+            choose_workspace=True,
+            workspaces=[WorkspaceChoice(id=str(ws.id), name=ws.name,
+                                        role=m.role) for m, ws in choices],
+            selection_token=jwt_service.create_selection_token(user.email),
+        )
+
+    member, ws = choices[0]
+    return _issue_tokens(user, member, ws)
+
+
+def _issue_tokens(user, member, ws) -> OTPVerifyResponse:
+    """Real tokens, bound to one workspace and the role held there."""
     token_data = {
         "sub": user.email,
-        "role": user.role.value,
+        "role": member.role.value,
         "name": user.name,
+        "ws": str(ws.id),
     }
-    access_token = jwt_service.create_access_token(token_data)
-    refresh_token = jwt_service.create_refresh_token(token_data)
-
-    logger.info(
-        "auth_router.verify_otp: tokens issued for %s (role=%s)",
-        request.email, user.role.value,
-    )
-
+    logger.info("auth_router: tokens issued for %s in %s (role=%s)",
+                user.email, ws.slug, member.role.value)
     return OTPVerifyResponse(
         verified=True,
-        access_token=access_token,
-        refresh_token=refresh_token,
-        role=user.role,
+        access_token=jwt_service.create_access_token(token_data),
+        refresh_token=jwt_service.create_refresh_token(token_data),
+        role=member.role,
         name=user.name,
+        workspace_id=str(ws.id),
+        workspace_name=ws.name,
     )
+
+
+@router.post("/select-workspace", response_model=OTPVerifyResponse)
+async def select_workspace(request: WorkspaceSelectRequest,
+                           db: AsyncSession = Depends(get_db)):
+    """Second half of signing in for someone in several workspaces."""
+    email = jwt_service.verify_selection_token(request.selection_token)
+    if not email:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This sign-in has expired. Please log in again.",
+        )
+    member = await workspace_service.membership(db, email,
+                                                request.workspace_id)
+    if member is None:
+        # Same answer whether the workspace does not exist or is not theirs.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not a member of that workspace.",
+        )
+    user = await auth_service.get_user_by_email(db, email)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Please log in again.")
+    ws = next(w for m, w in await workspace_service.memberships(db, email)
+              if m.id == member.id)
+    return _issue_tokens(user, member, ws)
 
 
 @router.post("/resend-otp")

@@ -20,7 +20,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.celery_app import celery_app
-from app.workers.workspace_runner import for_each_workspace
+from app.workers.workspace_runner import for_configured_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ _KEEP_IF_SHEET_BLANK = {"photo_url"}
     max_retries=3,
     default_retry_delay=60,
 )
-@for_each_workspace
+@for_configured_workspace
 def sync_csp_data(self):
     """Sync CSP data from the Google Sheet into the local database."""
     from sqlalchemy import create_engine, select, func

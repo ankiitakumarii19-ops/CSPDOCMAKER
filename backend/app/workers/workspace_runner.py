@@ -51,7 +51,7 @@ def active_workspaces():
         engine.dispose()
 
 
-def for_each_workspace(fn):
+def for_each_workspace(fn, *, configured_only=False):
     """Run this task once per active workspace, inside that workspace.
 
     The wrapped function keeps its own signature and simply runs with the
@@ -59,9 +59,12 @@ def for_each_workspace(fn):
     """
     @wraps(fn)
     def run(*args, **kwargs):
+        from app.models.workspace import DEFAULT_SLUG
         from app.workspace_context import workspace
 
         workspaces = active_workspaces()
+        if configured_only:
+            workspaces = [w for w in workspaces if w[1] == DEFAULT_SLUG]
         if not workspaces:
             logger.warning(
                 "%s: there are no active workspaces, so there is nothing to "
@@ -106,3 +109,13 @@ def for_each_workspace(fn):
         return {"workspaces": len(workspaces), "results": results}
 
     return run
+
+
+def for_configured_workspace(fn):
+    """Run this task only for the workspace that owns the configured sheets.
+
+    The Google Sheet ids in the environment are Eko SBI Kiosk CSP's. A task
+    that reads them must never run inside any other workspace: it would copy
+    Eko's CSPs and people into a stranger's workspace within a minute.
+    """
+    return for_each_workspace(fn, configured_only=True)

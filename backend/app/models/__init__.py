@@ -13,6 +13,7 @@ from app.models.messaging import (
 from app.models.agent import AgentFinding, AgentRun, AgentState
 from app.models.user import User
 from app.models.authorization_record import AuthorizationRecord
+from app.models.workspace_member import WorkspaceMember
 from app.models.csp_record import CSPRecord
 from app.models.processing_job import ProcessingJob
 from app.models.document_job import DocumentJob
@@ -28,6 +29,7 @@ from app.models.data_request import DataRequest
 from app.models.document_template import DocumentTemplate
 
 __all__ = [
+    "WorkspaceMember",
     "Workspace",
     "DataSource",
     "Dashboard",

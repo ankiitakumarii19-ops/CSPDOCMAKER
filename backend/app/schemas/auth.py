@@ -15,6 +15,8 @@ class SignupRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     password: str = Field(..., min_length=8, max_length=128)
     requested_role: UserRole = Field(..., description="Role requested — backend verifies against Google Sheet")
+    # Only for a Super Admin creating their own workspace.
+    workspace_name: Optional[str] = Field(None, max_length=100)
 
 
 class SignupResponse(BaseModel):
@@ -48,6 +50,18 @@ class ResendOTPRequest(BaseModel):
     email: EmailStr
 
 
+class WorkspaceChoice(BaseModel):
+    """One workspace a person may enter, as shown on the chooser."""
+    id: str
+    name: str
+    role: UserRole
+
+
+class WorkspaceSelectRequest(BaseModel):
+    selection_token: str
+    workspace_id: str
+
+
 class OTPVerifyRequest(BaseModel):
     """OTP verification request."""
     email: EmailStr
@@ -62,6 +76,13 @@ class OTPVerifyResponse(BaseModel):
     token_type: str = "bearer"
     role: Optional[UserRole] = None
     name: Optional[str] = None
+    workspace_id: Optional[str] = None
+    workspace_name: Optional[str] = None
+    # Set instead of the tokens when the person belongs to more than one
+    # workspace: they choose, then exchange selection_token for real tokens.
+    choose_workspace: bool = False
+    workspaces: Optional[list[WorkspaceChoice]] = None
+    selection_token: Optional[str] = None
 
 
 class PasswordResetRequest(BaseModel):

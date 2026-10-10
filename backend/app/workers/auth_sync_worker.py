@@ -13,7 +13,7 @@ import logging
 from datetime import datetime, timezone
 
 from app.celery_app import celery_app
-from app.workers.workspace_runner import for_each_workspace
+from app.workers.workspace_runner import for_configured_workspace
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
     max_retries=3,
     default_retry_delay=60,
 )
-@for_each_workspace
+@for_configured_workspace
 def sync_authorization(self):
     """Refresh authorization_records from the RMs and Admins tabs."""
     from sqlalchemy import create_engine, select

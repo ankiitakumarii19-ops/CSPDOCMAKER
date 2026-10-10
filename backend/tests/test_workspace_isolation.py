@@ -193,7 +193,7 @@ async def test_every_table_holding_customer_data_is_scoped():
         "AuthorizationRecord", "CSPRecord", "Dashboard", "DataRequest",
         "DataSource", "DocumentTemplate", "EmailJob", "MessageCampaign",
         "MessageChannel", "MessageTemplate", "ProcessingJob", "RMAlert",
-        "StoredDocument", "SyncRun", "User",
+        "StoredDocument", "SyncRun", "User", "WorkspaceMember",
     }
     # DashboardWidget is deliberately absent: it is reached only through the
     # dashboard that owns it, which is scoped. Denormalising the workspace

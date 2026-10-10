@@ -38,7 +38,7 @@ from app.database import Base
 # The workspace every existing row belongs to. The system ran for one
 # customer before workspaces existed, and all of that data is theirs.
 DEFAULT_SLUG = "sbi-kiosk-csp"
-DEFAULT_NAME = "SBI Kiosk CSP"
+DEFAULT_NAME = "Eko SBI Kiosk CSP"
 
 # Where a workspace's generated documents are kept.
 STORAGE_POSTGRES = "postgres"
