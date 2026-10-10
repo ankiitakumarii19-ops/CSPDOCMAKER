@@ -1,0 +1,42 @@
+version: "3.9"
+
+services:
+  # ---- PostgreSQL Database ----
+  postgres:
+    image: postgres:16-alpine
+    container_name: cspdocmaker-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cspdocmaker
+      POSTGRES_USER: cspdocmaker
+      POSTGRES_PASSWORD: cspdocmaker_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cspdocmaker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---- Redis (Job Queue + OTP Cache) ----
+  redis:
+    image: redis:7-alpine
+    container_name: cspdocmaker-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local

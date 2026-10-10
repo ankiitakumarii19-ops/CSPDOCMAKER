@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSPdocMaker | Eko Financial Infrastructure</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        eko: {
+                            DEFAULT: '#00B259',
+                            dark: '#00964b',
+                            light: '#e6f7ef',
+                        },
+                        navy: {
+                            800: '#1e293b',
+                            900: '#0f172a',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        /* Custom scrollbar for enterprise feel */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+
+<body x-data="appState()" :class="{ 'dark': theme === 'dark' }" class="font-sans antialiased text-gray-800 bg-gray-50 dark:bg-navy-900 dark:text-gray-200 transition-colors duration-300 min-h-screen flex flex-col">
+
+    <!-- MAIN APP CONTAINER -->
+    <div class="flex-grow flex flex-col h-screen overflow-hidden">
+        
+        <!-- ========================================== -->
+        <!-- AUTHENTICATION VIEW -->
+        <!-- ========================================== -->
+        <template x-if="currentRoute === 'auth'">
+            <div class="flex h-full w-full">
+                <!-- Left: Branding Graphic (Hidden on mobile) -->
+                <div class="hidden lg:flex w-1/2 bg-navy-900 relative items-center justify-center overflow-hidden">
+                    <div class="absolute inset-0 opacity-20">
+                        <svg class="h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none"><path d="M0,100 C30,60 70,60 100,0 L100,100 Z" fill="#00B259"></path></svg>
+                    </div>
+                    <div class="relative z-10 text-center px-12">
+                        <div class="flex items-center justify-center gap-3 mb-6">
+                            <div class="w-12 h-12 bg-eko rounded-lg flex items-center justify-center text-white text-2xl font-bold">E</div>
+                            <h1 class="text-4xl font-bold text-white tracking-tight">CSPdocMaker</h1>
+                        </div>
+                        <p class="text-gray-300 text-lg max-w-md mx-auto">Financial Infrastructure for Bharat. Seamlessly manage and generate compliance documents for your Customer Service Points.</p>
+                    </div>
+                </div>
+
+                <!-- Right: Auth Forms -->
+                <div class="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white dark:bg-gray-900">
+                    <div class="w-full max-w-md">
+                        <!-- Theme Toggle in Auth -->
+                        <div class="absolute top-6 right-6">
+                            <button @click="toggleTheme()" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-gray-500 dark:text-gray-400">
+                                <i class="fas" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+                            </button>
+                        </div>
+
+                        <!-- Header -->
+                        <div class="text-center mb-8 lg:hidden">
+                            <div class="flex items-center justify-center gap-2 mb-2">
+                                <div class="w-8 h-8 bg-eko rounded border flex items-center justify-center text-white font-bold">E</div>
+                                <h1 class="text-2xl font-bold text-gray-900 dark:text-white">CSPdocMaker</h1>
+                            </div>
+                        </div>
+
+                        <!-- Auth Tabs -->
+                        <div class="flex space-x-1 bg-gray-100 dark:bg-gray-800 p-1 rounded-xl mb-8">
+                            <button @click="authTab = 'login'" :class="authTab === 'login' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" class="w-1/2 py-2.5 text-sm font-medium rounded-lg transition-all">Login</button>
+                            <button @click="authTab = 'register'" :class="authTab === 'register' ? 'bg-white dark:bg-gray-700 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" class="w-1/2 py-2.5 text-sm font-medium rounded-lg transition-all">Create Account</button>
+                        </div>
+
+                        <!-- Login Form -->
+                        <div x-show="authTab === 'login'" x-transition.opacity>
+                            <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Welcome back</h2>
+                            <div class="space-y-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email Address</label>
+                                    <input type="email" value="rm@eko.in" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none transition-all" placeholder="name@eko.in">
+                                </div>
+                                <div>
+                                    <div class="flex justify-between items-center mb-1">
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                                        <a href="#" class="text-xs text-eko font-medium hover:underline">Forgot password?</a>
+                                    </div>
+                                    <input type="password" value="password" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none transition-all" placeholder="••••••••">
+                                </div>
+                                
+                                <div class="pt-2 flex gap-3">
+                                    <button @click="login('rm')" class="w-1/2 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg shadow-sm shadow-green-500/30 transition-all flex justify-center items-center gap-2">
+                                        <span>Login as RM</span> <i class="fas fa-arrow-right text-xs"></i>
+                                    </button>
+                                    <button @click="login('admin')" class="w-1/2 py-2.5 bg-navy-800 hover:bg-navy-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-medium rounded-lg shadow-sm transition-all flex justify-center items-center gap-2">
+                                        <span>Login Admin</span> <i class="fas fa-shield-alt text-xs"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Register Form Simulation -->
+                        <div x-show="authTab === 'register'" x-transition.opacity x-cloak>
+                            <h2 class="text-2xl font-bold mb-6 text-gray-900 dark:text-white">Create an account</h2>
+                            
+                            <div x-show="registerStep === 1">
+                                <div class="space-y-4">
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Official Email</label>
+                                        <input type="email" class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none" placeholder="name@eko.in">
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Select Role</label>
+                                        <select class="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none">
+                                            <option>Relationship Manager (RM)</option>
+                                            <option>Administrator</option>
+                                        </select>
+                                    </div>
+                                    <button @click="registerStep = 2" class="w-full mt-4 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg transition-all">Continue to OTP</button>
+                                </div>
+                            </div>
+
+                            <div x-show="registerStep === 2" x-cloak>
+                                <div class="space-y-4">
+                                    <div class="p-3 bg-eko-light dark:bg-eko/10 text-eko-dark dark:text-eko rounded-lg text-sm mb-4">
+                                        <i class="fas fa-check-circle mr-2"></i> Email domain verified.
+                                    </div>
+                                    <div>
+                                        <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Enter OTP sent to email</label>
+                                        <div class="flex gap-2">
+                                            <input type="text" maxlength="1" class="w-12 h-12 text-center text-xl font-bold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none">
+                                            <input type="text" maxlength="1" class="w-12 h-12 text-center text-xl font-bold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none">
+                                            <input type="text" maxlength="1" class="w-12 h-12 text-center text-xl font-bold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none">
+                                            <input type="text" maxlength="1" class="w-12 h-12 text-center text-xl font-bold rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none">
+                                        </div>
+                                    </div>
+                                    <div class="flex gap-3 mt-6">
+                                        <button @click="registerStep = 1" class="w-1/3 py-2.5 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-all">Back</button>
+                                        <button @click="login('rm')" class="w-2/3 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg transition-all">Verify & Login</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+        </template>
+
+
+        <!-- ========================================== -->
+        <!-- RM DASHBOARD VIEW -->
+        <!-- ========================================== -->
+        <template x-if="currentRoute === 'rm'">
+            <div class="flex flex-col h-full bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
+                <!-- Global Top Nav -->
+                <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0 z-20">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 bg-eko rounded flex items-center justify-center text-white font-bold text-sm">E</div>
+                        <span class="font-bold text-lg hidden sm:block text-gray-900 dark:text-white">CSPdocMaker <span class="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">RM Portal</span></span>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <!-- Notifications Dropdown -->
+                        <div class="relative" @click.outside="alertsMenu = false">
+                            <button @click="alertsMenu = !alertsMenu" class="relative text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors">
+                                <i class="far fa-bell text-xl"></i>
+                                <span x-show="unreadAlerts > 0" class="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full" x-text="unreadAlerts"></span>
+                            </button>
+                            
+                            <!-- Dropdown Menu -->
+                            <div x-show="alertsMenu" x-cloak class="absolute top-10 right-0 w-80 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                                <div class="px-4 py-2.5 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+                                    <span class="font-bold text-sm text-gray-800 dark:text-white">Action Required</span>
+                                    <span class="text-xs bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400 px-2 py-0.5 rounded-full font-bold" x-text="unreadAlerts + ' New'"></span>
+                                </div>
+                                <div class="max-h-80 overflow-y-auto">
+                                    <template x-for="alert in rmAlerts" :key="alert.id">
+                                        <div @click="openAlert(alert)" class="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors" :class="!alert.read ? 'bg-orange-50/30 dark:bg-orange-900/10' : ''">
+                                            <div class="flex justify-between items-start mb-1">
+                                                <div class="font-bold text-sm text-gray-900 dark:text-white" x-text="alert.cspName"></div>
+                                                <div class="text-xs font-semibold text-gray-500 bg-gray-100 dark:bg-gray-900 px-1.5 py-0.5 rounded" x-text="alert.cspId"></div>
+                                            </div>
+                                            <div class="text-xs text-orange-600 dark:text-orange-400 font-medium mt-1.5"><i class="fas fa-exclamation-triangle mr-1"></i> Missing: <span x-text="alert.missing"></span></div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <button @click="toggleTheme()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                            <i class="fas" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+                        </button>
+                        <div class="h-8 w-px bg-gray-200 dark:bg-gray-700 mx-2"></div>
+                        <div class="flex items-center gap-3 cursor-pointer group relative" @click="logoutMenu = !logoutMenu" @click.outside="logoutMenu = false">
+                            <div class="text-right hidden sm:block">
+                                <div class="text-sm font-semibold text-gray-900 dark:text-white">Rahul Kumar</div>
+                                <div class="text-xs text-gray-500">RM - Delhi NCR</div>
+                            </div>
+                            <div class="w-9 h-9 rounded-full bg-eko text-white flex items-center justify-center font-bold">RK</div>
+                            <!-- Logout Dropdown -->
+                            <div x-show="logoutMenu" x-cloak class="absolute top-12 right-0 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1">
+                                <button @click="logout()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                    <i class="fas fa-sign-out-alt mr-2"></i> Sign Out
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <!-- RM Main Scrollable Area -->
+                <main class="flex-grow overflow-y-auto p-4 sm:p-8">
+                    <div class="max-w-5xl mx-auto space-y-6">
+
+                        <!-- State 1: Dashboard & Search -->
+                        <div x-show="rmStep === 'dashboard' || rmStep === 'search_result'">
+                            
+                            <!-- Search Bar -->
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 mb-6">
+                                <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 uppercase tracking-wider">Search CSP</label>
+                                <div class="flex gap-3">
+                                    <div class="relative flex-grow">
+                                        <i class="fas fa-search absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                                        <input type="text" x-model="searchQuery" @keyup.enter="searchCSP()" class="w-full pl-11 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none transition-all text-lg" placeholder="Enter CSP ID (e.g. CSP100234)">
+                                    </div>
+                                    <button @click="searchCSP()" class="px-6 py-3 bg-navy-800 hover:bg-navy-900 dark:bg-eko dark:hover:bg-eko-dark text-white font-medium rounded-lg shadow-sm transition-all whitespace-nowrap">
+                                        Search
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Search Result / Details (Shown after search) -->
+                            <div x-show="rmStep === 'search_result'" x-transition x-cloak>
+                                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                    
+                                    <!-- Left Column: CSP Details Card -->
+                                    <div class="lg:col-span-1 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                        <div class="bg-gray-50 dark:bg-gray-900/50 p-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                            <h3 class="font-semibold text-gray-900 dark:text-white"><i class="far fa-id-card text-eko mr-2"></i> CSP Details</h3>
+                                            <span class="px-2 py-1 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 text-xs rounded font-medium border border-green-200 dark:border-green-800">Active</span>
+                                        </div>
+                                        <div class="p-4 flex flex-col items-center border-b border-gray-200 dark:border-gray-700">
+                                            <div class="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-full mb-3 flex items-center justify-center overflow-hidden">
+                                                <i class="fas fa-user text-3xl text-gray-400"></i>
+                                            </div>
+                                            <h4 class="font-bold text-lg text-gray-900 dark:text-white" x-text="mockCSP.name"></h4>
+                                            <p class="text-sm text-gray-500 font-medium" x-text="mockCSP.id"></p>
+                                        </div>
+                                        <div class="p-4 space-y-3 text-sm">
+                                            <div class="flex justify-between"><span class="text-gray-500">Branch</span> <span class="font-medium text-gray-900 dark:text-white text-right" x-text="mockCSP.branch"></span></div>
+                                            <div class="flex justify-between"><span class="text-gray-500">Location</span> <span class="font-medium text-gray-900 dark:text-white text-right" x-text="mockCSP.location"></span></div>
+                                            <div class="flex justify-between"><span class="text-gray-500">Mobile</span> <span class="font-medium text-gray-900 dark:text-white" x-text="mockCSP.mobile"></span></div>
+                                            <div class="flex justify-between"><span class="text-gray-500">Email</span> <span class="font-medium text-gray-900 dark:text-white" x-text="mockCSP.email"></span></div>
+                                            <div class="pt-2 mt-2 border-t border-gray-100 dark:border-gray-700 flex justify-between"><span class="text-gray-500">Assigned RM</span> <span class="font-medium text-gray-900 dark:text-white" x-text="mockCSP.rm"></span></div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Right Column: Document Selection -->
+                                    <div class="lg:col-span-2 bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 flex flex-col">
+                                        <h3 class="font-semibold text-gray-900 dark:text-white mb-4 text-lg">Select Documents to Generate</h3>
+                                        
+                                        <div class="space-y-3 flex-grow">
+                                            <template x-for="(doc, index) in documentTypes" :key="index">
+                                                <label class="flex items-center p-4 border border-gray-200 dark:border-gray-700 rounded-lg cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors" :class="selectedDocs.includes(doc) ? 'border-eko bg-eko-light/30 dark:border-eko dark:bg-eko/10' : ''">
+                                                    <input type="checkbox" :value="doc" x-model="selectedDocs" class="w-5 h-5 text-eko border-gray-300 rounded focus:ring-eko">
+                                                    <span class="ml-3 font-medium text-gray-900 dark:text-white" x-text="doc"></span>
+                                                    <i class="fas fa-file-alt ml-auto text-gray-400" :class="selectedDocs.includes(doc) ? 'text-eko' : ''"></i>
+                                                </label>
+                                            </template>
+                                        </div>
+
+                                        <div class="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                                            <button @click="rmStep = 'dashboard'; selectedDocs = []" class="px-5 py-2.5 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors">Cancel</button>
+                                            <button @click="startGeneration()" :disabled="selectedDocs.length === 0" :class="selectedDocs.length === 0 ? 'opacity-50 cursor-not-allowed' : 'hover:bg-eko-dark shadow-sm shadow-green-500/30'" class="px-6 py-2.5 bg-eko text-white font-medium rounded-lg transition-all flex items-center gap-2">
+                                                <span>Generate Documents</span> <i class="fas fa-cogs"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Request History (Hidden when looking at specific search) -->
+                            <div x-show="rmStep === 'dashboard'" class="mt-8">
+                                <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-4">Recent Requests</h3>
+                                <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                    <div class="overflow-x-auto">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP ID</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP Name</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Documents</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Date</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Status</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700 text-right">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                                <template x-for="req in rmHistory" :key="req.id">
+                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors group">
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="req.cspId"></td>
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="req.cspName"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300" x-text="req.docs"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300" x-text="req.date"></td>
+                                                        <td class="px-4 py-3">
+                                                            <span class="px-2.5 py-1 text-xs font-medium rounded-full inline-flex items-center gap-1.5"
+                                                                  :class="{
+                                                                      'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 border border-green-200 dark:border-green-800': req.status === 'Sent',
+                                                                      'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 border border-red-200 dark:border-red-800': req.status === 'Failed',
+                                                                      'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800': req.status === 'Waiting for Data'
+                                                                  }">
+                                                                <i class="fas text-[10px]" :class="{
+                                                                    'fa-check-circle': req.status === 'Sent',
+                                                                    'fa-times-circle': req.status === 'Failed',
+                                                                    'fa-exclamation-triangle': req.status === 'Waiting for Data'
+                                                                }"></i>
+                                                                <span x-text="req.status"></span>
+                                                            </span>
+                                                        </td>
+                                                        <td class="px-4 py-3 text-right">
+                                                            <button class="text-gray-400 hover:text-eko transition-colors"><i class="fas fa-chevron-right"></i></button>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- State 2: Generating Progress -->
+                        <div x-show="rmStep === 'generating'" x-transition x-cloak class="flex flex-col items-center justify-center py-20">
+                            <div class="w-16 h-16 border-4 border-gray-200 border-t-eko rounded-full animate-spin mb-6"></div>
+                            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Preparing Documents...</h2>
+                            <div class="w-64 space-y-3 mt-4 text-sm text-gray-600 dark:text-gray-300">
+                                <div class="flex items-center gap-2"><i class="fas fa-check text-green-500"></i> Checking CSP data</div>
+                                <div class="flex items-center gap-2" :class="genProgress > 0 ? '' : 'opacity-50'"><i class="fas" :class="genProgress > 0 ? 'fa-check text-green-500' : 'fa-circle-notch fa-spin'"></i> Verifying required fields</div>
+                                <div class="flex items-center gap-2 opacity-50"><i class="fas fa-circle-notch fa-spin"></i> Analyzing templates</div>
+                            </div>
+                        </div>
+
+                        <!-- State 3: Missing Data Form -->
+                        <div x-show="rmStep === 'missing_data'" x-transition x-cloak class="max-w-2xl mx-auto">
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-orange-200 dark:border-orange-900 overflow-hidden">
+                                <div class="bg-orange-50 dark:bg-orange-900/30 p-6 border-b border-orange-100 dark:border-orange-800 text-center flex flex-col items-center">
+                                    <div class="w-16 h-16 bg-orange-100 dark:bg-orange-800/50 text-orange-500 dark:text-orange-400 rounded-full flex items-center justify-center text-3xl mb-4"><i class="fas fa-exclamation-triangle"></i></div>
+                                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white">Data Required</h2>
+                                    <p class="text-gray-600 dark:text-gray-300 mt-2 text-sm">We cannot generate the selected documents because some information is missing.</p>
+                                </div>
+                                
+                                <!-- Alert Context: CSP Details -->
+                                <div class="p-5 bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                    <div class="flex items-center gap-4">
+                                        <div class="w-12 h-12 bg-white dark:bg-gray-800 rounded-full shadow-sm border border-gray-200 dark:border-gray-700 flex items-center justify-center text-gray-400 text-xl"><i class="fas fa-store"></i></div>
+                                        <div>
+                                            <div class="font-bold text-gray-900 dark:text-white" x-text="mockCSP.name"></div>
+                                            <div class="text-xs text-gray-500 font-medium mt-0.5">ID: <span class="text-gray-700 dark:text-gray-300" x-text="mockCSP.id"></span> &bull; RM: <span class="text-gray-700 dark:text-gray-300" x-text="mockCSP.rm"></span></div>
+                                        </div>
+                                    </div>
+                                    <span class="px-2.5 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] uppercase tracking-wider rounded font-bold border border-orange-200 dark:border-orange-800">Pending Upload</span>
+                                </div>
+
+                                <div class="p-6 md:p-8 space-y-6">
+                                    
+                                    <!-- Missing Field 1 -->
+                                    <div class="space-y-2">
+                                        <label class="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <span>Branch Code <span class="text-red-500">*</span></span>
+                                            <span class="text-xs text-orange-500"><i class="fas fa-info-circle"></i> Required for BCP</span>
+                                        </label>
+                                        <input type="text" class="w-full px-4 py-2.5 rounded-lg border border-orange-300 dark:border-orange-700 bg-white dark:bg-gray-900 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none" placeholder="Enter valid branch code">
+                                    </div>
+
+                                    <!-- Missing Field 2 -->
+                                    <div class="space-y-2">
+                                        <label class="flex justify-between text-sm font-medium text-gray-700 dark:text-gray-300">
+                                            <span>CSP Photo <span class="text-red-500">*</span></span>
+                                            <span class="text-xs text-orange-500"><i class="fas fa-info-circle"></i> Required for ID Card</span>
+                                        </label>
+                                        <div class="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-xl p-8 text-center hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors cursor-pointer">
+                                            <i class="fas fa-cloud-upload-alt text-3xl text-gray-400 mb-2"></i>
+                                            <p class="text-sm font-medium text-gray-900 dark:text-white">Click to upload or drag and drop</p>
+                                            <p class="text-xs text-gray-500 mt-1">PNG, JPG up to 5MB</p>
+                                        </div>
+                                    </div>
+
+                                </div>
+                                <div class="p-6 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                    <div class="text-sm text-gray-500">Responsible RM: <strong class="text-gray-700 dark:text-gray-300">Rahul Kumar</strong></div>
+                                    <button @click="resumeGeneration()" class="px-6 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg shadow-sm transition-all flex items-center gap-2">
+                                        <span>Save & Continue</span> <i class="fas fa-arrow-right"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- State 4: Validation Screen -->
+                        <div x-show="rmStep === 'validating'" x-transition x-cloak class="max-w-2xl mx-auto">
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden">
+                                <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+                                    <div>
+                                        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Document Validation</h2>
+                                        <p class="text-sm text-gray-500" x-text="mockCSP.name + ' (' + mockCSP.id + ')'"></p>
+                                    </div>
+                                    <div class="w-12 h-12 bg-green-100 text-green-600 dark:bg-green-900/30 dark:text-green-400 rounded-full flex items-center justify-center text-2xl">
+                                        <i class="fas fa-check-double"></i>
+                                    </div>
+                                </div>
+                                <div class="p-6 bg-gray-50 dark:bg-gray-900/30">
+                                    <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Generated Documents</h4>
+                                    <div class="flex flex-wrap gap-2 mb-6">
+                                        <template x-for="doc in selectedDocs">
+                                            <span class="px-3 py-1 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm"><i class="fas fa-file-pdf text-red-500 mr-1.5"></i> <span x-text="doc"></span></span>
+                                        </template>
+                                    </div>
+
+                                    <h4 class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Automated Checks</h4>
+                                    <ul class="space-y-3 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
+                                        <li class="flex items-center gap-3 text-sm font-medium text-gray-800 dark:text-gray-200"><i class="fas fa-check-circle text-eko"></i> CSP Name matches records</li>
+                                        <li class="flex items-center gap-3 text-sm font-medium text-gray-800 dark:text-gray-200"><i class="fas fa-check-circle text-eko"></i> Branch mappings verified</li>
+                                        <li class="flex items-center gap-3 text-sm font-medium text-gray-800 dark:text-gray-200"><i class="fas fa-check-circle text-eko"></i> Missing data updated successfully</li>
+                                        <li class="flex items-center gap-3 text-sm font-medium text-gray-800 dark:text-gray-200"><i class="fas fa-check-circle text-eko"></i> Templates mapped accurately</li>
+                                    </ul>
+                                </div>
+                                <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end">
+                                    <button @click="rmStep = 'confirm_email'" class="px-6 py-2.5 bg-navy-800 hover:bg-navy-900 dark:bg-gray-700 dark:hover:bg-gray-600 text-white font-medium rounded-lg transition-all flex items-center gap-2">
+                                        <span>Continue to Email</span> <i class="fas fa-envelope"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- State 5: Email Confirmation -->
+                        <div x-show="rmStep === 'confirm_email'" x-transition x-cloak class="max-w-md mx-auto">
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden text-center">
+                                <div class="p-8">
+                                    <div class="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 dark:text-blue-400 rounded-full flex items-center justify-center text-3xl mx-auto mb-4 border border-blue-100 dark:border-blue-800/50">
+                                        <i class="fas fa-paper-plane"></i>
+                                    </div>
+                                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-2">Confirm Delivery</h2>
+                                    <p class="text-sm text-gray-500 mb-6">You are about to send <strong class="text-gray-800 dark:text-gray-200" x-text="selectedDocs.length"></strong> documents to the CSP.</p>
+                                    
+                                    <div class="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-4 text-left border border-gray-100 dark:border-gray-700 mb-6">
+                                        <div class="text-xs text-gray-500 mb-1">Recipient Email</div>
+                                        <div class="font-medium text-gray-900 dark:text-white mb-3" x-text="mockCSP.email"></div>
+                                        <div class="text-xs text-gray-500 mb-1">Subject</div>
+                                        <div class="font-medium text-gray-900 dark:text-white text-sm">Official Eko Compliance Documents - <span x-text="mockCSP.id"></span></div>
+                                    </div>
+
+                                    <div class="flex gap-3">
+                                        <button @click="rmStep = 'dashboard'" class="w-1/3 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Cancel</button>
+                                        <button @click="sendEmail()" class="w-2/3 py-2.5 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg shadow-sm shadow-green-500/30 transition-all flex justify-center items-center gap-2">
+                                            <span>Send Documents</span> <i class="fas fa-paper-plane text-xs"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- State 6: Success -->
+                        <div x-show="rmStep === 'success'" x-transition x-cloak class="max-w-lg mx-auto">
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-green-200 dark:border-green-900 overflow-hidden text-center p-10">
+                                <div class="w-24 h-24 bg-green-100 dark:bg-green-900/30 text-eko rounded-full flex items-center justify-center text-4xl mx-auto mb-6">
+                                    <i class="fas fa-check"></i>
+                                </div>
+                                <h2 class="text-3xl font-bold text-gray-900 dark:text-white mb-2">Sent Successfully</h2>
+                                <p class="text-gray-600 dark:text-gray-300 mb-8">Documents have been generated and emailed to <strong x-text="mockCSP.email"></strong>.</p>
+                                
+                                <div class="flex flex-col gap-3">
+                                    <button @click="resetRM()" class="w-full py-3 bg-eko hover:bg-eko-dark text-white font-medium rounded-lg transition-all">Generate Another</button>
+                                    <button @click="resetRM()" class="w-full py-3 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 font-medium rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-all">Back to Dashboard</button>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </main>
+            </div>
+        </template>
+
+
+        <!-- ========================================== -->
+        <!-- ADMIN DASHBOARD VIEW -->
+        <!-- ========================================== -->
+        <template x-if="currentRoute === 'admin'">
+            <div class="flex h-full bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
+                
+                <!-- Admin Sidebar -->
+                <aside class="w-56 bg-navy-900 text-gray-300 hidden md:flex flex-col shrink-0">
+                    <div class="h-16 flex items-center px-6 bg-navy-800 border-b border-gray-700">
+                        <div class="w-8 h-8 bg-eko rounded flex items-center justify-center text-white font-bold text-sm mr-3">E</div>
+                        <span class="font-bold text-lg text-white">CSPdocMaker</span>
+                    </div>
+                    <nav class="flex-grow py-6 px-3 space-y-1 overflow-y-auto">
+                        <div class="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-3">Main Menu</div>
+                        <button @click="adminRoute = 'overview'" :class="adminRoute === 'overview' ? 'bg-navy-800 text-white border-l-4 border-eko' : 'hover:bg-navy-800 hover:text-white border-l-4 border-transparent'" class="w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3">
+                            <i class="fas fa-chart-line w-5 text-center"></i> Dashboard Overview
+                        </button>
+                    </nav>
+                </aside>
+
+                <!-- Admin Main Content -->
+                <main class="flex-grow flex flex-col h-full overflow-hidden relative">
+                    
+                    <!-- Admin Top Nav -->
+                    <header class="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
+                        <div class="flex items-center gap-4 w-1/3">
+                            <i class="fas fa-bars text-gray-500 md:hidden text-xl"></i>
+                            <div class="relative w-full hidden sm:block">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
+                                <input type="text" class="w-full pl-9 pr-4 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-1 focus:ring-eko dark:text-white outline-none text-sm" placeholder="Global search CSP ID...">
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4">
+                            <button @click="toggleTheme()" class="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                                <i class="fas" :class="theme === 'dark' ? 'fa-sun' : 'fa-moon'"></i>
+                            </button>
+                            <div class="h-6 w-px bg-gray-200 dark:bg-gray-700"></div>
+                            <div class="flex items-center gap-2 cursor-pointer relative" @click="logoutMenu = !logoutMenu" @click.outside="logoutMenu = false">
+                                <div class="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">AD</div>
+                                <span class="text-sm font-semibold text-gray-700 dark:text-gray-200 hidden sm:block">Admin Ops</span>
+                                
+                                <!-- Admin Logout Dropdown -->
+                                <div x-show="logoutMenu" x-cloak class="absolute top-12 right-0 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                                    <button @click="logout()" class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                                        <i class="fas fa-sign-out-alt mr-2"></i> Sign Out
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    <!-- Scrollable Area -->
+                    <div class="flex-grow overflow-y-auto p-4 md:p-8">
+                        
+                        <!-- Admin Overview View -->
+                        <div x-show="adminRoute === 'overview'" x-transition class="max-w-6xl mx-auto space-y-8">
+                            
+                            <!-- Header & Global Date Filter -->
+                            <div class="flex justify-end w-full -mb-4">
+                                <div class="flex items-center bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg p-1 shadow-sm focus-within:ring-2 focus-within:ring-eko transition-all z-10">
+                                    <div class="pl-3 pr-2 py-1 text-gray-400">
+                                        <i class="far fa-calendar-alt"></i>
+                                    </div>
+                                    <select x-model="adminDateFilter" class="bg-transparent text-sm font-medium outline-none text-gray-700 dark:text-gray-200 cursor-pointer appearance-none py-1.5 pr-6 relative">
+                                        <option value="today">Today</option>
+                                        <option value="yesterday">Yesterday</option>
+                                        <option value="this_week">This Week</option>
+                                        <option value="this_month">This Month</option>
+                                        <option value="this_year">This Year</option>
+                                        <option value="custom">Custom Date...</option>
+                                    </select>
+                                    <i class="fas fa-chevron-down text-gray-400 text-xs -ml-5 mr-3 pointer-events-none"></i>
+                                    
+                                    <!-- Custom Date Picker -->
+                                    <div x-show="adminDateFilter === 'custom'" class="border-l border-gray-300 dark:border-gray-600 pl-3 ml-1 flex items-center" x-cloak>
+                                        <input type="date" x-model="adminCustomDate" class="bg-transparent text-sm outline-none text-gray-700 dark:text-gray-200 font-medium py-1.5">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Global Hierarchical Filters -->
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>State [All]</option><option>Delhi</option><option>Haryana</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>District [All]</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>LHO [All]</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>CH [All]</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>ASM [All]</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>DC [All]</option></select>
+                                <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-gray-50 dark:bg-gray-900 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>RM [All]</option><option>Rahul Kumar</option></select>
+                            </div>
+
+                            <!-- Global Stats -->
+                            <div>
+                                <h2 class="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                                    New CSP Onboarding Pulse 
+                                    <span class="text-xs font-semibold bg-gray-200 text-gray-700 dark:bg-gray-700 dark:text-gray-300 px-2 py-1 rounded" x-text="adminDateDisplay"></span>
+                                </h2>
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl">
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group" @click="openDrilldown('total_csp', 'Total CSP Directory')">
+                                        <div class="text-sm text-gray-500 mb-1 group-hover:text-gray-700 dark:group-hover:text-gray-300">Total CSP</div>
+                                        <div class="text-3xl font-bold text-gray-900 dark:text-white">4,289 <i class="fas fa-external-link-alt text-xs ml-1 opacity-0 group-hover:opacity-50 transition-opacity font-normal"></i></div>
+                                    </div>
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm border-l-4 border-l-blue-500 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group" @click="openDrilldown('new_csp', 'Newly Added CSPs')">
+                                        <div class="text-sm text-gray-500 mb-1 group-hover:text-blue-600 dark:group-hover:text-blue-400">New CSP Identified</div>
+                                        <div class="text-3xl font-bold text-gray-900 dark:text-white">142 <i class="fas fa-external-link-alt text-xs ml-1 opacity-0 group-hover:opacity-50 transition-opacity font-normal"></i></div>
+                                    </div>
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm border-l-4 border-l-eko cursor-pointer hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors group" @click="openDrilldown('details_fetched', 'Successfully Fetched Details')">
+                                        <div class="text-sm text-gray-500 mb-1 group-hover:text-eko transition-colors">Details Fetched</div>
+                                        <div class="text-3xl font-bold text-gray-900 dark:text-white group-hover:text-eko transition-colors">139 <i class="fas fa-external-link-alt text-xs ml-1 opacity-0 group-hover:opacity-50 transition-opacity font-normal"></i></div>
+                                    </div>
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm border-l-4 border-l-orange-500 cursor-pointer hover:bg-orange-50 dark:hover:bg-orange-900/20 transition-colors group" @click="openDrilldown('details_not_fetched', 'Missing / Unfetched Details')">
+                                        <div class="text-sm text-gray-500 mb-1 group-hover:text-orange-600 dark:group-hover:text-orange-400">Details Not Fetched</div>
+                                        <div class="text-3xl font-bold text-orange-600 dark:text-orange-400">3 <i class="fas fa-external-link-alt text-xs ml-1 opacity-0 group-hover:opacity-50 transition-opacity font-normal"></i></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Document Specific Metrics (New CSPs) -->
+                            <div>
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">New CSPs: Document Generation Status (<span x-text="adminDateDisplay"></span>)</h2>
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-6">
+                                    <template x-for="docMetric in adminNewCspMetrics" :key="'new_'+docMetric.name">
+                                        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                                            <div class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                                                <h3 class="font-bold text-gray-800 dark:text-white text-sm truncate" x-text="docMetric.name"></h3>
+                                            </div>
+                                            <div class="p-4 grid grid-cols-2 gap-4 flex-grow">
+                                                <div @click="openDrilldown('requests', 'Generated Documents Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group">
+                                                    <div class="text-xs text-gray-500 group-hover:text-eko transition-colors">Generated</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-eko transition-colors" x-text="docMetric.generated"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Failed Generations Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group">
+                                                    <div class="text-xs text-gray-500 group-hover:text-red-500 transition-colors">Failed (Gen)</div>
+                                                    <div class="text-xl font-semibold text-red-600 dark:text-red-400" x-text="docMetric.failedGen"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Sent Documents Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                    <div class="text-xs text-gray-500 group-hover:text-eko transition-colors">Sent</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-eko transition-colors" x-text="docMetric.sent"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Failed Emails Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                    <div class="text-xs text-gray-500 group-hover:text-red-500 transition-colors">Failed (Send)</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-red-500 transition-colors" x-text="docMetric.failedSend"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                            
+                            <!-- Document Specific Metrics (Old CSPs) -->
+                            <div class="pt-2">
+                                <h2 class="text-xl font-bold text-gray-900 dark:text-white mb-4">Old CSPs: Document Requests Overview (<span x-text="adminDateDisplay"></span>)</h2>
+                                
+                                <div class="mb-6 max-w-xs">
+                                    <div class="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700 shadow-sm border-l-4 border-l-purple-500 cursor-pointer hover:bg-purple-50 dark:hover:bg-purple-900/20 transition-colors group" @click="openDrilldown('requests', 'Total Old CSP Requests', false)">
+                                        <div class="text-sm text-gray-500 mb-1 group-hover:text-purple-600 dark:group-hover:text-purple-400">Total Requests</div>
+                                        <div class="text-3xl font-bold text-gray-900 dark:text-white">1,245 <i class="fas fa-external-link-alt text-xs ml-1 opacity-0 group-hover:opacity-50 transition-opacity font-normal"></i></div>
+                                    </div>
+                                </div>
+
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 xl:gap-6">
+                                    <template x-for="docMetric in adminOldCspMetrics" :key="'old_'+docMetric.name">
+                                        <div class="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden flex flex-col">
+                                            <div class="p-4 border-b border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+                                                <h3 class="font-bold text-gray-800 dark:text-white text-sm truncate" x-text="docMetric.name"></h3>
+                                            </div>
+                                            <div class="p-4 grid grid-cols-2 gap-4 flex-grow">
+                                                <div @click="openDrilldown('requests', 'Total Requests Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group col-span-2 pb-2 border-b border-gray-100 dark:border-gray-700">
+                                                    <div class="text-xs text-gray-500 group-hover:text-blue-500 transition-colors">Total Requested</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-blue-500 transition-colors" x-text="docMetric.requested"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Generated Documents Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group">
+                                                    <div class="text-xs text-gray-500 group-hover:text-eko transition-colors">Generated</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-eko transition-colors" x-text="docMetric.generated"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Failed Generations Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group">
+                                                    <div class="text-xs text-gray-500 group-hover:text-red-500 transition-colors">Failed (Gen)</div>
+                                                    <div class="text-xl font-semibold text-red-600 dark:text-red-400" x-text="docMetric.failedGen"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Sent Documents Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                    <div class="text-xs text-gray-500 group-hover:text-eko transition-colors">Sent</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-eko transition-colors" x-text="docMetric.sent"></div>
+                                                </div>
+                                                <div @click="openDrilldown('requests', 'Failed Emails Log (' + docMetric.name + ')', true, docMetric.name)" class="cursor-pointer group pt-2 border-t border-gray-100 dark:border-gray-700">
+                                                    <div class="text-xs text-gray-500 group-hover:text-red-500 transition-colors">Failed (Send)</div>
+                                                    <div class="text-xl font-semibold text-gray-900 dark:text-white group-hover:text-red-500 transition-colors" x-text="docMetric.failedSend"></div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Admin Drill-down Table View -->
+                        <div x-show="adminRoute === 'drilldown'" x-transition x-cloak class="max-w-[1600px] mx-auto h-full flex flex-col">
+                            
+                            <div class="flex justify-between items-end mb-4">
+                                <div>
+                                    <button @click="adminRoute = 'overview'; activeDocContext = null" class="text-sm text-gray-500 hover:text-eko mb-2 inline-block"><i class="fas fa-arrow-left mr-1"></i> Back to Overview</button>
+                                    <h2 class="text-2xl font-bold text-gray-900 dark:text-white" x-text="drilldownTitle"></h2>
+                                </div>
+                                <button class="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg text-sm font-medium shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                                    <i class="fas fa-download mr-1"></i> Export CSV
+                                </button>
+                            </div>
+
+                            <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col flex-grow min-h-[500px]">
+                                
+                                <!-- Filters Row -->
+                                <div class="p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 rounded-t-xl grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>RM [All]</option><option>Rahul Kumar</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>ASM [All]</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>CH [All]</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>DC [All]</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>LHO [All]</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>District [All]</option></select>
+                                    <select class="text-xs w-full p-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-200 outline-none focus:border-eko"><option>State [All]</option><option>Delhi</option><option>Haryana</option></select>
+                                </div>
+
+                                <!-- Data Table -->
+                                <div class="overflow-x-auto flex-grow">
+                                    
+                                    <!-- TABLE VIEW: Total & New CSPs -->
+                                    <template x-if="['total_csp', 'new_csp'].includes(drilldownType)">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP ID</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP Name</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Date Added</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Assigned RM</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">State</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                                <template x-for="row in currentDrilldownData" :key="row.id">
+                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="row.id"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300" x-text="row.name"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="row.date"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300" x-text="row.rm"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="row.state"></td>
+                                                        <td class="px-4 py-3">
+                                                            <span class="px-2 py-1 text-[10px] font-bold rounded uppercase tracking-wider inline-block"
+                                                                    :class="row.status === 'Active' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'" 
+                                                                    x-text="row.status">
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+
+                                    <!-- TABLE VIEW: Details Fetched -->
+                                    <template x-if="drilldownType === 'details_fetched'">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP ID</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP Name</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700 w-1/3">Successfully Read Data</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Ready For Documents</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                                <template x-for="row in currentDrilldownData" :key="row.id">
+                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="row.id"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300" x-text="row.name"></td>
+                                                        <td class="px-4 py-3">
+                                                            <div class="flex flex-wrap gap-1">
+                                                                <template x-for="col in row.fetchedCols">
+                                                                    <span class="px-2 py-0.5 bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-medium rounded border border-green-200 dark:border-green-800" x-text="col"></span>
+                                                                </template>
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-4 py-3">
+                                                            <div class="text-xs text-gray-500 leading-relaxed" x-text="row.readyDocs.join(', ')"></div>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+
+                                    <!-- TABLE VIEW: Details Not Fetched (Missing Data) -->
+                                    <template x-if="drilldownType === 'details_not_fetched'">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP ID</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP Name</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Assigned RM</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700 w-1/4">Missing / Unreadable Data</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Blocked Documents</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                                <template x-for="row in currentDrilldownData" :key="row.id">
+                                                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors">
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="row.id"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300" x-text="row.name"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="row.rm"></td>
+                                                        <td class="px-4 py-3">
+                                                            <div class="flex flex-wrap gap-1">
+                                                                <template x-for="col in row.missingCols">
+                                                                    <span class="px-2 py-0.5 bg-orange-50 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] font-medium rounded border border-orange-200 dark:border-orange-800"><i class="fas fa-exclamation-triangle mr-1 opacity-70"></i><span x-text="col"></span></span>
+                                                                </template>
+                                                            </div>
+                                                        </td>
+                                                        <td class="px-4 py-3">
+                                                            <div class="text-xs text-red-600 dark:text-red-400 font-medium leading-relaxed" x-text="row.blockedDocs.join(', ')"></div>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template> <!-- ADDED CRITICAL MISSING TAG HERE -->
+
+                                    <!-- TABLE VIEW: Default Document Requests -->
+                                    <template x-if="drilldownType === 'requests'">
+                                        <table class="w-full text-left border-collapse">
+                                            <thead>
+                                                <tr class="bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider sticky top-0 shadow-sm z-10">
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP ID</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">CSP Name</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">RM</th>
+                                                    <th x-show="!drilldownHideDocs" class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700 w-1/4">Documents Made/Requested</th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700" x-text="drilldownTitle.includes('New CSP') ? 'Fetched At' : 'Requested At'"></th>
+                                                    <th class="px-4 py-3 font-semibold border-b border-gray-200 dark:border-gray-700">Status</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+                                                <template x-for="row in currentDrilldownData" :key="row.id">
+                                                    <tr @click="openAdminModal(row)" class="hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors cursor-pointer group">
+                                                        <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white" x-text="row.id"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-300" x-text="row.name"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="row.rm"></td>
+                                                        <td x-show="!drilldownHideDocs" class="px-4 py-3 text-xs text-gray-500 truncate max-w-[200px]" x-text="row.docs"></td>
+                                                        <td class="px-4 py-3 text-sm text-gray-500" x-text="row.date"></td>
+                                                        <td class="px-4 py-3">
+                                                            <span class="px-2 py-1 text-[10px] font-bold rounded uppercase tracking-wider inline-block"
+                                                                    :class="{
+                                                                        'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400': row.status === 'Failed',
+                                                                        'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400': row.status === 'Missing Data',
+                                                                        'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400': row.status === 'Generated'
+                                                                    }" x-text="row.status">
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                </template>
+                                            </tbody>
+                                        </table>
+                                    </template>
+                                </div>
+                                <div class="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center bg-gray-50 dark:bg-gray-900/50 rounded-b-xl">
+                                    <span class="text-sm text-gray-500">Showing 1 to 10 entries</span>
+                                    <div class="flex gap-1">
+                                        <button class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-500 disabled:opacity-50" disabled>Prev</button>
+                                        <button class="px-3 py-1 border border-eko rounded bg-eko text-white">1</button>
+                                        <button class="px-3 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-500">Next</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </main>
+
+                <!-- Admin Request Details Overlay/Modal -->
+                <div x-show="adminModalOpen" class="fixed inset-0 z-50 overflow-y-auto" x-cloak>
+                    <div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:p-0">
+                        <div x-show="adminModalOpen" x-transition.opacity class="fixed inset-0 transition-opacity bg-gray-900/75 dark:bg-gray-900/90" @click="adminModalOpen = false"></div>
+                        
+                        <div x-show="adminModalOpen" x-transition.scale class="inline-block w-full max-w-2xl p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white dark:bg-gray-800 shadow-xl rounded-2xl border border-gray-200 dark:border-gray-700 relative">
+                            
+                            <button @click="adminModalOpen = false" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors">
+                                <i class="fas fa-times text-xl"></i>
+                            </button>
+
+                            <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-6 border-b border-gray-100 dark:border-gray-700 pb-4">Request Details</h3>
+                            
+                            <template x-if="selectedRow">
+                                <div class="space-y-6">
+                                    <div class="grid grid-cols-2 gap-4">
+                                        <div class="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
+                                            <div class="text-xs text-gray-500 mb-1 uppercase tracking-wider font-semibold">CSP Info</div>
+                                            <div class="font-bold text-gray-900 dark:text-white text-lg" x-text="selectedRow.name"></div>
+                                            <div class="text-sm text-gray-600 dark:text-gray-300" x-text="'ID: ' + selectedRow.id"></div>
+                                        </div>
+                                        <div class="bg-gray-50 dark:bg-gray-900/50 p-4 rounded-lg border border-gray-100 dark:border-gray-700">
+                                            <div class="text-xs text-gray-500 mb-1 uppercase tracking-wider font-semibold">RM Info</div>
+                                            <div class="font-bold text-gray-900 dark:text-white text-lg" x-text="selectedRow.rm"></div>
+                                            <div class="text-sm text-gray-600 dark:text-gray-300">Delhi NCR Region</div>
+                                        </div>
+                                    </div>
+
+                                    <div x-show="!drilldownHideDocs">
+                                        <div class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-2">Requested Documents</div>
+                                        <div class="flex flex-wrap gap-2">
+                                            <span class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs rounded border border-gray-200 dark:border-gray-600" x-text="selectedRow.docs"></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="border-t border-gray-100 dark:border-gray-700 pt-6">
+                                        <div class="text-sm font-bold text-gray-700 dark:text-gray-300 mb-4">Request Timeline & Status</div>
+                                        
+                                        <div class="relative border-l-2 border-gray-200 dark:border-gray-700 ml-3 space-y-6">
+                                            
+                                            <div class="relative pl-6">
+                                                <div class="absolute -left-1.5 top-1 w-3 h-3 rounded-full bg-green-500 ring-4 ring-white dark:ring-gray-800"></div>
+                                                <div class="text-xs text-gray-400 mb-1" x-text="selectedRow.date"></div>
+                                                <div class="text-sm font-semibold text-gray-900 dark:text-white">Request Initiated</div>
+                                            </div>
+
+                                            <div class="relative pl-6">
+                                                <div class="absolute -left-1.5 top-1 w-3 h-3 rounded-full bg-green-500 ring-4 ring-white dark:ring-gray-800"></div>
+                                                <div class="text-sm font-semibold text-gray-900 dark:text-white">Data Validation Passed</div>
+                                            </div>
+
+                                            <div class="relative pl-6" x-show="selectedRow.status === 'Failed'">
+                                                <div class="absolute -left-1.5 top-1 w-3 h-3 rounded-full bg-red-500 ring-4 ring-white dark:ring-gray-800"></div>
+                                                <div class="text-sm font-semibold text-red-600 dark:text-red-400 mb-1">Generation Failed</div>
+                                                <div class="text-xs bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3 rounded border border-red-100 dark:border-red-800 font-mono">
+                                                    Error [ERR_092]: Template mismatch for standard certificate. Missing required bounding box variable for signature.
+                                                </div>
+                                            </div>
+
+                                            <div class="relative pl-6" x-show="selectedRow.status === 'Missing Data'">
+                                                <div class="absolute -left-1.5 top-1 w-3 h-3 rounded-full bg-yellow-500 ring-4 ring-white dark:ring-gray-800"></div>
+                                                <div class="text-sm font-semibold text-yellow-600 dark:text-yellow-400 mb-1">Waiting on RM Input</div>
+                                                <div class="text-xs text-gray-500">RM needs to upload Branch Code and CSP Photo.</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            
+                            <div class="mt-8 flex justify-end">
+                                <button @click="adminModalOpen = false" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white font-medium rounded transition-colors text-sm">Close Panel</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </template>
+    </div>
+
+    <script>
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('appState', () => ({
+                // Global state
+                theme: 'light',
+                currentRoute: 'auth', 
+                
+                // Auth state
+                authTab: 'login',
+                registerStep: 1,
+                logoutMenu: false,
+
+                // RM State
+                rmStep: 'dashboard', 
+                searchQuery: '',
+                selectedDocs: [],
+                genProgress: 0,
+                documentTypes: ['CSP ID CARD', 'CSP CERTIFICATE', 'TRAINING CERTIFICATE', 'BUSINESS CONTINUITY PLAN'],
+                
+                // Notifications State
+                alertsMenu: false,
+                rmAlerts: [
+                    { id: 1, cspId: 'CSP100234', cspName: 'Demo Enterprises (Rajesh)', missing: 'Branch Code, CSP Photo', read: false },
+                    { id: 2, cspId: 'CSP44012', cspName: 'Kisan Point', missing: 'Training Certificate Upload', read: false }
+                ],
+                get unreadAlerts() {
+                    return this.rmAlerts.filter(a => !a.read).length;
+                },
+
+                // Admin State
+                adminRoute: 'overview',
+                adminDateFilter: 'today',
+                adminCustomDate: '',
+                drilldownType: 'requests',
+                drilldownTitle: '',
+                drilldownHideDocs: false,
+                activeDocContext: null, // Stores document name when clicked from inside a doc section
+                adminModalOpen: false,
+                adminModalType: 'request',
+                selectedRow: null,
+
+                // Computed Dates
+                get adminDateDisplay() {
+                    if (this.adminDateFilter === 'custom') {
+                        if (!this.adminCustomDate) return 'Selected Date';
+                        const d = new Date(this.adminCustomDate);
+                        return isNaN(d.getTime()) ? 'Selected Date' : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                    }
+                    const map = {
+                        'today': 'Today',
+                        'yesterday': 'Yesterday',
+                        'this_week': 'This Week',
+                        'this_month': 'This Month',
+                        'this_year': 'This Year'
+                    };
+                    return map[this.adminDateFilter] || 'Today';
+                },
+
+                // Mock Data
+                mockCSP: {
+                    id: 'CSP100234',
+                    name: 'Demo Enterprises (Rajesh Kumar)',
+                    branch: 'Delhi NCR Main (DL-01)',
+                    location: 'Connaught Place, New Delhi',
+                    mobile: '+91 98765 43210',
+                    email: 'rajesh.demo@example.com',
+                    rm: 'Rahul Kumar'
+                },
+
+                rmHistory: [
+                    { id: 'REQ-9921', cspId: 'CSP44201', cspName: 'Sharma Comms', docs: 'CSP ID CARD, BCP', date: 'Today, 10:45 AM', status: 'Sent' },
+                    { id: 'REQ-9920', cspId: 'CSP88123', cspName: 'Gupta Traders', docs: 'TRAINING CERTIFICATE', date: 'Today, 09:12 AM', status: 'Failed' },
+                    { id: 'REQ-9915', cspId: 'CSP100234', cspName: 'Demo Enterprises', docs: 'CSP ID CARD', date: 'Yesterday, 16:30 PM', status: 'Waiting for Data' }
+                ],
+
+                adminNewCspMetrics: [
+                    { name: 'CSP ID CARD', generated: 140, failedGen: 2, sent: 138, failedSend: 2 },
+                    { name: 'CSP CERTIFICATE', generated: 142, failedGen: 0, sent: 141, failedSend: 1 },
+                    { name: 'TRAINING CERTIFICATE', generated: 135, failedGen: 7, sent: 130, failedSend: 5 },
+                    { name: 'BUSINESS CONTINUITY PLAN', generated: 141, failedGen: 1, sent: 141, failedSend: 0 }
+                ],
+                
+                adminOldCspMetrics: [
+                    { name: 'CSP ID CARD', requested: 45, generated: 40, failedGen: 5, sent: 38, failedSend: 2 },
+                    { name: 'CSP CERTIFICATE', requested: 20, generated: 20, failedGen: 0, sent: 19, failedSend: 1 },
+                    { name: 'TRAINING CERTIFICATE', requested: 60, generated: 52, failedGen: 8, sent: 50, failedSend: 2 },
+                    { name: 'BUSINESS CONTINUITY PLAN', requested: 15, generated: 12, failedGen: 3, sent: 12, failedSend: 0 }
+                ],
+
+                // Admin Table Default Data Lists
+                adminTableData: [
+                    { id: 'CSP100234', name: 'Demo Enterprises', rm: 'Rahul Kumar', docs: 'CSP ID CARD, BCP', date: 'Today, 10:45 AM', status: 'Generated' },
+                    { id: 'CSP99211', name: 'Verma Kiosk', rm: 'Amit Singh', docs: 'CSP CERTIFICATE', date: 'Today, 09:12 AM', status: 'Generated' },
+                    { id: 'CSP44012', name: 'Kisan Point', rm: 'Priya D', docs: 'TRAINING CERTIFICATE', date: 'Yesterday, 16:30 PM', status: 'Failed' },
+                    { id: 'CSP11092', name: 'National CSC', rm: 'Rahul Kumar', docs: 'Multiple Documents', date: 'Oct 24, 2023', status: 'Missing Data' }
+                ],
+
+                totalCspData: [
+                    { id: 'CSP100234', name: 'Demo Enterprises', date: 'Jan 15, 2023', rm: 'Rahul Kumar', state: 'Delhi', status: 'Active' },
+                    { id: 'CSP99211', name: 'Verma Kiosk', date: 'Feb 20, 2023', rm: 'Amit Singh', state: 'Haryana', status: 'Active' }
+                ],
+
+                newCspData: [
+                    { id: 'CSP125432', name: 'Mishra Electronics', date: 'Today, 08:30 AM', rm: 'Rahul Kumar', state: 'Delhi', status: 'Pending Docs' },
+                    { id: 'CSP125433', name: 'A-One Services', date: 'Today, 09:15 AM', rm: 'Priya D', state: 'UP East', status: 'Pending Docs' }
+                ],
+
+                detailsFetchedData: [
+                    { id: 'CSP125432', name: 'Mishra Electronics', fetchedCols: ['CSP ID', 'Name', 'Phone', 'Address', 'Branch Code', 'Photo'], readyDocs: ['CSP ID CARD', 'CSP CERTIFICATE', 'TRAINING CERTIFICATE', 'BUSINESS CONTINUITY PLAN'], rm: 'Rahul Kumar' }
+                ],
+
+                detailsNotFetchedData: [
+                    { id: 'CSP125434', name: 'Tech Comms', missingCols: ['Branch Code', 'Photo'], blockedDocs: ['CSP ID CARD', 'BUSINESS CONTINUITY PLAN'], rm: 'Amit Singh' },
+                    { id: 'CSP125436', name: 'Singh Point', missingCols: ['Photo'], blockedDocs: ['CSP ID CARD'], rm: 'Rahul Kumar' }
+                ],
+
+                // Dynamic drilldown computation
+                get currentDrilldownData() {
+                    if(this.drilldownType === 'total_csp') return this.totalCspData;
+                    if(this.drilldownType === 'new_csp') return this.newCspData;
+                    if(this.drilldownType === 'details_fetched') return this.detailsFetchedData;
+                    if(this.drilldownType === 'details_not_fetched') return this.detailsNotFetchedData;
+                    
+                    // Fallback to requests data
+                    let baseData = JSON.parse(JSON.stringify(this.adminTableData || [])); 
+                    
+                    // If a specific document is clicked, force that document context in the table
+                    if(this.activeDocContext) {
+                        return baseData.map(row => {
+                            row.docs = this.activeDocContext;
+                            return row;
+                        });
+                    }
+                    
+                    return baseData;
+                },
+
+                // Methods
+                toggleTheme() {
+                    this.theme = this.theme === 'dark' ? 'light' : 'dark';
+                },
+                
+                openAlert(alert) {
+                    alert.read = true;
+                    this.alertsMenu = false;
+                    this.searchQuery = alert.cspId;
+                    
+                    // Set mock context for the alert
+                    this.mockCSP.id = alert.cspId;
+                    this.mockCSP.name = alert.cspName;
+                    
+                    // Pre-select required documents to show logic
+                    this.selectedDocs = ['CSP ID CARD', 'BUSINESS CONTINUITY PLAN'];
+                    
+                    // Directly jump to missing data form
+                    this.rmStep = 'missing_data';
+                },
+
+                login(role) {
+                    this.currentRoute = role;
+                    if(role === 'rm') this.rmStep = 'dashboard';
+                    if(role === 'admin') this.adminRoute = 'overview';
+                },
+
+                logout() {
+                    this.currentRoute = 'auth';
+                    this.logoutMenu = false;
+                    this.rmStep = 'dashboard';
+                    this.selectedDocs = [];
+                    this.searchQuery = '';
+                },
+
+                searchCSP() {
+                    if(this.searchQuery.length > 3) {
+                        this.rmStep = 'search_result';
+                        this.selectedDocs = []; 
+                    }
+                },
+
+                startGeneration() {
+                    this.rmStep = 'generating';
+                    this.genProgress = 0;
+                    setTimeout(() => { this.genProgress = 1; }, 1200);
+                    setTimeout(() => {
+                        if(this.selectedDocs.includes('BUSINESS CONTINUITY PLAN') || this.selectedDocs.includes('CSP ID CARD')) {
+                            this.rmStep = 'missing_data';
+                        } else {
+                            this.rmStep = 'validating';
+                        }
+                    }, 2500);
+                },
+
+                resumeGeneration() {
+                    this.rmStep = 'generating';
+                    this.genProgress = 1;
+                    setTimeout(() => { this.rmStep = 'validating'; }, 1500);
+                },
+
+                sendEmail() {
+                    setTimeout(() => {
+                        this.rmStep = 'success';
+                        this.rmHistory.unshift({
+                            id: 'REQ-99' + Math.floor(Math.random() * 99),
+                            cspId: this.mockCSP.id,
+                            cspName: this.mockCSP.name.split(' (')[0],
+                            docs: this.selectedDocs.length > 2 ? 'Multiple Documents' : this.selectedDocs.join(', '),
+                            date: 'Just now',
+                            status: 'Sent'
+                        });
+                    }, 800);
+                },
+
+                resetRM() {
+                    this.rmStep = 'dashboard';
+                    this.searchQuery = '';
+                    this.selectedDocs = [];
+                },
+
+                handleNotificationClick(notif) {
+                    notif.unread = false;
+                    this.rmNotificationsOpen = false;
+                    this.searchQuery = notif.cspId;
+                    this.searchCSP();
+                },
+
+                // Modified to handle setting the active context so Document Columns hide when appropriate
+                openDrilldown(type, title, hideDocs = false, docContext = null) {
+                    this.drilldownType = type;
+                    this.drilldownTitle = title;
+                    this.drilldownHideDocs = hideDocs;
+                    this.activeDocContext = docContext; 
+                    this.adminRoute = 'drilldown';
+                },
+
+                openAdminModal(row, type) {
+                    this.selectedRow = row;
+                    this.adminModalType = type;
+                    this.adminModalOpen = true;
+                }
+            }));
+        });
+    </script>
+</body>
+</html>

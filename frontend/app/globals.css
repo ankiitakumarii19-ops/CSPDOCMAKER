@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/* Dark mode is driven by a class on <html>, set from localStorage before the
+   page paints, so a returning user never sees a flash of the wrong theme.
+   The supplied design uses Tailwind's darkMode: 'class'. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* The supplied design's tailwind.config, as Tailwind v4 theme tokens. These
+   are the only colours it defines beyond Tailwind's defaults. */
+@theme {
+  --color-eko: #00B259;
+  --color-eko-dark: #00964b;
+  --color-eko-light: #e6f7ef;
+
+  --color-navy-800: #1e293b;
+  --color-navy-900: #0f172a;
+
+  --font-sans: Inter, sans-serif;
+}
+
+/* Everything below is the supplied design's own <style> block, unchanged.
+   Nothing else belongs here: the look is carried by utility classes on the
+   elements, and any plain CSS added here would be UNLAYERED and therefore
+   override every Tailwind utility in the app regardless of specificity. */
+
+/* Custom scrollbar for enterprise feel */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb { background: #475569; }

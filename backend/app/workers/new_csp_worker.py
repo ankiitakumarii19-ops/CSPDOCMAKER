@@ -1,0 +1,278 @@
+"""
+CSP DocMaker — New CSP Worker
+
+Runs the whole flow for a newly detected CSP, unattended:
+
+    fetch the photo from the CRM
+      -> if anything is still missing, alert the RM and STOP
+      -> otherwise generate, validate, convert to PDF, store both formats,
+         and email the PDFs to the CSP
+      -> stamp the CSP as processed so it never runs twice
+
+Two rules shape this:
+
+  * A document is produced only when every field AND the photograph are
+    present. Nothing goes out with a placeholder face or a blank field; if
+    anything is missing the RM is asked and the CSP waits.
+
+  * Work is selected by ``(origin='new' OR auto_enrolled_at IS NOT NULL)
+    AND new_csp_processed_at IS NULL``,
+    never by a time window. An earlier version looked at CSPs created in the
+    last few minutes, which meant any CSP added while the worker was down was
+    skipped forever.
+
+The processed stamp is written in the same transaction as the documents, and
+the email is sent only after that commit succeeds, so a crash cannot send a
+CSP their documents twice.
+"""
+
+import logging
+from datetime import datetime, timezone
+
+from app.celery_app import celery_app
+from app.workers.workspace_runner import for_each_workspace
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(
+    name="workers.process_new_csps",
+    bind=True,
+    max_retries=2,
+    default_retry_delay=120,
+)
+@for_each_workspace
+def process_new_csps(self):
+    """Process every new CSP that has not been processed yet."""
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import Session
+
+    from app.config import get_settings
+    from app.models.csp_record import CSPRecord
+    from app.models.enums import DocumentType
+    from app.models.rm_alert import MISSING_DATA
+    from app.services import alert_service
+    from app.services.missing_data_service import check_missing_data
+
+    settings = get_settings()
+    engine = create_engine(
+        settings.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://")
+    )
+
+    all_doc_types = list(DocumentType)
+    processed = alerted = failed = 0
+
+    with Session(engine) as session:
+        # Two kinds of work, both finished the same way:
+        #
+        #   a new CSP, which is automatic by definition; and
+        #   an existing one an RM deliberately enrolled.
+        #
+        # A baseline CSP nobody enrolled is still never touched — that is
+        # what stops a first sync emailing an entire organisation.
+        from sqlalchemy import or_
+
+        pending = session.execute(
+            select(CSPRecord).where(
+                or_(
+                    CSPRecord.origin == "new",
+                    CSPRecord.auto_enrolled_at.is_not(None),
+                ),
+                CSPRecord.new_csp_processed_at.is_(None),
+            ).order_by(CSPRecord.created_at)
+        ).scalars().all()
+
+        if not pending:
+            engine.dispose()
+            return {"status": "nothing_to_do",
+                    "timestamp": datetime.now(timezone.utc).isoformat()}
+
+        logger.info("new_csp_worker: %d new CSP(s) awaiting processing",
+                    len(pending))
+
+        for csp in pending:
+            try:
+                if _try_photo(csp):
+                    session.commit()
+
+                missing = check_missing_data(csp, all_doc_types)
+                if missing.has_missing_data:
+                    message, details = alert_service.describe_missing(missing)
+                    alert_service.raise_alert(
+                        session, csp.csp_id, csp.rm_email,
+                        MISSING_DATA, message, details,
+                    )
+                    session.commit()
+                    alerted += 1
+                    logger.info("new_csp_worker: CSP %s blocked — %s",
+                                csp.csp_id, message)
+                    continue
+
+                _process_one(session, csp, all_doc_types)
+                processed += 1
+
+            except Exception as e:
+                session.rollback()
+                failed += 1
+                logger.error(
+                    "new_csp_worker: CSP %s failed: %s: %s",
+                    csp.csp_id, type(e).__name__, e, exc_info=True,
+                )
+
+    engine.dispose()
+
+    summary = {
+        "status": "completed",
+        "pending": len(pending),
+        "documents_sent": processed,
+        "rm_alerted": alerted,
+        "failed": failed,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    logger.info(
+        "new_csp_worker: %d new CSP(s) — %d completed, %d awaiting the RM, "
+        "%d failed", len(pending), processed, alerted, failed,
+    )
+    return summary
+
+
+def _try_photo(csp) -> bool:
+    """Fetch the CSP's photo from the CRM if we do not have one yet.
+
+    Returns True when the record was changed. A failure here is not an error:
+    it simply leaves the photo missing, which the missing-data check then
+    reports to the RM like any other absent field.
+    """
+    import os
+
+    from app.services import csp_photo_service
+
+    existing = (csp.photo_url or "").strip()
+    if existing and os.path.isfile(existing):
+        return False
+
+    result = csp_photo_service.fetch_photo(csp)
+    if result.ok:
+        csp.photo_url = result.path
+        logger.info("new_csp_worker: CSP %s — %s", csp.csp_id, result.message)
+        return True
+
+    logger.info("new_csp_worker: CSP %s — no photo: %s",
+                csp.csp_id, result.message)
+    return False
+
+
+def _process_one(session, csp, document_types) -> None:
+    """Generate, store and send one complete CSP's documents."""
+    import uuid
+
+    from app.models.email_document import EmailDocument
+    from app.models.email_job import EmailJob
+    from app.models.enums import EmailStatus, JobState, WorkflowType
+    from app.models.processing_job import ProcessingJob
+    from app.services import (
+        alert_service, csp_mapping, document_service,
+        document_storage_service, document_validation_service,
+        email_service, pdf_service,
+    )
+    from app.services.missing_data_service import DOCUMENT_LABELS
+
+    # The automated run is a processing job like any other. Without this row
+    # the admin dashboard — which counts jobs and emails — would show nothing
+    # for CSPs handled automatically, understating what the system did.
+    job = ProcessingJob(
+        job_id=f"JOB-{datetime.now(timezone.utc).strftime('%Y%m%d')}-"
+               f"{uuid.uuid4().hex[:6]}",
+        csp_id=csp.csp_id,
+        workflow_type=WorkflowType.NEW_CSP,
+        current_state=JobState.DOCUMENT_GENERATING,
+        requested_by=None,   # nobody asked: the sync detected the CSP
+    )
+    session.add(job)
+    session.flush()
+
+    made_on = csp_mapping.effective_certificate_date(csp)
+
+    generated = document_service.generate_documents(
+        csp, document_types, certificate_date_value=made_on)
+
+    passed, results = document_validation_service.validate_all_documents(
+        csp, generated, made_on)
+    if not passed:
+        # Validation failing is a defect in the templates or the data, not
+        # something an RM can fix, so it is raised loudly and nothing is sent.
+        job.current_state = JobState.FAILED_DOCUMENT_VALIDATION
+        session.commit()
+        raise RuntimeError(
+            f"Document validation failed for CSP {csp.csp_id}: "
+            f"{[r['issues'] for r in results if r['issues']]}"
+        )
+
+    converted = dict(pdf_service.convert_all([path for _, path in generated]))
+
+    # Rows are built and added here rather than through
+    # store_generated_documents(), which commits on its own: the stored files
+    # and the processed stamp must land in ONE transaction, or a crash between
+    # them would leave a CSP that looks unprocessed but already has documents,
+    # and the next run would email them a second time.
+    for doc_type, docx_path in generated:
+        version = document_storage_service.next_version(
+            session, csp.csp_id, doc_type)
+        session.add_all(document_storage_service.build_pair(
+            csp.csp_id, doc_type, docx_path, converted[docx_path], version,
+            processing_job_id=job.id))
+        session.flush()
+
+    job.current_state = JobState.EMAIL_SENDING
+    csp.new_csp_processed_at = datetime.now(timezone.utc)
+    alert_service.resolve_alerts(session, csp.csp_id)
+    session.commit()
+
+    pdf_paths = [converted[path] for _, path in generated]
+    names = [DOCUMENT_LABELS.get(dt, dt.value) for dt, _ in generated]
+
+    # Recorded before the attempt, so a failed send still says what it was
+    # carrying. The email's status decides whether each document counts as
+    # sent or failed.
+    email_job = EmailJob(
+        processing_job_id=job.id,
+        recipient=csp.email,
+        subject=f"Your CSP Documents — {csp.csp_id} | EKO India Financial Services",
+        status=EmailStatus.SENDING,
+    )
+    email_job.documents = [
+        EmailDocument(document_type=doc_type) for doc_type, _ in generated
+    ]
+    session.add(email_job)
+    session.commit()
+
+    sent = email_service.send_documents_email(
+        to_email=csp.email,
+        csp_name=csp.name,
+        csp_id=csp.csp_id,
+        doc_names=names,
+        doc_filepaths=pdf_paths,
+    )
+
+    if sent:
+        email_job.status = EmailStatus.SENT
+        email_job.sent_at = datetime.now(timezone.utc)
+        job.current_state = JobState.EMAIL_SENT
+    else:
+        email_job.status = EmailStatus.FAILED
+        email_job.failure_reason = "Email provider did not accept the message."
+        job.current_state = JobState.FAILED_EMAIL_SENDING
+    session.commit()
+
+    if sent:
+        logger.info("new_csp_worker: CSP %s — %d document(s) sent to %s",
+                    csp.csp_id, len(pdf_paths), csp.email)
+    else:
+        # The documents are stored and the CSP stays processed; only delivery
+        # failed, and that is an operational problem, not a reason to
+        # regenerate and risk sending twice.
+        logger.error(
+            "new_csp_worker: CSP %s — documents stored but the email to %s "
+            "was not accepted", csp.csp_id, csp.email,
+        )
