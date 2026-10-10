@@ -102,7 +102,7 @@ it — you said so.
 | 50 | 11 Oct | You reported: Access screen crashes ("Cannot read properties of undefined (reading 'length')") | **Fixed** — Claude's mistake: the access data was changed for workspaces without the screen. Data put back in the shape the screen expects; a test now guards it. Checked live |
 | 51 | 11 Oct | The two Ganesh Kumar rows (ganesh.kumar@eko.co.in and ganesh.kumar@ekosupport.in) are **different and both correct** | Noted — not a duplicate; nothing to change |
 | 52 | 11 Oct | **Read the Authorization sheet for Super Admins:** the SuperAdmins tab says only Ankita is Super Admin; Ganesh is only an Admin. Admin and Super Admin are different | **Done** — the app now reads the SuperAdmins tab (it used a settings-file list that named Ganesh). Ganesh, who signed up on 11 Oct at 3:14 am and was wrongly made Super Admin, corrected to Admin. Checked live |
-| 53 | 11 Oct | **The RM's only job is to search an agent and choose which documents to make. The RM fills in no data — missing details go to the agent by WhatsApp** | **Waiting for you** — conflicts with earlier records (No. 18, your prototype's "Data Required" screen, and the 1 Oct rule that the RM is chased for bank/organisation fields). Claude asked how to handle fields an agent can't know |
+| 53 | 11 Oct | **The RM's only job is to search an agent and choose which documents to make. The RM fills in no data — missing details go to the agent by WhatsApp** | **Decided 11 Oct:** (a) RM sees a "details missing — agent asked" message and the request stays **Pending**; when the data arrives and the sheet is updated, the documents are made automatically, **emailed and WhatsApped** to the agent. (b) Bank/organisation details (AO, RBO Name, DC/ASM where INFO can't fill) come from **new columns in the INFO sheet**. (c) **Nothing is sent to agents until WhatsApp works** — requests wait. Replaces No. 18 and the RM part of the 1 Oct field-ownership rule. Status: **To do** — tasks M1–M6; 2 questions open (M5, M6) |
 | 54 | 11 Oct | Where are the workspace changes on the login/sign-up pages? | **Built 11 Oct** — sign-up box, workspace chooser, Super Admin in the Add form. Pages compile and load; **you have not tested them yet** |
 
 ---
@@ -164,6 +164,17 @@ it — you said so.
 | W7 | Security tests: nobody sees another workspace | **Done 11 Oct** — 20 new tests; all 771 tests pass |
 | W8 | Backup again just before the change | **Done 11 Oct** — database-before-workspaces.dump |
 
+### RM fills nothing (request No. 53)
+
+| No. | What | Status |
+|---|---|---|
+| M1 | RM screen: replace the "Data Required" form with a "details missing" message; request shows **Pending** | To do — approved 11 Oct |
+| M2 | Keep pending requests and finish them automatically when the sheet has the data: make documents, email, WhatsApp | To do |
+| M3 | Ask the agent for missing details on WhatsApp | **Stuck** — WhatsApp not working yet (needs B and C); you chose to wait rather than use email |
+| M4 | Read AO / RBO Name from new INFO columns | **Waiting for you** — you add the columns; Claude reads them |
+| M5 | Where in INFO should the AO / RBO columns go, and matched by what (district? LHO?) | **Waiting for you** |
+| M6 | Certificate date for **existing** agents — INFO can't hold a per-agent date. Who gives it? | **Waiting for you** |
+
 ### Stuck until something else is done
 
 - **WhatsApp messages** — waits on B and C, and Meta must approve the message wording.
@@ -209,3 +220,4 @@ it — you said so.
 | 11 Oct 2026 | Added No. 51: the two Ganesh Kumar entries are both correct |
 | 11 Oct 2026 | Added No. 52 (done), 53 (waiting for you), 54 (in progress) |
 | 11 Oct 2026 | Workspace screens built (W3–W5, No. 54) |
+| 11 Oct 2026 | Your answers on No. 53 recorded; tasks M1–M6 added |
