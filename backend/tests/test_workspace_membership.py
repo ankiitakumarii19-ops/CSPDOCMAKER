@@ -235,8 +235,6 @@ async def test_a_real_access_token_is_not_a_selection_token(
 
 async def test_the_settings_list_does_not_demote_a_workspace_creator(
         strict_client, db, other_ws, captured_codes, monkeypatch):
-    from app.config import get_settings
-    monkeypatch.setattr(get_settings(), "super_admin_emails", "")
     db.add(User(email="outsider@eko.co.in", name="Outsider", mobile="",
                 role=UserRole.SUPER_ADMIN, workspace_id=other_ws.id,
                 account_status=AccountStatus.ACTIVE,

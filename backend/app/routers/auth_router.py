@@ -277,14 +277,19 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
     eko = await workspace_service.eko_workspace(db)
     if eko is not None:
         eko_member = await workspace_service.membership(db, user.email, eko.id)
-        if settings.is_super_admin(user.email):
+        listed = await workspace_service.sheet_super_admins(db)
+        if listed is None:
+            # The SuperAdmins tab has never been read: unknown, so change
+            # nothing rather than demote anyone.
+            pass
+        elif user.email.lower() in listed:
             if eko_member is None:
                 db.add(WorkspaceMember(
                     workspace_id=eko.id, email=user.email.lower(),
                     name=user.name, role=UserRole.SUPER_ADMIN, active=True))
             elif eko_member.role is not UserRole.SUPER_ADMIN:
                 logger.info("auth_router.verify_otp: %s promoted to Super "
-                            "Admin of Eko by configuration", user.email)
+                            "Admin of Eko by the SuperAdmins tab", user.email)
                 eko_member.role = UserRole.SUPER_ADMIN
         elif (eko_member is not None
               and eko_member.role is UserRole.SUPER_ADMIN
@@ -292,8 +297,8 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
             # Taken off the list: they stop being one immediately. A Super
             # Admin who was ADDED in the app (added_by_email set) is not
             # governed by the list, so is left alone.
-            logger.info("auth_router.verify_otp: %s is no longer a "
-                        "configured Super Admin — demoted to Admin in Eko",
+            logger.info("auth_router.verify_otp: %s is no longer in the "
+                        "SuperAdmins tab — demoted to Admin in Eko",
                         user.email)
             eko_member.role = UserRole.ADMIN
         await db.flush()

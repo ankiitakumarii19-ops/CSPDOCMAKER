@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 )
 @for_configured_workspace
 def sync_authorization(self):
-    """Refresh authorization_records from the RMs and Admins tabs."""
+    """Refresh authorization_records from the RMs, Admins and SuperAdmins tabs."""
     from sqlalchemy import create_engine, select
     from sqlalchemy.orm import Session
 
@@ -51,6 +51,8 @@ def sync_authorization(self):
             for role, sheet_name in (
                 (UserRole.RM, settings.google_sheets_rm_sheet_name),
                 (UserRole.ADMIN, settings.google_sheets_admin_sheet_name),
+                (UserRole.SUPER_ADMIN,
+                 settings.google_sheets_super_admin_sheet_name),
             ):
                 rows_by_role[role] = gs._read_sheet_tab(sheet_name)
         except RuntimeError as e:

@@ -101,6 +101,9 @@ it — you said so.
 | 49 | 11 Oct | Give me the login page so I can test everything myself | **Done** — app started on this laptop: http://localhost:3000/auth/login. Workspace screens not built yet, so those can't be tested on screen |
 | 50 | 11 Oct | You reported: Access screen crashes ("Cannot read properties of undefined (reading 'length')") | **Fixed** — Claude's mistake: the access data was changed for workspaces without the screen. Data put back in the shape the screen expects; a test now guards it. Checked live |
 | 51 | 11 Oct | The two Ganesh Kumar rows (ganesh.kumar@eko.co.in and ganesh.kumar@ekosupport.in) are **different and both correct** | Noted — not a duplicate; nothing to change |
+| 52 | 11 Oct | **Read the Authorization sheet for Super Admins:** the SuperAdmins tab says only Ankita is Super Admin; Ganesh is only an Admin. Admin and Super Admin are different | **Done** — the app now reads the SuperAdmins tab (it used a settings-file list that named Ganesh). Ganesh, who signed up on 11 Oct at 3:14 am and was wrongly made Super Admin, corrected to Admin. Checked live |
+| 53 | 11 Oct | **The RM's only job is to search an agent and choose which documents to make. The RM fills in no data — missing details go to the agent by WhatsApp** | **Waiting for you** — conflicts with earlier records (No. 18, your prototype's "Data Required" screen, and the 1 Oct rule that the RM is chased for bank/organisation fields). Claude asked how to handle fields an agent can't know |
+| 54 | 11 Oct | Where are the workspace changes on the login/sign-up pages? | Not built yet (W3–W5 screens) — Claude building them now |
 
 ---
 
@@ -204,3 +207,4 @@ it — you said so.
 | 11 Oct 2026 | Added No. 49: app started for your own testing |
 | 11 Oct 2026 | Added No. 50: Access screen crash fixed |
 | 11 Oct 2026 | Added No. 51: the two Ganesh Kumar entries are both correct |
+| 11 Oct 2026 | Added No. 52 (done), 53 (waiting for you), 54 (in progress) |

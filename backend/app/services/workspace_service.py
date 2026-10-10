@@ -128,3 +128,27 @@ async def has_any_membership(session, email: str) -> bool:
             select(WorkspaceMember.id).where(
                 WorkspaceMember.email == (email or "").strip().lower())
         )).first() is not None
+
+
+async def sheet_super_admins(session):
+    """Active Super Admins of Eko SBI Kiosk CSP, from the SuperAdmins tab.
+
+    Read from the mirrored copy (authorization_records), refreshed every 15
+    minutes. Returns None when the tab has never been mirrored — which means
+    "unknown", not "nobody": callers must then change nothing, or a Google
+    outage would demote every Super Admin.
+    """
+    from app.models.authorization_record import AuthorizationRecord
+
+    eko = await eko_workspace(session)
+    if eko is None:
+        return None
+    with all_workspaces():
+        rows = (await session.execute(
+            select(AuthorizationRecord.email, AuthorizationRecord.active)
+            .where(AuthorizationRecord.workspace_id == eko.id,
+                   AuthorizationRecord.role == UserRole.SUPER_ADMIN)
+        )).all()
+    if not rows:
+        return None
+    return {email.strip().lower() for email, active in rows if active}

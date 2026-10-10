@@ -181,7 +181,7 @@ async def _sheet_people(
         "people": people,
         "total": len(people),
         # Shown so it is obvious these are not managed here.
-        "super_admins": list(settings.super_admins),
+        "super_admins": [],
         "source": "Authorization Google Sheet",
         "sync_interval_minutes": settings.google_sheets_sync_interval_minutes,
     }
@@ -298,13 +298,6 @@ async def _revoke_in_sheet(
 ):
     """Take someone's access away by marking them inactive in the sheet."""
     settings = get_settings()
-    if settings.is_super_admin(request.email):
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"{request.email} is a Super Admin. Remove them from "
-            f"SUPER_ADMIN_EMAILS instead — the sheet does not control them.",
-        )
-
     tab = _tab(request.role)
     _service, rows, columns = _read(tab)
     if "email" not in columns or "status" not in columns:
@@ -427,13 +420,23 @@ async def list_access(
     if is_eko:
         # People the Authorization sheet lists but who have not signed up
         # yet are still shown, exactly as before workspaces.
-        sheet = await _sheet_people(session=session, user=user)
-        for p in sheet["people"]:
-            if (p["email"] or "").lower() not in seen:
-                people.append({**p, "added_by": None})
-        for email in settings.super_admins:
+        listed = await workspace_service.sheet_super_admins(session) or set()
+        for email in sorted(listed):
             if email not in super_admins:
                 super_admins.append(email)
+        sheet = await _sheet_people(session=session, user=user)
+        for p in sheet["people"]:
+            if p["role"] not in ("rm", "admin"):
+                continue
+            if (p["email"] or "").lower() not in seen:
+                people.append({**p, "added_by": None})
+
+    # A Super Admin is shown in the Owners box only — never also as an
+    # old, inactive Admin row left behind in the sheet's history.
+    owners = {e.lower() for e in super_admins}
+    people = [p for p in people
+              if not ((p["email"] or "").lower() in owners
+                      and not p["active"])]
 
     return {
         "people": people,

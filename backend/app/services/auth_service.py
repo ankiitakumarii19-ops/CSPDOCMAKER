@@ -127,13 +127,26 @@ async def signup_user(
     invited = None
     authorized, sheet_data = False, None
 
-    if settings.is_super_admin(email):
-        # (a) A configured Super Admin runs Eko SBI Kiosk CSP, as before.
-        requested_role = "super_admin"
-        authorized = True
-        logger.info(
-            "auth_service.signup_user: %s is a configured Super Admin", email,
-        )
+    if (requested_role == "super_admin"
+            and not (workspace_name or "").strip()):
+        # (a) A Super Admin of Eko SBI Kiosk CSP: listed in the SuperAdmins
+        # tab of the Authorization sheet, checked live.
+        try:
+            authorized, sheet_data = (
+                google_sheets_service.check_authorization(
+                    email, "super_admin"))
+        except RuntimeError as e:
+            logger.error("auth_service.signup_user: SuperAdmins tab check "
+                         "failed for %s: %s", email, e)
+            return False, (
+                "Authorization verification is temporarily unavailable. "
+                "Please try again later."
+            ), None
+        if not authorized:
+            return False, (
+                "Please enter a name for your new workspace. (Leave it blank "
+                "only if you are listed as a Super Admin of Eko SBI Kiosk CSP.)"
+            ), None
     elif requested_role == "super_admin":
         # (b) Anyone on an allowed domain may create their OWN workspace.
         # It starts empty and sees nothing of any other workspace.

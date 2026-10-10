@@ -107,70 +107,81 @@ async def test_an_rm_does_not_get_the_admin_dashboard(client, path):
 
 
 # ---- where Super Admins come from ---------------------------------------
+#
+# Changed 11 Oct 2026 (tracker No. 52): Super Admins of Eko SBI Kiosk CSP
+# come from the SuperAdmins tab of the Authorization sheet — the same way
+# RMs and Admins come from theirs. The SUPER_ADMIN_EMAILS setting listed
+# Ganesh as an owner when the sheet said he is an Admin; it is no longer read.
 
-async def test_a_configured_email_is_a_super_admin(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails",
-                        "owner@eko.co.in, second@ekosupport.in")
-    assert settings.is_super_admin("owner@eko.co.in")
-    assert settings.is_super_admin("second@ekosupport.in")
+def _sheet_says(monkeypatch, listed: dict):
+    """Make the live sheet check answer from `listed` = {email: role}."""
+    from app.services import google_sheets_service
 
-
-async def test_matching_an_owner_ignores_case_and_spacing(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails", "  Owner@Eko.co.in ")
-    assert settings.is_super_admin("owner@eko.co.in")
-    assert settings.is_super_admin("  OWNER@EKO.CO.IN  ")
-
-
-async def test_nobody_else_is_a_super_admin(monkeypatch):
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails", "owner@eko.co.in")
-    assert not settings.is_super_admin("admin@eko.co.in")
-    assert not settings.is_super_admin("")
+    def fake(email, role):
+        ok = listed.get(email.lower()) == role
+        return ok, ({"Email_id": email, "Contact_no": "9000000000"}
+                    if ok else None)
+    monkeypatch.setattr(google_sheets_service, "check_authorization", fake)
 
 
-async def test_an_empty_list_makes_nobody_a_super_admin(monkeypatch):
-    """A blank setting must not accidentally grant the role to everyone."""
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails", "")
-    assert settings.super_admins == ()
-    assert not settings.is_super_admin("anyone@eko.co.in")
+async def _mirror(db, email, role, active=True):
+    """What the 15-minute sync writes for one sheet row."""
+    from app.models.authorization_record import AuthorizationRecord
+    db.add(AuthorizationRecord(email=email, name=email.split("@")[0],
+                               mobile="", role=role, active=active,
+                               source="google_sheet"))
+    await db.commit()
+
+
+async def test_the_settings_file_no_longer_makes_anyone_a_super_admin(
+        db, monkeypatch):
+    from app.services import auth_service
+
+    monkeypatch.setattr(get_settings(), "super_admin_emails",
+                        "ganesh.test@eko.co.in")
+    _sheet_says(monkeypatch, {"ganesh.test@eko.co.in": "admin"})
+    ok, _m, user = await auth_service.signup_user(
+        db=db, email="ganesh.test@eko.co.in", name="Ganesh",
+        password="a-password", requested_role="admin")
+    assert ok and user.role is UserRole.ADMIN
+
+
+async def test_someone_in_the_superadmins_tab_signs_up_as_super_admin(
+        db, monkeypatch):
+    from app.services import auth_service
+
+    _sheet_says(monkeypatch, {"owner@eko.co.in": "super_admin"})
+    ok, message, user = await auth_service.signup_user(
+        db=db, email="owner@eko.co.in", name="Owner",
+        password="a-password", requested_role="super_admin")
+    assert ok, message
+    assert user.role is UserRole.SUPER_ADMIN
 
 
 async def test_signup_as_super_admin_needs_a_workspace_name(db, monkeypatch):
-    """Changed 11 Oct 2026 (tracker No. 48). Anyone on an allowed domain may
-    sign up as a Super Admin — but only of a NEW workspace they name. Without
-    a name there is nothing to be Super Admin of, so it is refused."""
+    """Not in the SuperAdmins tab and no workspace name: nothing to be
+    Super Admin of, so it is refused (tracker No. 48)."""
     from app.services import auth_service
 
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails", "owner@eko.co.in")
-
+    _sheet_says(monkeypatch, {})
     ok, message, user = await auth_service.signup_user(
         db=db, email="someone.else@eko.co.in", name="Someone",
-        password="x", requested_role="super_admin",
-    )
+        password="x", requested_role="super_admin")
     assert ok is False
-    assert "workspace name" in message
+    assert "workspace" in message
     assert user is None
 
 
-async def test_a_configured_owner_signing_up_gets_the_role(db, monkeypatch):
-    """And the configured one does get it, without being in any sheet."""
-    from app.services import auth_service
+async def test_who_is_a_super_admin_is_read_from_the_mirrored_tab(db):
+    from app.services import workspace_service
 
-    settings = get_settings()
-    monkeypatch.setattr(settings, "super_admin_emails", "owner@eko.co.in")
-
-    ok, _message, user = await auth_service.signup_user(
-        db=db, email="owner@eko.co.in", name="Owner",
-        password="a-password", requested_role="rm",
-    )
-    assert ok is True
-    assert user is not None
-    assert user.role is UserRole.SUPER_ADMIN, (
-        "a configured owner asked for 'rm' and should still be an owner")
+    assert await workspace_service.sheet_super_admins(db) is None, (
+        "never mirrored = unknown, not 'nobody'")
+    await _mirror(db, "Owner@Eko.co.in", UserRole.SUPER_ADMIN)
+    await _mirror(db, "former@eko.co.in", UserRole.SUPER_ADMIN, active=False)
+    await _mirror(db, "admin.only@eko.co.in", UserRole.ADMIN)
+    assert await workspace_service.sheet_super_admins(db) == {
+        "owner@eko.co.in"}
 
 
 # ---- the agents' run history is the Owner's alone -----------------------

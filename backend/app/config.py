@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     google_sheets_id: str = Field(default="", alias="GOOGLE_SHEETS_ID")
     google_sheets_rm_sheet_name: str = Field(default="RMs", alias="GOOGLE_SHEETS_RM_SHEET_NAME")
     google_sheets_admin_sheet_name: str = Field(default="Admins", alias="GOOGLE_SHEETS_ADMIN_SHEET_NAME")
+    google_sheets_super_admin_sheet_name: str = Field(
+        default="SuperAdmins", alias="GOOGLE_SHEETS_SUPER_ADMIN_SHEET_NAME")
     google_sheets_sync_interval_minutes: int = Field(default=15, alias="GOOGLE_SHEETS_SYNC_INTERVAL_MINUTES")
 
     # ---- Gmail API ----
@@ -150,7 +152,9 @@ class Settings(BaseSettings):
     # Admin is who adds them to it.
     super_admin_emails: str = Field(
         default="", alias="SUPER_ADMIN_EMAILS",
-        description="Comma-separated emails that sign in as Super Admin",
+        description="NO LONGER USED (11 Oct 2026). Super Admins of Eko SBI "
+                    "Kiosk CSP come from the SuperAdmins tab of the "
+                    "Authorization sheet. Kept only so an old .env loads.",
     )
 
     @property

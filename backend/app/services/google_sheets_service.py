@@ -223,6 +223,8 @@ def check_authorization(email: str, requested_role: str) -> tuple[bool, Optional
         sheet_name = settings.google_sheets_admin_sheet_name
     elif requested_role == "rm":
         sheet_name = settings.google_sheets_rm_sheet_name
+    elif requested_role == "super_admin":
+        sheet_name = settings.google_sheets_super_admin_sheet_name
     else:
         logger.warning(
             "google_sheets_service.check_authorization: invalid role '%s' for %s",
