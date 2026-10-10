@@ -121,8 +121,8 @@ it — you said so.
 
 | No. | What | Why it matters |
 |---|---|---|
-| K | **Save a backup copy of all the code** (first "git commit") — needs your OK | Right now the whole project exists only on this one laptop |
-| L | **Back up the database** | All documents and agent data are in one place that already broke once (5 Oct) |
+| K | ~~Save a backup copy of all the code~~ **Done 11 Oct** | Right now the whole project exists only on this one laptop |
+| L | ~~Back up the database~~ **Done 11 Oct** (one-off; automatic regular backups still to do) | All documents and agent data are in one place that already broke once (5 Oct) |
 | M | Check whether the agent's "fill in your details" page exists | The two project files disagree |
 | N | Make uploading a new template actually work | Upload is accepted but would fail when used |
 | O | Check the 12 prototype screen changes are all in place | Not confirmed |
@@ -135,7 +135,7 @@ it — you said so.
 | No. | What | Status |
 |---|---|---|
 | S1 | Look at what the app already has | Done (10 Oct) — findings in Claude's reply |
-| S2 | **Back up** code, database and files before any change | **Waiting for you** — you said "not yet" (10 Oct). Your own rule says no big change before a backup, so S5–S9 wait on this |
+| S2 | **Back up** code, database and files before any change | **Done 11 Oct** — code saved in git (save point `050737d`); database, photos and documents copied to `C:\CSPDOCMAKER-backups6-10-11\`; database test-restored and matched exactly |
 | S3 | Existing "company" setup | Decided 10 Oct: **leave it as it is** — one company, nothing removed |
 | S4 | Original papers | Decided 10 Oct: **keep only the photo**; papers stay in Zoho. (This changes your request No. 47, which listed original papers) |
 | S5 | Move photos and papers into private storage | To do |
@@ -180,3 +180,4 @@ it — you said so.
 | 10 Oct 2026 | Rewritten in plain language at your request |
 | 10 Oct 2026 | Added No. 47 (central database) and tasks S1–S9 |
 | 10 Oct 2026 | Your 4 answers recorded on S2, S3, S4, S6 |
+| 11 Oct 2026 | Backup done and checked (S2, K, L). Found and excluded a copy of the passwords file from git |
