@@ -380,7 +380,15 @@ async def list_access(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("super_admin")),
 ):
-    """Everyone in this workspace, grouped by the Super Admin who added them."""
+    """Everyone in this workspace, grouped by the Super Admin who added them.
+
+    The first five keys are the shape the Access Control screen was built
+    against (AccessListing in frontend/app/lib/api.ts) and must not change
+    without that screen changing with them: `people` holds RMs and Admins
+    only, `super_admins` the workspace's Super Admins. The rest is new and
+    additive.
+    """
+    settings = get_settings()
     workspace_id = require_workspace_id()
     ws = (await session.execute(
         select(Workspace).where(Workspace.id == workspace_id))).scalars().one()
@@ -391,37 +399,53 @@ async def list_access(
         u.email.lower(): u for u in
         (await session.execute(select(User))).scalars().all()
     }
-    people = []
+
+    people, super_admins, seen = [], [], set()
+    groups: dict = {}
     for m in members:
+        groups.setdefault(m.added_by_email or CARRIED_OVER, []).append(m.email)
+        if m.role is UserRole.SUPER_ADMIN:
+            if m.active:
+                super_admins.append(m.email)
+            continue
         account = accounts.get(m.email)
+        seen.add(m.email)
         people.append({
             "email": m.email,
-            "name": m.name or (account.name if account else None),
-            "mobile": account.mobile if account else None,
+            "name": m.name or (account.name if account else "") or m.email,
+            "mobile": (account.mobile if account else "") or "",
             "role": m.role.value,
             "active": m.active,
-            "added_by": m.added_by_email,
-            "added_at": m.created_at.isoformat() if m.created_at else None,
             "registered": account is not None,
             "last_login": account.last_login_at.isoformat()
                           if account and account.last_login_at else None,
+            "synchronized_at": None,
+            "added_by": m.added_by_email,
         })
 
-    groups: dict = {}
-    for p in people:
-        groups.setdefault(p["added_by"] or CARRIED_OVER, []).append(p["email"])
+    is_eko = await workspace_service.is_eko(session, workspace_id)
+    if is_eko:
+        # People the Authorization sheet lists but who have not signed up
+        # yet are still shown, exactly as before workspaces.
+        sheet = await _sheet_people(session=session, user=user)
+        for p in sheet["people"]:
+            if (p["email"] or "").lower() not in seen:
+                people.append({**p, "added_by": None})
+        for email in settings.super_admins:
+            if email not in super_admins:
+                super_admins.append(email)
 
-    result = {
-        "workspace": {"id": str(ws.id), "name": ws.name},
+    return {
         "people": people,
         "total": len(people),
+        "super_admins": super_admins,
+        "source": ("Authorization Google Sheet and this app" if is_eko
+                   else "Added in this app"),
+        "sync_interval_minutes": settings.google_sheets_sync_interval_minutes,
+        # New, additive.
+        "workspace": {"id": str(ws.id), "name": ws.name},
         "by_super_admin": groups,
-        "source": "This workspace",
     }
-    if await workspace_service.is_eko(session, workspace_id):
-        # Still shown: who the Authorization sheet lists, as before.
-        result["sheet"] = await _sheet_people(session=session, user=user)
-    return result
 
 
 @router.post("/grant", status_code=status.HTTP_201_CREATED)

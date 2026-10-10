@@ -326,3 +326,33 @@ def test_the_two_sheet_reading_jobs_use_the_eko_only_runner():
     from app.workers import auth_sync_worker, csp_sync_worker
     for module in (csp_sync_worker, auth_sync_worker):
         assert "@for_configured_workspace" in inspect.getsource(module)
+
+
+# ---- the Access Control screen's contract ---------------------------------
+#
+# On 11 Oct the listing's shape was changed without the screen, and the
+# screen crashed reading `super_admins.length`. These pin the keys that
+# AccessListing in frontend/app/lib/api.ts relies on.
+
+SCREEN_KEYS = {"people", "total", "super_admins", "source",
+               "sync_interval_minutes"}
+PERSON_KEYS = {"email", "name", "mobile", "role", "active", "registered",
+               "last_login", "synchronized_at"}
+
+
+async def test_the_access_listing_keeps_the_shape_the_screen_reads(
+        strict_client, db, other_ws):
+    await _member(db, "helper2@eko.co.in", UserRole.RM, ws_id=other_ws.id,
+                  added_by="outsider@eko.co.in")
+    body = (await strict_client.get(
+        "/api/admin/access",
+        headers=_token("outsider@eko.co.in", "super_admin", other_ws.id),
+    )).json()
+    assert SCREEN_KEYS <= body.keys()
+    assert body["super_admins"] == ["outsider@eko.co.in"]
+    assert isinstance(body["sync_interval_minutes"], int)
+    assert body["people"], "the RM should be listed"
+    for person in body["people"]:
+        assert PERSON_KEYS <= person.keys()
+        # The screen's table is RMs and Admins; Super Admins go in the box.
+        assert person["role"] in ("rm", "admin")

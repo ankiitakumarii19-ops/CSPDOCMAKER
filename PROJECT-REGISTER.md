@@ -98,6 +98,8 @@ it — you said so.
 | 46 | 10 Oct | Make this tracker readable, in plain language | Done — this version |
 | 47 | 10 Oct | **One central database under the Super Admin.** Super Admin sees everything; RMs see their own agents; Admins only watch; each agent's sheet details, photos, original papers and documents are kept together on their record. **No company-by-company separation for now**, but build so it can be added later. A new searchable "Database" section for the Super Admin. Back up before any big change. Ask before changing anything existing. | **Waiting for you** — plan proposed, see section 3 (S1–S9). Partly replaces No. 33 (company separation is paused) |
 | 48 | 11 Oct | **Super Admins create workspaces.** A Super Admin creates a workspace and adds other Super Admins, Admins or RMs to it. Anyone new who signs up as a Super Admin gets their **own empty workspace**, and cannot see any other workspace unless a Super Admin there adds them. | **Decided 11 Oct:** (a) Yes, turn workspaces on — **replaces the "no separation" part of No. 47**. (b) The present workspace is renamed **"Eko SBI Kiosk CSP"**; every new Super Admin is asked to **name their own** workspace. (c) Anyone with an @eko.co.in or @ekosupport.in email may sign up as a Super Admin and get a new workspace — **changes No. 11** for Super Admins only. (d) Super Admins add Super Admins, Admins and RMs **inside the app**; the Authorization sheet keeps working for Eko SBI Kiosk CSP only. Status: **Waiting for you** — screen designs shown 11 Oct, need approval (W1–W8) |
+| 49 | 11 Oct | Give me the login page so I can test everything myself | **Done** — app started on this laptop: http://localhost:3000/auth/login. Workspace screens not built yet, so those can't be tested on screen |
+| 50 | 11 Oct | You reported: Access screen crashes ("Cannot read properties of undefined (reading 'length')") | **Fixed** — Claude's mistake: the access data was changed for workspaces without the screen. Data put back in the shape the screen expects; a test now guards it. Checked live |
 
 ---
 
@@ -198,3 +200,5 @@ it — you said so.
 | 11 Oct 2026 | Added No. 48 (workspaces created by Super Admins); flagged 2 conflicts; S6 on hold |
 | 11 Oct 2026 | Your answers on No. 48 recorded; tasks W1–W8 added |
 | 11 Oct 2026 | Workspaces built behind the scenes and tested (W1, W2, W6, W7, W8 done). Screens still to do |
+| 11 Oct 2026 | Added No. 49: app started for your own testing |
+| 11 Oct 2026 | Added No. 50: Access screen crash fixed |
