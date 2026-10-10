@@ -73,24 +73,27 @@ def test_complete_csp_with_a_stored_date_has_nothing_missing():
     assert result.has_missing_data is False, result.model_dump()
 
 
-def test_stored_date_is_printed_and_validated(tmp_path):
-    csp = _csp(certificate_date=date(2026, 3, 4))
+def test_a_saved_date_is_ignored_and_today_is_printed(tmp_path):
+    """Changed 11 Oct 2026 (tracker No. 56): the certificate date is always
+    the day the document is made, even if an older date is on the record."""
+    csp = _csp(certificate_date=date(2019, 3, 4))
     docs = document_service.generate_documents(csp, [DocumentType.BCP], None)
     text = document_validation_service._extract_document_text(docs[0][1])
-    assert "March 2026" in text
+    assert date.today().strftime("%B %Y") in text
+    assert "March 2019" not in text
 
     all_passed, results = document_validation_service.validate_all_documents(csp, docs)
     assert all_passed, results
     assert results[0]["validation_status"] == ValidationStatus.PASSED.value
 
 
-def test_validation_fails_when_the_printed_date_is_not_the_records_date(tmp_path):
+def test_validation_fails_when_the_printed_date_is_not_the_runs_date(tmp_path):
     """A document made with one date must not validate against another."""
-    csp = _csp(certificate_date=date(2026, 3, 4))
-    docs = document_service.generate_documents(csp, [DocumentType.BCP], None)
-    csp.certificate_date = date(2024, 8, 15)  # record now says something else
+    csp = _csp()
+    docs = document_service.generate_documents(
+        csp, [DocumentType.BCP], date(2026, 3, 4))
     status, issues = document_validation_service.validate_document(
-        csp, DocumentType.BCP, docs[0][1],
+        csp, DocumentType.BCP, docs[0][1], date(2024, 8, 15),
     )
     assert status == ValidationStatus.FAILED
     assert any(i["expected"] == "August 2024" for i in issues), issues
@@ -99,16 +102,18 @@ def test_validation_fails_when_the_printed_date_is_not_the_records_date(tmp_path
 def test_training_certificate_prints_the_date(tmp_path, monkeypatch):
     """The Training Certificate carries the photo AND the made-on date."""
     monkeypatch.setattr(document_service.settings, "document_output_dir", str(tmp_path))
-    csp = _csp(certificate_date=date(2024, 8, 15))
+    csp = _csp(certificate_date=date(2024, 8, 15))   # ignored (No. 56)
     (_, path), = document_service.generate_documents(
         csp, [DocumentType.TRAINING_CERTIFICATE], None)
-    assert "15.08.2024" in document_validation_service._extract_document_text(path)
+    text = document_validation_service._extract_document_text(path)
+    assert date.today().strftime("%d.%m.%Y") in text
+    assert "15.08.2024" not in text
     all_passed, results = document_validation_service.validate_all_documents(
         csp, [(DocumentType.TRAINING_CERTIFICATE, path)])
     assert all_passed, results
 
 
-# ---- new CSPs date themselves, existing ones are asked --------------------
+# ---- every CSP is dated the day the document is made (No. 56) ------------
 
 def _record(origin, certificate_date=None):
     from app.models.csp_record import CSPRecord
@@ -148,10 +153,13 @@ def test_the_date_is_never_unknown():
             _record(origin)) is not None
 
 
-def test_a_stored_date_always_wins_over_today():
+def test_a_saved_date_never_replaces_today():
+    """Tracker No. 56: always the date the document is made."""
     from datetime import date
     stored = date(2019, 1, 19)
-    assert csp_mapping.effective_certificate_date(_record("new", stored)) == stored
+    for origin in ("new", "baseline"):
+        assert csp_mapping.effective_certificate_date(
+            _record(origin, stored)) == date.today()
 
 
 def test_an_explicit_date_beats_everything():

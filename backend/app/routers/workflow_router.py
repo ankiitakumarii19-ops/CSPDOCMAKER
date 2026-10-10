@@ -39,6 +39,7 @@ from app.models.enums import (
     WorkflowType,
 )
 from app.schemas.workflow import WorkflowProcessRequest
+from app.services import csp_mapping
 from app.services import csp_access
 from app.services.missing_data_service import check_missing_data, DOCUMENT_LABELS
 from app.services import document_service
@@ -170,8 +171,12 @@ async def process_workflow(
     # 3. Generate documents
     job.current_state = JobState.DOCUMENT_GENERATING
     await session.flush()
+    # One date for the whole run: the documents and the check of them must
+    # agree even if this crosses midnight. It is always today (No. 56).
+    made_on = csp_mapping.effective_certificate_date(csp)
     try:
-        generated = document_service.generate_documents(csp, request.document_types)
+        generated = document_service.generate_documents(
+            csp, request.document_types, certificate_date_value=made_on)
     except RuntimeError as e:
         job.current_state = JobState.FAILED_DOCUMENT_GENERATION
         job.error_message = "Document generation failed."
@@ -186,7 +191,7 @@ async def process_workflow(
     job.current_state = JobState.DOCUMENT_VALIDATING
     await session.flush()
     all_passed, validation_results = document_validation_service.validate_all_documents(
-        csp, generated,
+        csp, generated, made_on,
     )
     for (doc_type, filepath), vr in zip(generated, validation_results):
         doc_status = ValidationStatus(vr["validation_status"])

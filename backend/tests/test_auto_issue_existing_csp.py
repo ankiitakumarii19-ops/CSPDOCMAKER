@@ -124,11 +124,12 @@ async def test_a_new_csp_is_dated_the_same_way(db):
         _csp(db, "NEW1", origin="new")) == date.today()
 
 
-async def test_a_supplied_date_is_kept_and_used(db):
+async def test_a_saved_date_is_not_used(db):
+    """Tracker No. 56: always the day the document is made."""
     from app.services import csp_mapping
 
     record = _csp(db, "OLD1", certificate_date=date(2026, 3, 14))
-    assert csp_mapping.effective_certificate_date(record) == date(2026, 3, 14)
+    assert csp_mapping.effective_certificate_date(record) == date.today()
 
 
 # ---- through the API, as an RM would -----------------------------------

@@ -179,9 +179,9 @@ async def update_csp(
 class AutoIssueRequest(BaseModel):
     """Put an existing CSP into the automatic pipeline.
 
-    certificate_date is optional and rarely needed: a certificate carries
-    the day it is made, so one issued today is dated today. Supply a date
-    only to override that deliberately.
+    certificate_date is accepted only so older callers do not break. It is
+    NOT used: since 11 Oct 2026 (tracker No. 56) a certificate always
+    carries the day it is made.
     """
 
     certificate_date: Optional[date] = None

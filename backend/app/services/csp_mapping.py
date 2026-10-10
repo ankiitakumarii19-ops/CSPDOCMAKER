@@ -186,37 +186,28 @@ def document_values(
 
 
 def effective_certificate_date(csp, explicit=None):
-    """The date a certificate carries: the day it is being made.
+    """The date a certificate carries: the day the document is made.
 
-    Confirmed rule, and it is that simple — a document made today is dated
-    today, whoever it is for. An existing CSP is not asked to remember when
-    they were onboarded, and their RM is not asked to supply a date before
-    anything can be issued.
+    Confirmed 11 Oct 2026 (tracker No. 56): ALWAYS the current date, for
+    every CSP, new or existing. Nobody is asked for it, it is never missing
+    data, and a date saved on the record earlier (csp.certificate_date, which
+    an RM used to type in) is no longer used.
 
-    Two narrower cases come first:
-
-      * an explicit date, when a caller is deliberately setting one;
-      * a date already on the record, so a CSP whose documents were issued
-        on a particular day keeps that day if anything is reissued, and
-        their ID card and certificate never disagree.
-
-    Otherwise: today. This never returns None, so a missing date can no
-    longer block a document from being made.
+    `explicit` is only for one run to pass the date it captured once, so the
+    documents it makes and the validation that checks them use the same day
+    even if the run crosses midnight.
     """
     from datetime import date as _date
 
-    if explicit:
-        return explicit
-    if getattr(csp, "certificate_date", None):
-        return csp.certificate_date
-    return _date.today()
+    return explicit or _date.today()
 
 
 def required_fields_for(doc_type: DocumentType) -> list:
     """Canonical fields an RM must supply before this document can be made.
 
     Derived from the template itself, minus the values generated at document
-    time — except certificate_date, which an existing CSP's RM provides.
+    time. certificate_date stays in the list but is never missing: it is
+    always the day the document is made.
     """
     from app.services import template_service
 
