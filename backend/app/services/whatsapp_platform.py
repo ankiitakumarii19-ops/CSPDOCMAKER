@@ -54,16 +54,22 @@ def _rpc(method: str, params: dict, request_id: int = 1) -> dict:
     """One JSON-RPC call to the hosted connection. Raises on any failure."""
     import httpx
 
+    from app import telemetry
+
     s = _settings()
+    op = params.get("name") or method
     try:
-        response = httpx.post(
-            s.whatsapp_platform_url,
-            json={"jsonrpc": "2.0", "id": request_id, "method": method,
-                  "params": params},
-            headers={"Content-Type": "application/json",
-                     "Accept": "application/json, text/event-stream"},
-            timeout=s.whatsapp_platform_timeout_seconds,
-        )
+        with telemetry.external_call("whatsapp_platform", op) as span:
+            response = httpx.post(
+                s.whatsapp_platform_url,
+                json={"jsonrpc": "2.0", "id": request_id, "method": method,
+                      "params": params},
+                headers={"Content-Type": "application/json",
+                         "Accept": "application/json, text/event-stream"},
+                timeout=s.whatsapp_platform_timeout_seconds,
+            )
+            telemetry.note_http(span, "whatsapp_platform", op,
+                                response.status_code, ok_statuses=(200,))
     except Exception as e:
         raise WhatsAppPlatformError(
             f"WhatsApp platform unreachable: {type(e).__name__}: {e}") from e
@@ -86,6 +92,8 @@ def _rpc(method: str, params: dict, request_id: int = 1) -> dict:
             except ValueError:
                 continue
     if payload is None:
+        logger.error("whatsapp_platform: reply not understood (malformed): %s",
+                     text[:300], extra={"failure_kind": "malformed"})
         raise WhatsAppPlatformError(
             f"WhatsApp platform reply not understood: {text[:300]}")
     if "error" in payload:

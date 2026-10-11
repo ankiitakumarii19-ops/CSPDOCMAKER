@@ -19,6 +19,7 @@ from app.services import csp_mapping, template_service
 from app.models.enums import DocumentType, ValidationStatus
 
 from app.services import document_registry as registry
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ def _extract_document_text(filepath: str) -> str:
     )
 
 
+@telemetry.traced("validate_document", "document_validation_service")
 def validate_document(
     csp: CSPRecord,
     doc_type: DocumentType,

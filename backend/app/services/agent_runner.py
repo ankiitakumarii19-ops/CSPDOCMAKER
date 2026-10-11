@@ -159,8 +159,17 @@ def run(session: Session, key: str, triggered_by: Optional[str] = None,
     session.add(record)
     session.flush()
 
+    from app import telemetry
+
     try:
-        outcome = work(session)
+        with telemetry.operation(f"agent {key}", "agent_runner",
+                                 agent=key, triggered_by=triggered_by or "schedule"):
+            outcome = work(session)
+            # What the agent decided — operational facts, no internals.
+            logger.info("[AGENT] %s: %s (%d finding(s)%s)", key,
+                        outcome.summary, len(outcome.findings),
+                        "; " + "; ".join(f.title for f in outcome.findings[:5])
+                        if outcome.findings else "")
         record.status = OK
         record.summary = outcome.summary
         record.detail = outcome.detail
@@ -182,15 +191,26 @@ def run(session: Session, key: str, triggered_by: Optional[str] = None,
         # failed. Roll back first, then re-attach the run record.
         try:
             session.rollback()
-        except Exception:
-            pass
+        except Exception as rollback_error:
+            # Recorded, not hidden: the original error below is what failed
+            # the agent; this only says the clean-up also had trouble.
+            logger.warning("agent_runner: rollback after %s failure also "
+                           "failed: %s: %s", key,
+                           type(rollback_error).__name__, rollback_error,
+                           exc_info=True)
         record = session.merge(record)
         record.status = FAILED
-        record.error = f"{type(e).__name__}: {e}"
+        # Keep the traceback with the run, so the run history shows where.
+        import traceback as _tb
+        record.error = (f"{type(e).__name__}: {e}" + chr(10)
+                        + "".join(_tb.format_exception(type(e), e,
+                                                       e.__traceback__))[-4000:])
         record.summary = f"{agent.name} failed: {type(e).__name__}"
         state = state_for(session, key)
         state.consecutive_failures = (state.consecutive_failures or 0) + 1
-        logger.error("agent_runner: %s failed: %s", key, e, exc_info=True)
+        logger.error("agent_runner: %s failed (traceback logged by its "
+                     "operation and kept on the run record): %s: %s",
+                     key, type(e).__name__, e)
 
     record.duration_ms = int((time.monotonic() - began) * 1000)
     state.last_run_at = datetime.now(timezone.utc)

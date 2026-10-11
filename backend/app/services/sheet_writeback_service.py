@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Tuple
 
 from app.config import get_settings
 from app.services import csp_mapping
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +89,7 @@ def find_row(rows: List[List[str]], code_column: int, csp_code: str) -> int:
     return matches[0]
 
 
+@telemetry.traced("write_back_to_sheet", "sheet_writeback_service")
 def write_values(
     csp_code: str,
     values: Dict[str, str],

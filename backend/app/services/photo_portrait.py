@@ -145,7 +145,9 @@ def _ask_cloudflare(photo_path: str) -> bytes:
     url = (f"https://api.cloudflare.com/client/v4/accounts/"
            f"{s.cloudflare_account_id.strip()}/ai/run/"
            f"{s.cloudflare_image_model}")
-    response = httpx.post(
+    from app import telemetry
+    with telemetry.external_call("cloudflare_ai", "run") as span:
+        response = httpx.post(
         url,
         headers={"Authorization": f"Bearer {s.cloudflare_api_token.strip()}"},
         data={"prompt": "The person in image 0. " + PROMPT,
@@ -153,7 +155,9 @@ def _ask_cloudflare(photo_path: str) -> bytes:
         files={"input_image_0": ("photo.png", buffer.getvalue(),
                                  "image/png")},
         timeout=s.gemini_timeout_seconds,
-    )
+        )
+        telemetry.note_http(span, "cloudflare_ai", "run",
+                            response.status_code, ok_statuses=(200,))
     if response.status_code != 200:
         raise RuntimeError(f"Cloudflare answered HTTP "
                            f"{response.status_code}: {response.text[:300]}")
@@ -192,11 +196,15 @@ def _ask_gemini(photo_path: str) -> bytes:
         {"text": PROMPT},
         {"inline_data": {"mime_type": mime, "data": data}},
     ]}]}
-    response = httpx.post(
-        url, json=body, timeout=s.gemini_timeout_seconds,
-        headers={"x-goog-api-key": s.gemini_api_key.strip(),
-                 "Content-Type": "application/json"},
-    )
+    from app import telemetry
+    with telemetry.external_call("gemini", "generateContent") as span:
+        response = httpx.post(
+            url, json=body, timeout=s.gemini_timeout_seconds,
+            headers={"x-goog-api-key": s.gemini_api_key.strip(),
+                     "Content-Type": "application/json"},
+        )
+        telemetry.note_http(span, "gemini", "generateContent",
+                            response.status_code, ok_statuses=(200,))
     if response.status_code != 200:
         raise RuntimeError(f"Gemini answered HTTP {response.status_code}: "
                            f"{response.text[:300]}")

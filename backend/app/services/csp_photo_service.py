@@ -26,6 +26,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from app.config import get_settings
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +78,7 @@ def stored_photo_path(csp_id: str) -> str:
     return os.path.join(photo_directory(), f"{_safe_folder_name(csp_id)}.png")
 
 
+@telemetry.traced("find_photo_in_crm", "csp_photo_service")
 def fetch_photo(csp) -> PhotoResult:
     """Fetch and store this CSP's photograph from the CRM.
 

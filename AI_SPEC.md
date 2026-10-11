@@ -67,29 +67,40 @@ processing and every "agent" are deterministic code. See §3, decision D1.
 
 ## 4. Telemetry specification
 
-### 4.1 Today (verified 12 Oct 2026)
+Implemented 12 Oct 2026 (PROJECT-REGISTER No. 79). Code: `backend/app/telemetry.py`.
 
-| Where | What is recorded |
+### 4.1 Where things are written
+
+| File (in `backend/logs/`, or `LOG_DIR`) | What |
 |---|---|
-| Console (Python `logging`, text) | Module-level log lines from API and workers. **No run/request/operation IDs. No file.** |
-| `sync_runs` table | Each sheet/authorisation sync: status, counts, error. |
-| `agent_runs` / `agent_findings` | Each agent run: status, summary, error text (no traceback). |
-| `processing_jobs` + `validation_results` | Each document request's state and validation issues. |
-| `email_jobs` / `email_documents` | Each email and the documents it carried. |
-| `audit_logs` | Sign-ins only. |
-| API global handler (`main.py`) | Unhandled errors: full traceback in the log; the user sees a generic message (**no error ID** — gap). |
+| `app.jsonl` (rotates 20 MB × 10) | One JSON object per log line, API and workers. |
+| `traces.jsonl` | OpenTelemetry spans (one per step and per external call), parent/child linked. |
+| `crash.log` | Interpreter-level crashes (faulthandler) and uncaught exceptions on any thread. |
 
-Known gaps: two silent `except: pass` sites (`agent_runner.py`, `document_template_service.py`); 61 broad `except Exception` sites not yet audited; no shared correlation ID; external calls not timed or classified.
+Database tables (`sync_runs`, `agent_runs`, `processing_jobs`, `email_jobs`, `audit_logs`) still hold business history; `agent_runs.error` now keeps type, message and traceback.
 
-### 4.2 Planned (awaiting approval — PROJECT-REGISTER No. 79)
+### 4.2 Fields on every log line
 
-- Structured JSON logs with `run_id`, `request_id`, `operation_id`, component, function, duration, status, retry count.
-- One trace per external call (Google Sheets, Zoho, SMTP, WhatsApp platform, LibreOffice): service, operation, duration, outcome class (timeout / connection / auth / rate-limit / server / malformed / empty).
-- Error responses carry an error ID the user can quote; full detail stays in logs.
-- A run-history view (steps → failure → retry → end) for debugging.
-- **Never logged:** passwords, tokens, API keys, OTPs, full phone numbers, email addresses, photos, document contents.
+`time, severity, run_id, request_id, operation_id, operation, trace_id, component, function, file, message` — plus, when relevant: `event` (start / success / failed / call_ok / call_failed / call_http_error / retry / crash / unhandled), `status`, `duration_ms`, `service`, `error_type`, `error_message`, `failure_kind`, `attempt`, `max_attempts`, `retryable`, `recovered`, `failed_function`, `failed_at`, `raised_in`, `context`, `traceback`.
 
-LLM telemetry (tokens, temperature, raw response): **not applicable** while D1 holds. If an LLM is introduced, its calls must be traced with those fields before it ships.
+- **run_id:** one per HTTP request (= the `X-Request-ID` response header = the Error ID shown to a user) and one per Celery task (= the task id).
+- **Steps:** `telemetry.operation(...)` / `@telemetry.traced(...)` log `START`, then `SUCCESS in N ms` or `FAILED` with traceback, and re-raise.
+- **External calls:** `telemetry.external_call(service, op, attempt, max_attempts)` around Google Sheets (patched once at `HttpRequest.execute`), Zoho, SMTP, the WhatsApp platform, LibreOffice, Gemini/Cloudflare (switched off). Failures are classified: timeout, connection, auth, rate_limit, server, client, malformed, empty, schema, unknown. Retryable = timeout, connection, rate_limit, server (logged WARNING while a retry remains, ERROR otherwise).
+- **User-facing errors:** an unhandled API error returns 500 with `error_id`, the failing operation and a next action; internals stay in the logs.
+- **Never logged** (masked by a filter on every line): bearer tokens, JWTs, `wabs_` keys, password/token/secret/api_key/otp values, email addresses, Indian phone numbers. Photos and document contents are never logged.
+
+### 4.3 How to inspect
+
+```
+cd backend
+python scripts/show_run.py <run / request / error id>      # timeline + ERROR REPORT
+python scripts/show_run.py <id> --full                     # whole tracebacks
+python scripts/show_run.py --failures 10                   # latest failed runs
+```
+
+### 4.4 LLM telemetry
+
+No production path calls an LLM (D1). Any LLM call that is added — including an eval judge — must be wrapped in `telemetry.external_call` and record `input_tokens`, `output_tokens`, latency, temperature and the raw response on its span before it ships.
 
 ---
 
@@ -113,3 +124,4 @@ this (or does it, with the user's OK).
 | Date | Change |
 |---|---|
 | 12 Oct 2026 | Initial version |
+| 12 Oct 2026 | §4 rewritten: telemetry layer implemented (No. 79) |

@@ -17,6 +17,7 @@ import logging
 
 from app.celery_app import celery_app
 from app.workers.workspace_runner import for_each_workspace
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,7 @@ def complete_pending_requests(self):
         engine.dispose()
 
 
+@telemetry.traced("finish_pending_requests", "pending_request_worker")
 def finish_ready(session) -> dict:
     """The work itself, separate from Celery so it can be tested directly."""
     from sqlalchemy import select

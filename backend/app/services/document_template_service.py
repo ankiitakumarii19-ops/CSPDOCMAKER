@@ -300,8 +300,12 @@ async def sync_builtin_templates(session) -> int:
         # step with whatever it has been renamed to in Word.
         try:
             row.filename = os.path.basename(ts.template_path(doc_type))
-        except Exception:
-            pass
+        except Exception as e:
+            # Not fatal — the stored name is kept — but never silent: a
+            # missing template file is worth knowing about at start-up.
+            logger.warning("document_template_service: template file for %s "
+                           "not found, keeping stored name %r: %s: %s",
+                           row.code, row.filename, type(e).__name__, e)
 
     if filled:
         await session.commit()

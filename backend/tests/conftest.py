@@ -24,6 +24,9 @@ os.environ["SMS_PROVIDER"] = "stub"
 os.environ["PHOTO_PLACEHOLDER_ALLOWED"] = "true"
 # Never call Google from the test suite: it costs money and sends photos out.
 os.environ["PHOTO_AI_PORTRAIT"] = "false"
+# Test runs write their logs and traces to a throwaway folder.
+import tempfile as _tempfile
+os.environ["LOG_DIR"] = _tempfile.mkdtemp(prefix="cspdocmaker-test-logs-")
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["CLOUDFLARE_ACCOUNT_ID"] = ""
 os.environ["CLOUDFLARE_API_TOKEN"] = ""

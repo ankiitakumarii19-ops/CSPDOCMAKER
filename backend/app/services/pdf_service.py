@@ -27,6 +27,7 @@ from pathlib import Path
 from typing import List, Optional, Tuple
 
 from app.config import get_settings
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -142,18 +143,24 @@ def convert_to_pdf(
         os.path.abspath(docx_path),
     ]
 
+    from app import telemetry
+
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            timeout=timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
-        raise PDFConversionError(
+        with telemetry.external_call("libreoffice", "convert_to_pdf",
+                                     file=os.path.basename(docx_path)):
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+    except subprocess.TimeoutExpired as e:
+        error = PDFConversionError(
             f"PDF conversion timed out after {timeout}s for "
             f"{os.path.basename(docx_path)}."
         )
+        error.failure_kind = telemetry.TIMEOUT
+        raise error from e
     finally:
         shutil.rmtree(profile_dir, ignore_errors=True)
 
@@ -162,17 +169,25 @@ def convert_to_pdf(
     if not os.path.isfile(expected_pdf):
         stderr = (result.stderr or b"").decode("utf-8", "replace").strip()
         stdout = (result.stdout or b"").decode("utf-8", "replace").strip()
-        raise PDFConversionError(
+        error = PDFConversionError(
             f"LibreOffice produced no PDF for {os.path.basename(docx_path)} "
             f"(exit={result.returncode}). stdout={stdout!r} stderr={stderr!r}"
         )
+        error.failure_kind = "empty"
+        logger.error("pdf_service: %s", error, extra={"failure_kind": "empty",
+                                                       "service": "libreoffice"})
+        raise error
 
     if not _looks_like_pdf(expected_pdf):
         os.remove(expected_pdf)
-        raise PDFConversionError(
+        error = PDFConversionError(
             f"LibreOffice wrote a file that is not a PDF for "
             f"{os.path.basename(docx_path)}."
         )
+        error.failure_kind = "malformed"
+        logger.error("pdf_service: %s", error, extra={"failure_kind": "malformed",
+                                                       "service": "libreoffice"})
+        raise error
 
     if os.path.getsize(expected_pdf) == 0:
         os.remove(expected_pdf)
@@ -188,6 +203,7 @@ def convert_to_pdf(
     return expected_pdf
 
 
+@telemetry.traced("convert_to_pdf_all", "pdf_service")
 def convert_all(
     docx_paths: List[str],
     output_dir: Optional[str] = None,

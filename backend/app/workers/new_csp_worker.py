@@ -31,6 +31,7 @@ from datetime import datetime, timezone
 
 from app.celery_app import celery_app
 from app.workers.workspace_runner import for_each_workspace
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,7 @@ def _try_photo(csp) -> bool:
     return False
 
 
+@telemetry.traced("issue_documents_for_csp", "new_csp_worker")
 def _process_one(session, csp, document_types, job=None) -> None:
     """Generate, store and send one complete CSP's documents.
 

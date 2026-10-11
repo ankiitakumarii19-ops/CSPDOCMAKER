@@ -144,18 +144,24 @@ def _send_via_smtp(
     msg.attach(MIMEText(plain_body, "plain", "utf-8"))
     msg.attach(MIMEText(html_body, "html", "utf-8"))
 
-    try:
-        if settings.smtp_use_tls:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
-            server.ehlo()
-            server.starttls()
-            server.ehlo()
-        else:
-            server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
+    from app import telemetry
 
-        server.login(settings.smtp_username, settings.smtp_password)
-        server.send_message(msg)
-        server.quit()
+    try:
+        # Traced and classified (timeout / connection / auth); the handlers
+        # below still decide what the caller is told.
+        with telemetry.external_call("smtp", "send_message",
+                                     attachments=len(msg.get_payload()) - 1):
+            if settings.smtp_use_tls:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
+                server.ehlo()
+                server.starttls()
+                server.ehlo()
+            else:
+                server = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=15)
+
+            server.login(settings.smtp_username, settings.smtp_password)
+            server.send_message(msg)
+            server.quit()
 
         logger.info("email_service._send_via_smtp: email sent to %s", to_email)
         return True

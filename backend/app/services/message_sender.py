@@ -35,6 +35,7 @@ from app.models.messaging import (
 )
 from app.services import data_request_service as drs
 from app.services import field_ownership as fo
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +140,10 @@ def _send_email(to: str, subject: str, body: str) -> Tuple[bool, str]:
         ok = email_service._send_via_smtp(to, subject, html, body)
         return ok, "" if ok else "SMTP reported failure"
     except Exception as e:
+        # Returned to the caller (recorded on the request as its delivery
+        # error) — and logged here with the traceback.
+        logger.warning("message_sender: email to a CSP failed: %s: %s",
+                       type(e).__name__, e, exc_info=True)
         return False, f"{type(e).__name__}: {e}"
 
 
@@ -180,6 +185,7 @@ def address_for(record, channel_kind: str) -> Tuple[str, str]:
     return "", ""
 
 
+@telemetry.traced("ask_csp_for_details", "message_sender")
 def ask_for_details(session: Session, record, *,
                     channel: Optional[MessageChannel] = None,
                     template: Optional[MessageTemplate] = None,

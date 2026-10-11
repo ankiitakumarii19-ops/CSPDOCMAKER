@@ -6,7 +6,7 @@ and lifecycle events.
 """
 
 import logging
-import traceback
+import re
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select
@@ -19,12 +19,10 @@ from app.database import init_db, close_db
 
 settings = get_settings()
 
-# Configure logging
-logging.basicConfig(
-    level=getattr(logging, settings.log_level.upper(), logging.INFO),
-    format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
+# Logging, tracing and crash capture (No. 79): structured JSON logs in
+# logs/app.jsonl, OpenTelemetry spans in logs/traces.jsonl, IDs on every line.
+from app import telemetry
+telemetry.setup("cspdocmaker-api", settings.log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -100,22 +98,34 @@ app.add_middleware(
 # ---- Global Error Handler ----
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    """Catch unhandled exceptions and return structured error responses.
+    """Unhandled errors: a clear message with an Error ID for the user.
 
-    Logs full error details for developers but returns a safe message to clients.
+    The full traceback was already logged by the request's operation
+    (telemetry), under the same ID. The user gets what failed, an ID to
+    quote, and what to do — not internals.
     """
-    logger.error(
-        "Unhandled exception on %s %s: %s: %s\n%s",
-        request.method,
-        request.url.path,
-        type(exc).__name__,
-        exc,
-        traceback.format_exc(),
-    )
+    error_id = getattr(request.state, "request_id", None) or telemetry.new_id()
+    operation = f"{request.method} {request.url.path}"
+    with telemetry.run(run_id=error_id, request_id=error_id):
+        logger.error(
+            "Unhandled %s on %s (error_id=%s): %s", type(exc).__name__,
+            operation, error_id, exc,
+            exc_info=(type(exc), exc, exc.__traceback__),
+            extra={**telemetry.where_failed(exc),
+                   "event": "unhandled", "status": "FAILED",
+                   "error_type": type(exc).__name__,
+                   "error_message": telemetry.redact(str(exc))},
+        )
     return JSONResponse(
         status_code=500,
+        headers={"X-Request-ID": error_id},
         content={
-            "detail": "An internal server error occurred. Please try again or contact support.",
+            "detail": (f"Failed while handling {operation} "
+                       f"(Error ID {error_id}). Please try again; if it "
+                       f"keeps failing, send this Error ID to support."),
+            "error_id": error_id,
+            "operation": operation,
+            "next_action": "Retry once; if it fails again, report the Error ID.",
         },
     )
 
@@ -164,8 +174,11 @@ async def _set_workspace(request, call_next):
     try:
         claims = jwt_service.decode_token(header.split(" ", 1)[1].strip())
         email = (claims or {}).get("sub") or (claims or {}).get("email")
-    except Exception:
-        # An invalid token is the router's business to reject, not ours.
+    except Exception as e:
+        # An invalid token is the router's business to reject (it answers
+        # 401), not ours — but it is noted, never silent.
+        logger.info("request token could not be read (%s: %s); the endpoint "
+                    "will reject it", type(e).__name__, e)
         return await call_next(request)
 
     if not email:
@@ -209,6 +222,33 @@ async def _set_workspace(request, call_next):
     with workspace(member.workspace_id):
         return await call_next(request)
 
+
+
+_SAFE_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+@app.middleware("http")
+async def _trace_request(request, call_next):
+    """Every request: an ID, a span, START/SUCCESS/FAILED, and the ID back
+    in the X-Request-ID header so a user can quote it (No. 79).
+
+    Added after the workspace middleware, so it is the outermost one and
+    wraps everything else."""
+    given = request.headers.get("x-request-id", "")
+    request_id = given if _SAFE_ID.match(given) else telemetry.new_id()
+    request.state.request_id = request_id
+    with telemetry.run(run_id=request_id, request_id=request_id):
+        with telemetry.operation(
+                f"HTTP {request.method} {request.url.path}", "api.request",
+                method=request.method, path=request.url.path) as span:
+            response = await call_next(request)
+            span.set_attribute("http.status_code", response.status_code)
+            if response.status_code >= 500:
+                logger.error("%s %s answered %s (request_id=%s)",
+                             request.method, request.url.path,
+                             response.status_code, request_id)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 # ---- API Routers ----
 from app.routers.auth_router import router as auth_router

@@ -118,3 +118,61 @@ celery_app.conf.include = [
     "app.workers.pending_request_worker",
     "app.workers.agent_worker",
 ]
+
+
+# ---- telemetry for background work (No. 79) ---------------------------------
+#
+# Every task is one traced run: its own run_id (the Celery task id), a span,
+# START -> SUCCESS / FAILED with duration, retries logged with their reason,
+# failures with the full traceback. Uncaught crashes are captured by
+# telemetry.setup in each worker process.
+
+from celery import signals  # noqa: E402
+
+_open_runs = {}
+
+
+@signals.worker_process_init.connect
+@signals.beat_init.connect
+@signals.worker_init.connect
+def _telemetry_for_worker(**_):
+    from app import telemetry
+    telemetry.setup("cspdocmaker-worker", settings.log_level)
+
+
+@signals.task_prerun.connect
+def _task_started(task_id=None, task=None, **_):
+    from app import telemetry
+    telemetry.setup("cspdocmaker-worker", settings.log_level)
+    run_cm = telemetry.run(run_id=task_id)
+    run_cm.__enter__()
+    op_cm = telemetry.operation(f"task {task.name}", "worker",
+                                task=task.name, task_id=task_id,
+                                retries=getattr(task.request, "retries", 0))
+    op_cm.__enter__()
+    _open_runs[task_id] = (run_cm, op_cm)
+
+
+@signals.task_retry.connect
+def _task_retrying(request=None, reason=None, **_):
+    import logging
+    logging.getLogger("worker").warning(
+        "[RETRY] task %s will retry (attempt %s): %s",
+        getattr(request, "task", "?"), (getattr(request, "retries", 0) or 0) + 1,
+        reason, extra={"event": "retry", "status": "RETRYING"})
+
+
+@signals.task_postrun.connect
+def _task_finished(task_id=None, state=None, retval=None, **_):
+    import sys
+    entry = _open_runs.pop(task_id, None)
+    if not entry:
+        return
+    run_cm, op_cm = entry
+    if state != "SUCCESS" and isinstance(retval, BaseException):
+        # FAILURE, or RETRY (retval is the Retry; the reason was logged by
+        # _task_retrying) — never recorded as a success.
+        op_cm.__exit__(type(retval), retval, retval.__traceback__)
+    else:
+        op_cm.__exit__(None, None, None)
+    run_cm.__exit__(*sys.exc_info())

@@ -26,6 +26,7 @@ from app.services import template_service
 from app.services.template_service import TemplateError
 
 from app.services import document_registry as registry
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ def _safe_folder_name(csp_id: str) -> str:
     return cleaned or "unknown_csp"
 
 
+@telemetry.traced("generate_document", "document_service")
 def generate_document(
     csp: CSPRecord,
     doc_type: DocumentType,
@@ -141,6 +143,7 @@ def generate_document(
     return filepath
 
 
+@telemetry.traced("generate_documents", "document_service")
 def generate_documents(
     csp: CSPRecord,
     document_types: List[DocumentType],

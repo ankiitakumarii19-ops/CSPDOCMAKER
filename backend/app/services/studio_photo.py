@@ -32,6 +32,7 @@ import logging
 import math
 import os
 from typing import Optional
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,7 @@ def _face(image_bgr):
     return None
 
 
+@telemetry.traced("make_passport_photo", "studio_photo")
 def make(photo_path: str) -> Optional[str]:
     """The white-background passport photo for this photo, or None."""
     if not photo_path or not os.path.isfile(photo_path):

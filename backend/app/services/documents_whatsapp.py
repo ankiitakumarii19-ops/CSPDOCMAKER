@@ -28,6 +28,7 @@ email already completed.
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+from app import telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +91,7 @@ def whatsapp_channel(session):
     ).scalars().first()
 
 
+@telemetry.traced("whatsapp_documents_ready", "documents_whatsapp")
 def notify(session, csp, job, document_names: List[str]) -> dict:
     """Send the WhatsApp notice for a delivery that was just emailed."""
     from app.services import message_sender, whatsapp_platform as wa

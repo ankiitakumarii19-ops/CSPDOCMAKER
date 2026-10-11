@@ -26,6 +26,7 @@ from typing import Dict, List, Optional
 
 import httpx
 
+from app import telemetry
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -85,17 +86,20 @@ def access_token(force: bool = False) -> str:
         if not force and _token and time.time() < _token_expires_at:
             return _token
 
-        response = httpx.post(
-            f"{settings.zoho_accounts_url}/oauth/v2/token",
-            data={
-                "grant_type": "refresh_token",
-                "client_id": settings.zoho_client_id,
-                "client_secret": settings.zoho_client_secret,
-                "refresh_token": settings.zoho_refresh_token,
-            },
-            timeout=30.0,
-        )
-        payload = response.json()
+        with telemetry.external_call("zoho", "oauth_token_refresh") as span:
+            response = httpx.post(
+                f"{settings.zoho_accounts_url}/oauth/v2/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "client_id": settings.zoho_client_id,
+                    "client_secret": settings.zoho_client_secret,
+                    "refresh_token": settings.zoho_refresh_token,
+                },
+                timeout=30.0,
+            )
+            telemetry.note_http(span, "zoho", "oauth_token_refresh",
+                                getattr(response, "status_code", None))
+            payload = response.json()
 
         if "access_token" not in payload:
             error = payload.get("error", payload)
@@ -122,8 +126,14 @@ def _request(method: str, path: str, **kwargs) -> httpx.Response:
         headers = dict(kwargs.pop("headers", {}))
         headers["Authorization"] = f"Zoho-oauthtoken {access_token(force=attempt == 2)}"
         try:
-            response = httpx.request(method, url, headers=headers,
-                                     timeout=60.0, **kwargs)
+            # Attempt 2 is the existing "retry once with a fresh token".
+            with telemetry.external_call("zoho", f"{method} {path}",
+                                         attempt=attempt,
+                                         max_attempts=2) as span:
+                response = httpx.request(method, url, headers=headers,
+                                         timeout=60.0, **kwargs)
+                telemetry.note_http(span, "zoho", f"{method} {path}",
+                                    getattr(response, "status_code", None))
         except httpx.HTTPError as e:
             raise ZohoError(f"Could not reach Zoho ({path}): {e}") from e
 
