@@ -83,7 +83,10 @@ def test_a_matching_portrait_is_used_and_kept(switched_on, photo, gemini,
     assert get_settings().gemini_image_model in call["url"]
     assert call["headers"]["x-goog-api-key"] == "test-key"
     prompt = call["body"]["contents"][0]["parts"][0]["text"]
-    assert "white background" in prompt and "own clothes" in prompt
+    assert "white background" in prompt and "clothes" in prompt
+    # Naming an accessory made the model ADD it (glasses, 11 Oct 2026 test).
+    assert "glasses" not in prompt.lower()
+    assert "Do not add anything" in prompt
 
 
 def test_a_portrait_is_paid_for_once(switched_on, photo, gemini, monkeypatch):
@@ -218,7 +221,7 @@ def test_the_cloudflare_request(cloudflare, photo, monkeypatch):
                            "flux-2-klein-4b")
     assert call["headers"]["Authorization"] == "Bearer cf-token"
     assert "white background" in call["data"]["prompt"]
-    assert "own clothes" in call["data"]["prompt"]
+    assert "glasses" not in call["data"]["prompt"].lower()
     sent = Image.open(io.BytesIO(call["files"]["input_image_0"][1]))
     assert sent.size[0] < 512 and sent.size[1] < 512, (
         "Cloudflare refuses input images of 512 x 512 or larger")
