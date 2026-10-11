@@ -38,20 +38,21 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-# Words matter here: an earlier wording said "keep their ... glasses
-# unchanged" and the free model ADDED glasses to three people who wear none
-# (11 Oct 2026 test). So accessories are never named — only "add nothing".
+# Words matter here: naming a thing makes the model ADD it. "Keep their ...
+# glasses" put glasses on three people who wear none, and "any bindi or
+# sindoor" put a bindi on three men (11 Oct 2026 tests). So nothing is
+# ever named — only "add nothing, remove nothing".
 PROMPT = (
     "Make a professional studio passport photo of exactly this person. "
     "The face must stay identical: same face shape, eyes, eyebrows, nose, "
-    "mouth, skin tone, age and expression, and any bindi or sindoor exactly "
-    "where it is. Keep exactly the clothes, hairstyle and jewellery they "
-    "are wearing in this photo. Do not add anything that is not in the "
-    "photo, and do not remove anything from the person. No beautifying, no "
-    "slimming, no skin smoothing, no make-up. Change only these: a plain "
-    "pure white background; the person facing the camera, head and "
-    "shoulders, centred, with a little space above the head; soft, even "
-    "studio lighting. Portrait orientation. Return only the photo."
+    "mouth, skin tone, age and expression, with every mark on the face "
+    "exactly as in this photo. Keep exactly the clothes, hairstyle and "
+    "jewellery they are wearing in this photo. Do not add anything that is "
+    "not in the photo, and do not remove anything from the person. No "
+    "beautifying, no slimming, no skin smoothing, no make-up. Change only "
+    "these: a plain pure white background; the person facing the camera, "
+    "head and shoulders, centred, with a little space above the head; soft, "
+    "even studio lighting. Portrait orientation. Return only the photo."
 )
 
 _DONE = ".studio"

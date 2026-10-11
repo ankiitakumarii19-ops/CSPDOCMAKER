@@ -85,7 +85,9 @@ def test_a_matching_portrait_is_used_and_kept(switched_on, photo, gemini,
     prompt = call["body"]["contents"][0]["parts"][0]["text"]
     assert "white background" in prompt and "clothes" in prompt
     # Naming an accessory made the model ADD it (glasses, 11 Oct 2026 test).
-    assert "glasses" not in prompt.lower()
+    # Naming a thing makes the model add it: "bindi" put one on three men.
+    for word in ("glasses", "bindi", "sindoor"):
+        assert word not in prompt.lower()
     assert "Do not add anything" in prompt
 
 
