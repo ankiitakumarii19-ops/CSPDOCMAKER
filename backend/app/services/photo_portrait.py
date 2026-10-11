@@ -204,31 +204,38 @@ def studio_portrait(photo_path: str) -> Optional[str]:
 
     from app.services import face_match
 
+    from app.config import get_settings
+
+    tries = max(1, get_settings().photo_ai_attempts)
     handle, attempt = tempfile.mkstemp(suffix=".png", prefix="portrait_")
     os.close(handle)
     try:
-        try:
-            image = _ask(photo_path)
-        except Exception as e:
-            # Not remembered as rejected: Google being down is not a verdict
-            # on the photo, so it is tried again next time.
-            logger.warning("photo_portrait: no portrait for %s: %s",
-                           os.path.basename(photo_path), e)
-            return None
-        with open(attempt, "wb") as f:
-            f.write(image)
+        for number in range(1, tries + 1):
+            try:
+                image = _ask(photo_path)
+            except Exception as e:
+                # Not remembered as rejected: the service being down is not
+                # a verdict on the photo, so it is tried again next time.
+                logger.warning("photo_portrait: no portrait for %s: %s",
+                               os.path.basename(photo_path), e)
+                return None
+            with open(attempt, "wb") as f:
+                f.write(image)
 
-        if not face_match.same_person(photo_path, attempt):
-            logger.warning("photo_portrait: portrait of %s does not match "
-                           "the original — using the original",
-                           os.path.basename(photo_path))
-            open(rejected, "w").close()
-            return None
+            if face_match.same_person(photo_path, attempt):
+                os.replace(attempt, done)
+                logger.info("photo_portrait: studio portrait made for %s "
+                            "(try %d of %d)", os.path.basename(photo_path),
+                            number, tries)
+                return done
+            logger.info("photo_portrait: try %d of %d for %s did not match",
+                        number, tries, os.path.basename(photo_path))
 
-        os.replace(attempt, done)
-        logger.info("photo_portrait: studio portrait made for %s",
-                    os.path.basename(photo_path))
-        return done
+        logger.warning("photo_portrait: no portrait of %s matched in %d "
+                       "tries — using the original",
+                       os.path.basename(photo_path), tries)
+        open(rejected, "w").close()
+        return None
     finally:
         if os.path.exists(attempt):
             os.remove(attempt)

@@ -184,8 +184,16 @@ class Settings(BaseSettings):
                                         alias="GEMINI_TIMEOUT_SECONDS")
     # Measured 11 Oct 2026 on the user's samples and the agents' photos:
     # same person 0.84-0.92, different people at most 0.43. OpenCV's own
-    # 0.363 would have accepted two different people.
-    face_match_threshold: float = Field(default=0.60,
+    # 0.363 would have accepted two different people. Raised from 0.60 to
+    # 0.75 the same day (tracker No. 65): the free Cloudflare model passed
+    # portraits at 0.63 that looked smoothed and younger. On an ID card only
+    # a strong match is used.
+    # The same photo gives a different portrait each time (1A852340 scored
+    # 0.85 once, 0.70 the next), so a photo gets a few tries before the
+    # original is settled on. Each try uses ~125 of Cloudflare's 10,000 free
+    # daily units.
+    photo_ai_attempts: int = Field(default=3, alias="PHOTO_AI_ATTEMPTS")
+    face_match_threshold: float = Field(default=0.75,
                                         alias="FACE_MATCH_THRESHOLD")
     photo_placeholder_allowed: bool = Field(
         default=True, alias="PHOTO_PLACEHOLDER_ALLOWED")

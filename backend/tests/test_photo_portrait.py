@@ -100,9 +100,20 @@ def test_a_portrait_is_paid_for_once(switched_on, photo, gemini, monkeypatch):
 def test_someone_else_is_thrown_away_and_not_retried(switched_on, photo,
                                                      gemini, monkeypatch):
     monkeypatch.setattr(face_match, "same_person", lambda a, b: False)
+    tries = get_settings().photo_ai_attempts
     assert photo_portrait.studio_portrait(photo) is None
+    assert len(gemini) == tries, "each photo gets its few tries"
     assert photo_portrait.studio_portrait(photo) is None
-    assert len(gemini) == 1, "a rejected photo was sent again"
+    assert len(gemini) == tries, "a rejected photo was sent again"
+
+
+def test_a_later_try_that_matches_is_used(switched_on, photo, gemini,
+                                          monkeypatch):
+    verdicts = iter([False, True])
+    monkeypatch.setattr(face_match, "same_person",
+                        lambda a, b: next(verdicts))
+    assert photo_portrait.studio_portrait(photo)
+    assert len(gemini) == 2, "stopped at the first matching try"
 
 
 def test_google_failing_falls_back_and_tries_again_later(switched_on, photo,
@@ -156,7 +167,7 @@ def test_the_face_check_needs_a_face(tmp_path):
 
 
 def test_the_threshold_is_the_measured_one():
-    assert get_settings().face_match_threshold == pytest.approx(0.60)
+    assert get_settings().face_match_threshold == pytest.approx(0.75)
     assert get_settings().face_match_threshold > face_match.OPENCV_SAME_PERSON
 
 
