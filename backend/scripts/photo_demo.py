@@ -23,7 +23,7 @@ from app.models.csp_record import CSPRecord
 from app.models.enums import DocumentType
 from app.services import (document_service, document_validation_service as dv,
                           face_match, pdf_service, photo_portrait,
-                          template_service as t)
+                          studio_photo, template_service as t)
 from app.workspace_context import all_workspaces
 
 OUT = sys.argv[1]
@@ -58,6 +58,13 @@ with Session(engine) as db, all_workspaces():
                 how += f" — face match {face_match.similarity(photo, portrait):.2f}"
             except Exception:
                 pass
+        elif not photo_portrait.enabled():
+            # No. 72: the AI is off; every photo is the white-background
+            # passport photo made on this machine.
+            used = studio_photo.make(photo)
+            how = ("White-background passport photo, made on this laptop"
+                   if used else "Original photo (no face found)")
+            used = used or photo
         else:
             done, rejected = photo_portrait._cache_paths(photo)
             why = ("face did not match in 3 tries today — tried again tomorrow"

@@ -164,6 +164,13 @@ class Settings(BaseSettings):
     # person's real face (tracker No. 67). Used unless an AI portrait is on.
     photo_white_background: bool = Field(default=True,
                                          alias="PHOTO_WHITE_BACKGROUND")
+    # The finished photo's size (tracker No. 72). Printed at 35 x 45 mm on
+    # the documents; DPI decides how sharp: 500 DPI = 689 x 886 pixels.
+    passport_photo_width_mm: float = Field(default=35,
+                                           alias="PASSPORT_PHOTO_WIDTH_MM")
+    passport_photo_height_mm: float = Field(default=45,
+                                            alias="PASSPORT_PHOTO_HEIGHT_MM")
+    passport_photo_dpi: int = Field(default=500, alias="PASSPORT_PHOTO_DPI")
 
     # AI studio portrait by Google Gemini (tracker No. 61). Only used when a
     # key is set; every portrait is face-checked against the CSP's photo.

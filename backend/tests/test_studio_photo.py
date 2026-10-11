@@ -13,7 +13,7 @@ from PIL import Image
 
 from app.services import studio_photo, template_service
 
-OUT_RATIO = studio_photo.OUTPUT_SIZE[0] / studio_photo.OUTPUT_SIZE[1]
+OUT_RATIO = studio_photo.output_size()[0] / studio_photo.output_size()[1]
 
 
 def _masks(height=1000, width=800, body_to_bottom=True, head_top=150):
@@ -95,7 +95,7 @@ def test_made_once_and_the_original_is_untouched(photo, monkeypatch):
 
     def fake_build(path):
         calls.append(path)
-        return Image.new("RGB", studio_photo.OUTPUT_SIZE, "white")
+        return Image.new("RGB", studio_photo.output_size(), "white")
 
     monkeypatch.setattr(studio_photo, "_build", fake_build)
     before = hashlib.sha256(open(photo, "rb").read()).hexdigest()
@@ -127,3 +127,37 @@ def test_documents_use_it(photo, monkeypatch, tmp_path):
                     mobile="9876543210", photo_url=photo)
     document_service.generate_documents(csp, [DocumentType.CSP_ID_CARD])
     assert used == [photo]
+
+
+
+# ---- size and automation (tracker No. 72, 12 Oct 2026) -------------------
+
+def test_the_size_comes_from_millimetres_and_dpi(monkeypatch):
+    from app.config import get_settings
+    s = get_settings()
+    monkeypatch.setattr(s, "passport_photo_width_mm", 35)
+    monkeypatch.setattr(s, "passport_photo_height_mm", 45)
+    monkeypatch.setattr(s, "passport_photo_dpi", 300)
+    assert studio_photo.output_size() == (413, 531)
+    monkeypatch.setattr(s, "passport_photo_dpi", 500)
+    assert studio_photo.output_size() == (689, 886)
+
+
+def test_changing_the_size_makes_a_fresh_photo(photo, monkeypatch):
+    from app.config import get_settings
+    first = studio_photo._cache_path(photo)
+    monkeypatch.setattr(get_settings(), "passport_photo_dpi", 300)
+    assert studio_photo._cache_path(photo) != first
+
+
+def test_an_agent_without_a_photo_is_skipped():
+    from app.models.csp_record import CSPRecord
+    assert studio_photo.prepare_for(CSPRecord(csp_id="X", photo_url=None)) is None
+
+
+def test_the_automation_edits_a_new_agents_photo(monkeypatch):
+    """New KO / Sub-KO: the photo is edited when the automation picks it up."""
+    import inspect
+    from app.workers import new_csp_worker, pending_request_worker
+    for module in (new_csp_worker, pending_request_worker):
+        assert "studio_photo.prepare_for(csp)" in inspect.getsource(module)

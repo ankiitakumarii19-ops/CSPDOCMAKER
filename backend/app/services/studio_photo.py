@@ -5,6 +5,11 @@ Chosen 11 Oct 2026 (tracker No. 67), after the AI services were tried: a
 plain WHITE background and passport framing, with the person's real face.
 Nothing is generated and nothing leaves the machine.
 
+Since 12 Oct 2026 (tracker No. 72) this is THE photo on every document —
+the Cloudflare AI portrait is off — and a new KO's or Sub-KO's photo is
+edited automatically as soon as the automation has it. Deterministic: the
+same photo always gives the same result.
+
   1. Find the face (OpenCV YuNet, already used for the face check).
   2. Level the head: the whole photo is turned so the eyes are level —
      at most 15 degrees. The face itself is not altered.
@@ -39,7 +44,6 @@ FACE_HEIGHT = 0.40        # the detected face box (brow to chin, roughly)
 FACE_CENTRE_Y = 0.43      # where the middle of that box sits
 MAX_FACE_HEIGHT = 0.62    # zoomed in no further than this
 MAX_TILT_DEGREES = 15
-OUTPUT_SIZE = (700, 900)  # 35:45
 
 _TAG = ".white"
 _session = None
@@ -54,11 +58,34 @@ def _session_for_cutout():
     return _session
 
 
+def output_size():
+    """The finished photo in pixels, from the configured mm and DPI."""
+    from app.config import get_settings
+    s = get_settings()
+    return (int(round(s.passport_photo_width_mm / 25.4 * s.passport_photo_dpi)),
+            int(round(s.passport_photo_height_mm / 25.4 * s.passport_photo_dpi)))
+
+
 def _cache_path(photo_path: str) -> str:
     with open(photo_path, "rb") as f:
         key = hashlib.sha256(f.read()).hexdigest()[:16]
     stem, _ = os.path.splitext(photo_path)
-    return f"{stem}{_TAG}.{key}.png"
+    w, h = output_size()
+    # The size is part of the name, so changing it makes a fresh photo.
+    return f"{stem}{_TAG}.{w}x{h}.{key}.png"
+
+
+def prepare_for(csp) -> Optional[str]:
+    """Edit this agent's photo now, if they have one (No. 72).
+
+    Called by the automation when a new KO or Sub-KO is picked up, so the
+    edited photo exists before any document needs it. Safe to call often:
+    a finished photo is reused.
+    """
+    photo = (getattr(csp, "photo_url", None) or "").strip()
+    if not photo or not os.path.isfile(photo):
+        return None
+    return make(photo)
 
 
 def _face(image_bgr):
@@ -147,7 +174,7 @@ def _build(photo_path: str):
     box = _frame(centre, h, np.asarray(alpha) > 128, np.asarray(valid) > 0)
     canvas = Image.new("RGB", (box[2] - box[0], box[3] - box[1]), "white")
     canvas.paste(white, (-box[0], -box[1]))
-    framed = canvas.resize(OUTPUT_SIZE, Image.LANCZOS)
+    framed = canvas.resize(output_size(), Image.LANCZOS)
 
     # 5. The light touch-up, on the finished photo.
     import tempfile
@@ -178,7 +205,7 @@ def _frame(centre, face_h, person, valid):
     """
     import numpy as np
 
-    out_w, out_h = OUTPUT_SIZE
+    out_w, out_h = output_size()
     cx, cy = centre
     height, width = valid.shape
     # Where the person's body ends at the top and bottom, and whether it
