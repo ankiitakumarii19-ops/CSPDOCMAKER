@@ -9,7 +9,7 @@ Reuses the same Google service account credentials.
 """
 
 import logging
-from typing import Optional, List, Dict, Tuple
+from typing import List, Dict
 
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -232,50 +232,3 @@ def _read_csp_tab(sheet_name: str) -> List[Dict[str, str]]:
         raise RuntimeError(
             f"Failed to read CSP Google Sheet: {type(e).__name__}: {e}"
         ) from e
-
-
-# Default column name mapping — maps Google Sheet header → CSP model field
-# Supports case-insensitive matching
-DEFAULT_COLUMN_MAP = {
-    "csp id": "csp_id",
-    "csp code": "csp_code",
-    "csp name": "name",
-    "name": "name",
-    "email": "email",
-    "email id": "email_id",
-    "mobile": "mobile",
-    "mobile number": "mobile",
-    "phone": "mobile",
-    "address": "address",
-    "branch name": "branch_name",
-    "branch code": "branch_code",
-    "module name": "module_name",
-    "rbo name": "rbo_name",
-    "onboarding date": "onboarded_date",
-    "onboarded date": "onboarded_date",
-    "onboarding month": "onboarding_month",
-    "onboarding year": "onboarding_year",
-    "status": "status",
-    "photo": "photo_url",
-    "photo url": "photo_url",
-}
-
-
-def map_row_to_csp_fields(row: Dict[str, str]) -> Dict[str, str]:
-    """Map a Google Sheet row (header → value) to CSP model field names.
-
-    Uses case-insensitive matching against DEFAULT_COLUMN_MAP.
-
-    Args:
-        row: Dict mapping sheet column headers to values.
-
-    Returns:
-        Dict mapping CSP model field names to values.
-    """
-    mapped = {}
-    for header, value in row.items():
-        header_lower = header.strip().lower()
-        field_name = DEFAULT_COLUMN_MAP.get(header_lower)
-        if field_name and value.strip():
-            mapped[field_name] = value.strip()
-    return mapped

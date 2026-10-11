@@ -6,7 +6,7 @@ Stores the outcome of each validation step (deterministic and AI-assisted).
 
 import uuid
 from datetime import datetime
-from sqlalchemy import String, DateTime, Enum as SAEnum, ForeignKey, func
+from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.database import Base

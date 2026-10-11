@@ -185,11 +185,11 @@ PHOTO_URL = "/api/admin/sheets/_photo"
     "../../.env",
     "../../../../Windows/System32/drivers/etc/hosts",
     "/etc/passwd",
-    "C:\CSPDOCMAKER\backend\.env",
+    r"C:\CSPDOCMAKER\backend\.env",
     "generated_documents/photos/../../.env",
 ])
 async def test_a_photo_path_cannot_escape_the_photos_directory(client, path):
-    """A cell reading '..\..\.env' must not become a file read."""
+    r"""A cell reading '..\..\.env' must not become a file read."""
     response = await client.get(PHOTO_URL, params={"path": path},
                                 headers=_auth("super_admin"))
     assert response.status_code in (400, 404), (

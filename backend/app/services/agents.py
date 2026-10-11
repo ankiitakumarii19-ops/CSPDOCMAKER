@@ -14,7 +14,7 @@ notice.
 import logging
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.models.agent import CRITICAL, INFO, WARNING
 from app.models.csp_record import CSPRecord
@@ -300,15 +300,12 @@ BULK_THRESHOLD = 25
 
 @performs("communication")
 def communication_agent(session) -> Outcome:
-    from app.models.messaging import MessageChannel, MessageTemplate
+    from app.models.messaging import MessageChannel
     from app.services import message_sender as sender
     from app.services.alert_composer import normalize_mobile
 
     channels = session.execute(
         select(MessageChannel).where(MessageChannel.active.is_(True))
-    ).scalars().all()
-    templates = session.execute(
-        select(MessageTemplate).where(MessageTemplate.active.is_(True))
     ).scalars().all()
     findings = []
 

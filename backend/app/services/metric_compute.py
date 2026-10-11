@@ -291,7 +291,3 @@ async def _awaiting_rm(session):
 
     return {"value": await _count(session, select(func.count(CSPRecord.id))
                                   .where(CSPRecord.rm_resolution == UNRESOLVED))}
-
-
-def registered_computers() -> set:
-    return set(_COMPUTERS)

@@ -147,7 +147,7 @@ async def test_a_retry_that_succeeded_counts_as_mailed_only(client, db,
     await _job_with_email(db, "ED0005", EmailStatus.FAILED, [DocumentType.BCP])
     await _job_with_email(db, "ED0005b", EmailStatus.SENT, [DocumentType.BCP])
     # Point both jobs at the same CSP.
-    from sqlalchemy import select, update
+    from sqlalchemy import update
 
     from app.models.processing_job import ProcessingJob
     await db.execute(update(ProcessingJob)

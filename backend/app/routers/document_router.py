@@ -7,8 +7,6 @@ Endpoints for missing data check, document generation, and validation.
 import os
 import uuid
 import logging
-from datetime import datetime
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,7 +15,6 @@ from sqlalchemy import select
 from app.database import get_session
 from app.dependencies import require_role
 from app.models.csp_record import CSPRecord
-from app.models.enums import DocumentType
 from app.schemas.missing_data import MissingDataCheckRequest, MissingDataCheckResponse
 from app.services import csp_access
 from app.services.missing_data_service import check_missing_data, DOCUMENT_LABELS

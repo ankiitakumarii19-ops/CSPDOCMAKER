@@ -24,7 +24,6 @@ link. Any other variation and the derivation fails.
 
 import logging
 import re
-from typing import Dict
 
 logger = logging.getLogger(__name__)
 

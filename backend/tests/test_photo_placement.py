@@ -13,7 +13,7 @@ import pytest
 from app.models.csp_record import CSPRecord
 from app.models.enums import DocumentType
 from app.services import document_service, template_service
-from app.services.template_service import TemplateError, count_images, has_photo_marker
+from app.services.template_service import count_images, has_photo_marker
 
 PHOTO_TYPES = [DocumentType.CSP_ID_CARD, DocumentType.TRAINING_CERTIFICATE]
 NO_PHOTO_TYPES = [DocumentType.CSP_CERTIFICATE, DocumentType.BCP]
@@ -362,7 +362,6 @@ def test_the_photo_cell_has_no_padding_and_nothing_else_in_it(doc_type):
     would squeeze the photograph. The caption lines are removed so they
     cannot push it down. The template file itself is not changed.
     """
-    import docx
     from docx.oxml.ns import qn
 
     (_, path), = document_service.generate_documents(

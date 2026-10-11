@@ -28,9 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_session
 from app.dependencies import require_role
-from app.models.dashboard import (
-    SYSTEM_SLUG, WIDGET_KINDS, Dashboard, DashboardWidget,
-)
+from app.models.dashboard import WIDGET_KINDS, Dashboard, DashboardWidget
 from app.services import metric_compute, metric_drilldown, metric_registry
 
 logger = logging.getLogger(__name__)

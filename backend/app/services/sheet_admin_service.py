@@ -27,7 +27,6 @@ import logging
 import re
 from typing import Dict, List, Optional, Tuple
 
-from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -113,13 +112,6 @@ def describe(spreadsheet_id: str) -> dict:
 def list_tabs(spreadsheet_id: str) -> List[dict]:
     """Every tab in the spreadsheet, as it stands right now."""
     return describe(spreadsheet_id)["tabs"]
-
-
-def spreadsheet_title(spreadsheet_id: str) -> str:
-    try:
-        return describe(spreadsheet_id)["title"]
-    except SheetAdminError:
-        return ""
 
 
 def _tab_id(spreadsheet_id: str, tab: str) -> int:

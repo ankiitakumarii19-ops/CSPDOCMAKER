@@ -5,7 +5,7 @@ Pydantic models for missing data detection and entry.
 """
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Optional
+from typing import List
 from app.models.enums import DocumentType
 
 

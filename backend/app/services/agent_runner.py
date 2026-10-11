@@ -26,8 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.agent import (
-    CRITICAL, FAILED, INFO, INFORMATIONAL, OK, PROPOSED, SKIPPED, WARNING,
-    AgentFinding, AgentRun, AgentState,
+    FAILED, INFO, INFORMATIONAL, OK, PROPOSED, SKIPPED, AgentFinding, AgentRun,
+    AgentState,
 )
 from app.services import agent_registry
 

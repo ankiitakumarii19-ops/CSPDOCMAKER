@@ -12,12 +12,11 @@ agree — on an empty workspace and on one with records in it. A metric
 added later without a matching drill-down fails too.
 """
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date
 
 import pytest
 
 from app.models.csp_record import CSPRecord
-from app.models.data_request import DataRequest
 from app.services import field_ownership as fo
 from app.services import metric_compute, metric_drilldown, metric_registry
 

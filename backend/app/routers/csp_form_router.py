@@ -25,7 +25,7 @@ the sheet is the source of truth and the sync would otherwise undo it.
 
 import logging
 import time
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
@@ -211,7 +211,6 @@ async def submit_form(
     """Record what the CSP confirmed, and write it to the sheet."""
     _guard(request, token)
 
-    from app.services import data_request_service as drs
     from app.services import sheet_writeback_service as wb
     from app.workspace_context import all_workspaces, workspace
 

@@ -42,9 +42,6 @@ numpy==2.5.3                      # block analysis to locate it
 # needs a model file downloaded at runtime. 4.x bundles the cascade.
 opencv-python-headless==4.14.0    # confirm the crop contains a face
 
-# ---- AI Integration ----
-openai==1.58.1
-
 # ---- HTTP Client ----
 httpx==0.28.1
 

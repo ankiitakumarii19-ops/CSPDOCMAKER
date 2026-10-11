@@ -23,13 +23,13 @@ Three rules this holds to:
 
 import logging
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models.data_request import VIA_EMAIL, VIA_WHATSAPP, DataRequest
+from app.models.data_request import VIA_EMAIL, VIA_WHATSAPP
 from app.models.messaging import (
     EMAIL, PURPOSE_DATA_REQUEST, WHATSAPP, MessageChannel, MessageTemplate,
 )

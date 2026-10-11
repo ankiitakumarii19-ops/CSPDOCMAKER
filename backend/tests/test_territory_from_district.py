@@ -11,7 +11,7 @@ and the field stays missing rather than being guessed.
 
 import pytest
 
-from app.services.info_directory import DC, InfoDirectory
+from app.services.info_directory import InfoDirectory
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 

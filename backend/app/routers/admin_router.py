@@ -21,9 +21,7 @@ from app.models.sms_job import SMSJob
 from app.models.user import User
 from app.models.audit_log import AuditLog
 from app.models.enums import EmailStatus, JobState, SMSStatus
-from app.services.missing_data_service import (
-    DOCUMENT_LABELS, document_label,
-)
+from app.services.missing_data_service import document_label
 
 logger = logging.getLogger(__name__)
 
@@ -436,7 +434,6 @@ async def csp_metrics(
     user=Depends(require_role("admin", "super_admin")),
 ):
     """New vs existing CSPs, and how many of each hold every document."""
-    from app.models.email_document import EmailDocument
     from app.models.enums import DocumentFormat, DocumentType
     from app.models.rm_alert import OPEN, RMAlert
     from app.models.stored_document import StoredDocument

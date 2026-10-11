@@ -46,7 +46,7 @@ import uuid
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import wraps
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource

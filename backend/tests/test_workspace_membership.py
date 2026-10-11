@@ -16,7 +16,7 @@ from app.models.user import User
 from app.models.workspace import DEFAULT_SLUG, Workspace
 from app.models.workspace_member import WorkspaceMember
 from app.services import auth_service, jwt_service, otp_service, workspace_service
-from app.workspace_context import all_workspaces, workspace
+from app.workspace_context import all_workspaces
 from tests.conftest import DEFAULT_WORKSPACE_ID
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")

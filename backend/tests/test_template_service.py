@@ -213,7 +213,6 @@ def test_no_template_has_stray_characters_after_a_placeholder():
     template for text pressed up against a placeholder with no separator,
     which is what that looks like.
     """
-    import re
 
     import docx
 

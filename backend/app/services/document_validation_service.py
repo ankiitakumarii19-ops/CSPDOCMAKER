@@ -10,7 +10,7 @@ CRITICAL: Documents must NOT be sent to CSPs if validation fails.
 
 import logging
 import os
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Tuple
 
 from docx import Document
 
@@ -69,7 +69,7 @@ def validate_document(
 
     try:
         doc_text = _extract_document_text(filepath)
-    except FileNotFoundError as e:
+    except FileNotFoundError:
         logger.error(
             "document_validation_service.validate_document: file not found: %s",
             filepath,

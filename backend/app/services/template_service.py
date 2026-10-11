@@ -29,9 +29,8 @@ import re
 from typing import Dict, Iterator, List, Optional
 
 from docx import Document
-from docx.image.image import Image as DocxImage
 from docx.oxml.ns import qn
-from docx.shared import Emu, Inches
+from docx.shared import Inches
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 

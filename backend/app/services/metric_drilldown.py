@@ -28,14 +28,12 @@ import logging
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
-from sqlalchemy import distinct, func, select
+from sqlalchemy import distinct, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.csp_record import CSPRecord
 from app.models.data_request import DataRequest
-from app.models.email_job import EmailJob
 from app.models.enums import EmailStatus
-from app.models.processing_job import ProcessingJob
 from app.models.stored_document import StoredDocument
 from app.services import document_registry as registry
 from app.services import field_ownership as fo

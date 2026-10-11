@@ -11,7 +11,6 @@ checks. Document validation, placeholder checks and photo dimensions are
 where they were, and no agent overrides them.
 """
 
-import uuid
 
 import pytest
 from sqlalchemy import create_engine, select, text
@@ -19,8 +18,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.agent import (
-    ACCEPTED, FAILED, INFORMATIONAL, OK, PROPOSED, SKIPPED, AgentRun,
-    AgentState,
+    FAILED, INFORMATIONAL, OK, PROPOSED, SKIPPED, AgentRun,
 )
 from app.services import agent_registry as reg
 from app.services import agent_runner as runner

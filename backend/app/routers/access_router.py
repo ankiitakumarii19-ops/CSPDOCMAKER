@@ -23,7 +23,7 @@ workspace's sheets in the first place.
 
 import logging
 import re
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -36,7 +36,7 @@ from app.dependencies import require_role
 from app.models.authorization_record import AuthorizationRecord
 from app.models.user import User
 from app.services import google_sheets_service as gs
-from app.services.sheet_writeback_service import SheetWriteError, column_letter
+from app.services.sheet_writeback_service import column_letter
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,6 @@ async def _revoke_in_sheet(
     user=Depends(require_role("super_admin")),
 ):
     """Take someone's access away by marking them inactive in the sheet."""
-    settings = get_settings()
     tab = _tab(request.role)
     _service, rows, columns = _read(tab)
     if "email" not in columns or "status" not in columns:

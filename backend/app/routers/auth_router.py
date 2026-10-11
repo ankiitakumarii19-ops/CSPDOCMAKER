@@ -273,7 +273,6 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
     # them, takes effect the next time they sign in. It says nothing about
     # any other workspace: a Super Admin who created their own workspace is
     # one there because they created it, not because of this list.
-    settings = get_settings()
     eko = await workspace_service.eko_workspace(db)
     if eko is not None:
         eko_member = await workspace_service.membership(db, user.email, eko.id)
@@ -441,8 +440,8 @@ async def resend_otp(
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(
-                f"You have asked for several codes in the last minute. "
-                f"Please wait a moment, then try again."
+                "You have asked for several codes in the last minute. "
+                "Please wait a moment, then try again."
             ),
         )
 

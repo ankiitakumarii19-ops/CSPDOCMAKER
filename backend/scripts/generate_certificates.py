@@ -25,14 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.config import get_settings  # noqa: E402
 from app.models.enums import DocumentType  # noqa: E402
-from app.services.csp_gsheet_service import read_csp_sheet, _get_sheets_service  # noqa: E402
-from app.services.csp_mapping import (  # noqa: E402
-    SHEET_COLUMN_TO_FIELD,
-    map_sheet_row,
-    normalize_header,
-    document_values,
-    effective_certificate_date,
-)
+from app.services.csp_gsheet_service import _get_sheets_service  # noqa: E402
+from app.services.csp_mapping import map_sheet_row  # noqa: E402
 from app.services import template_service  # noqa: E402
 from app.services import document_service  # noqa: E402
 

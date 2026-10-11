@@ -34,16 +34,6 @@ class DashboardResponse(BaseModel):
     metrics: DashboardMetrics
 
 
-class RecentActivity(BaseModel):
-    """A single recent activity entry."""
-    time: datetime
-    csp_id: str
-    operation: str
-    status: str
-    job_id: Optional[str] = None
-    details: Optional[str] = None
-
-
 class JobListResponse(BaseModel):
     """Paginated job list."""
     jobs: List[dict]

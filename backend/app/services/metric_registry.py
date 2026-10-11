@@ -22,7 +22,7 @@ Metrics are grouped so the builder can offer them sensibly:
 
 import logging
 from dataclasses import dataclass
-from typing import Callable, Dict, List, Optional
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 

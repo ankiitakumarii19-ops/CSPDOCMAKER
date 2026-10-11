@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.csp_record import CSPRecord
-from app.models.data_request import ANSWERED, CANCELLED, EXPIRED, OPEN
+from app.models.data_request import ANSWERED, EXPIRED
 from app.services import data_request_service as svc
 from app.services import field_ownership as fo
 

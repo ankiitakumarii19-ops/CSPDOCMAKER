@@ -147,14 +147,3 @@ def check_missing_data(
         documents=documents,
         total_missing_fields=total_missing,
     )
-
-
-def get_all_required_fields(
-    document_types: List[DocumentType],
-) -> Dict[str, Tuple[str, str]]:
-    """Deduplicated field_name → (label, input type) across several documents."""
-    all_fields: Dict[str, Tuple[str, str]] = {}
-    for doc_type in document_types:
-        for field, label, input_type in required_fields(doc_type):
-            all_fields.setdefault(field, (label, input_type))
-    return all_fields
