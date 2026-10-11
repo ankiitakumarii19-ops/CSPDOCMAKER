@@ -24,6 +24,7 @@ from app.services import (
 def switched_on(monkeypatch):
     s = get_settings()
     monkeypatch.setattr(s, "photo_ai_portrait", True)
+    monkeypatch.setattr(s, "photo_ai_provider", "gemini")
     monkeypatch.setattr(s, "gemini_api_key", "test-key")
 
 
@@ -65,6 +66,7 @@ def gemini(monkeypatch):
 
 def test_off_without_a_key(photo, gemini, monkeypatch):
     monkeypatch.setattr(get_settings(), "photo_ai_portrait", True)
+    monkeypatch.setattr(get_settings(), "photo_ai_provider", "gemini")
     monkeypatch.setattr(get_settings(), "gemini_api_key", "")
     assert photo_portrait.studio_portrait(photo) is None
     assert gemini == [], "Google was called with no key"
@@ -153,3 +155,82 @@ def test_the_face_check_needs_a_face(tmp_path):
 def test_the_threshold_is_the_measured_one():
     assert get_settings().face_match_threshold == pytest.approx(0.60)
     assert get_settings().face_match_threshold > face_match.OPENCV_SAME_PERSON
+
+
+
+# ---- Cloudflare Workers AI (the default, chosen 11 Oct 2026) -------------
+
+@pytest.fixture
+def cloudflare(monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "photo_ai_portrait", True)
+    monkeypatch.setattr(s, "photo_ai_provider", "cloudflare")
+    monkeypatch.setattr(s, "cloudflare_account_id", "acct123")
+    monkeypatch.setattr(s, "cloudflare_api_token", "cf-token")
+    calls = []
+
+    class _CF:
+        status_code = 200
+        headers = {"content-type": "application/json"}
+        text = ""
+
+        def __init__(self, image):
+            self._image = image
+
+        def json(self):
+            return {"success": True, "result": {
+                "image": base64.b64encode(self._image).decode()}}
+
+    def post(url, headers, data, files, timeout):
+        calls.append({"url": url, "headers": headers, "data": data,
+                      "files": files})
+        return _CF(files["input_image_0"][1])   # echo the photo back
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", post)
+    return calls
+
+
+def test_cloudflare_is_the_default_provider():
+    from app.config import Settings
+    assert Settings.model_fields["photo_ai_provider"].default == "cloudflare"
+    assert photo_portrait.CF_INPUT[0] < 512 and photo_portrait.CF_INPUT[1] < 512
+
+
+def test_cloudflare_needs_both_account_and_token(photo, monkeypatch):
+    s = get_settings()
+    monkeypatch.setattr(s, "photo_ai_portrait", True)
+    monkeypatch.setattr(s, "photo_ai_provider", "cloudflare")
+    monkeypatch.setattr(s, "cloudflare_account_id", "acct123")
+    monkeypatch.setattr(s, "cloudflare_api_token", "")
+    assert photo_portrait.enabled() is False
+
+
+def test_the_cloudflare_request(cloudflare, photo, monkeypatch):
+    import io
+    from PIL import Image
+
+    monkeypatch.setattr(face_match, "same_person", lambda a, b: True)
+    assert photo_portrait.studio_portrait(photo)
+    call = cloudflare[0]
+    assert call["url"] == ("https://api.cloudflare.com/client/v4/accounts/"
+                           "acct123/ai/run/@cf/black-forest-labs/"
+                           "flux-2-klein-4b")
+    assert call["headers"]["Authorization"] == "Bearer cf-token"
+    assert "white background" in call["data"]["prompt"]
+    assert "own clothes" in call["data"]["prompt"]
+    sent = Image.open(io.BytesIO(call["files"]["input_image_0"][1]))
+    assert sent.size[0] < 512 and sent.size[1] < 512, (
+        "Cloudflare refuses input images of 512 x 512 or larger")
+
+
+def test_a_cloudflare_rejection_does_not_block_gemini(cloudflare, photo,
+                                                      monkeypatch):
+    monkeypatch.setattr(face_match, "same_person", lambda a, b: False)
+    assert photo_portrait.studio_portrait(photo) is None
+    monkeypatch.setattr(get_settings(), "photo_ai_provider", "gemini")
+    monkeypatch.setattr(get_settings(), "gemini_api_key", "g-key")
+    done, rejected = photo_portrait._cache_paths(photo)
+    import os
+    assert not os.path.exists(rejected), (
+        "Cloudflare's rejection must not stop Gemini being tried")

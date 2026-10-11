@@ -164,6 +164,16 @@ class Settings(BaseSettings):
     # AI studio portrait by Google Gemini (tracker No. 61). Only used when a
     # key is set; every portrait is face-checked against the CSP's photo.
     photo_ai_portrait: bool = Field(default=True, alias="PHOTO_AI_PORTRAIT")
+    # Which service makes it. Cloudflare Workers AI chosen 11 Oct 2026 for
+    # its free daily allowance; Gemini kept as the paid alternative.
+    photo_ai_provider: str = Field(default="cloudflare",
+                                   alias="PHOTO_AI_PROVIDER")
+    cloudflare_account_id: str = Field(default="",
+                                       alias="CLOUDFLARE_ACCOUNT_ID")
+    cloudflare_api_token: str = Field(default="", alias="CLOUDFLARE_API_TOKEN")
+    cloudflare_image_model: str = Field(
+        default="@cf/black-forest-labs/flux-2-klein-4b",
+        alias="CLOUDFLARE_IMAGE_MODEL")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_image_model: str = Field(
         default="gemini-nano-banana-2.1", alias="GEMINI_IMAGE_MODEL")

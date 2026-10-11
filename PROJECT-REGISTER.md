@@ -111,6 +111,8 @@ it — you said so.
 | 59 | 11 Oct | **Is WhatsApp working? I want to test** | **Answered: No.** The sending code is not written and no WhatsApp channel is set up. You chose Eko's real number (not a test number): **waiting for you** to set up Meta and send Claude the values (steps given 11 Oct). The WHATSAPP_API_URL/KEY already in the settings file are not used by any code |
 | 60 | 11 Oct | (found by Claude) **7 agents in KOData are not in the app yet**: 1A850168, 1A850395, 1A850398, 1A851334, 1A852472, 1A850534, 1A850483. Once the background programs run they count as NEW and are emailed automatically | **Done 11 Oct** — you said existing: added as existing agents (Rajesh, Rajiv Kumar, Gyanendra Kumar, Bhupendra Prasad, Savita Kumari, Bhagwat Prasad, Sriniwas Pandey). Nothing emailed (still 8 emails ever). App now has 16 agents |
 | 61 | 11 Oct | Sample photos sent showing the wanted result: a casual selfie turned into a studio portrait (plain background, centred, straight pose; one with a suit and tie added) | **Built 11 Oct — waiting for your Gemini API key.** You chose: Google Gemini ("Nano Banana"), **white** background, **own clothes kept**, fully automatic with a face check. Each portrait is compared with the agent's own photo (measured: same person 0.84–0.92, different people ≤0.43; bar set at 0.60) and thrown away if it doesn't match; then the original + light touch-up is used. Made once per photo and reused; original never changed. 807 tests pass. **Not tried on a real Gemini call yet** — no key |
+| 62 | 11 Oct | Is there a free option (for the AI portrait)? | **Answered:** Gemini has no free tier (~$0.034 ≈ ₹3 per photo, once per agent). Free: a white-background version done on this laptop (no pose/eye changes), or Cloudflare Workers AI (10,000 free units a day ≈ 80 portraits/day, estimated) |
+| 63 | 11 Oct | **Use Cloudflare Workers AI** for the studio portrait | **Built 11 Oct — waiting for your Cloudflare Account ID and API token.** Model FLUX.2 [klein] 4B; photo shrunk below 512×512 as Cloudflare requires; same face check (0.60) and fallback; Gemini kept as the alternative. 811 tests pass. **Not tried on a real Cloudflare call yet**; how well it keeps faces is unknown until tested |
 
 ---
 
@@ -233,3 +235,4 @@ it — you said so.
 | 11 Oct 2026 | Added No. 57 (done), 58–60 (waiting for you) |
 | 11 Oct 2026 | No. 58 and 60 done; No. 59 waiting on Meta setup |
 | 11 Oct 2026 | Added No. 61: AI studio portrait built, waiting for Gemini key |
+| 11 Oct 2026 | Added No. 62 (answered) and 63: Cloudflare provider built, waiting for account details |

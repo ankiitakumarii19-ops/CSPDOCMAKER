@@ -25,6 +25,8 @@ os.environ["PHOTO_PLACEHOLDER_ALLOWED"] = "true"
 # Never call Google from the test suite: it costs money and sends photos out.
 os.environ["PHOTO_AI_PORTRAIT"] = "false"
 os.environ["GEMINI_API_KEY"] = ""
+os.environ["CLOUDFLARE_ACCOUNT_ID"] = ""
+os.environ["CLOUDFLARE_API_TOKEN"] = ""
 # Generated documents go to a throwaway directory, never the dev output dir.
 os.environ.setdefault(
     "DOCUMENT_OUTPUT_DIR",
