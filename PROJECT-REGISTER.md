@@ -106,6 +106,10 @@ it — you said so.
 | 54 | 11 Oct | Where are the workspace changes on the login/sign-up pages? | **Built 11 Oct** — sign-up box, workspace chooser, Super Admin in the Add form. Pages compile and load; **you have not tested them yet** |
 | 55 | 11 Oct | Build the RM change. You will add AO and RBO to the INFO sheet yourself. If something is missing and INFO can't fill it, ask the agent on WhatsApp and write the answer into the sheet | **Built 11 Oct** (M1, M2, and asking the agent for everything INFO can't fill). All 777 tests pass. WhatsApp sending itself still blocked |
 | 56 | 11 Oct | **The certificate date is the current date — the date the document is made.** Correct it and fix it | **Done** — always today, for every agent; a date saved on a record is no longer used (none was saved). Checked on Nitasha's real record: Training Certificate 11.10.2026, BCP October 2026, both validated. 777 tests pass. Replaces the 23 Sep rule that an RM types the date for existing agents. (Claude's earlier claim that such requests would 'wait forever' was wrong — the code already fell back to today.) |
+| 57 | 11 Oct | **KO and Sub-KO.** CSPData tab renamed **KOData**; new **SUBKOData** tab. KO code = 8 characters, Sub-KO = KO code + 1 or 2 (9–10). Training Certificate says KO or Sub-KO by the code. **BCP only for KO.** CSP Certificate replaced by your new **Appointment Letter**; your re-designed templates must keep their look | **Done 11 Oct** — both tabs read; Training Certificate wording by code length (checked); BCP never made/offered/counted for a Sub-KO; Appointment Letter wired in (screens, email, file names); new 35×45 mm photo cells measured exactly 35.0×45.0 mm in the PDF; all 4 of Nitasha's documents rendered and validated. 794 tests pass. Note: Nitasha's sheet address reads "Village , Rural, Urban" |
+| 58 | 11 Oct | **Make every photo look professional without changing the look or face** | **Waiting for you** — Claude asked what "professional" should include (11 Oct) |
+| 59 | 11 Oct | **Is WhatsApp working? I want to test** | **Answered: No.** The sending code is not written, no WhatsApp channel is set up, and Meta needs a business number, an access token and approved message templates. Waiting for you to set up Meta (steps given 11 Oct) |
+| 60 | 11 Oct | (found by Claude) **7 agents in KOData are not in the app yet**: 1A850168, 1A850395, 1A850398, 1A851334, 1A852472, 1A850534, 1A850483. Once the background programs run they count as NEW and are emailed automatically | **Waiting for you** — new agents, or existing ones? |
 
 ---
 
@@ -225,3 +229,4 @@ it — you said so.
 | 11 Oct 2026 | Your answers on No. 53 recorded; tasks M1–M6 added |
 | 11 Oct 2026 | Added No. 55; RM change built (M1, M2) |
 | 11 Oct 2026 | Added No. 56: certificate date always today (M6 done) |
+| 11 Oct 2026 | Added No. 57 (done), 58–60 (waiting for you) |
