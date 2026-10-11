@@ -27,7 +27,8 @@ os.environ["PHOTO_AI_PORTRAIT"] = "false"
 os.environ["GEMINI_API_KEY"] = ""
 os.environ["CLOUDFLARE_ACCOUNT_ID"] = ""
 os.environ["CLOUDFLARE_API_TOKEN"] = ""
-os.environ["FACE_MATCH_THRESHOLD"] = "0.75"
+os.environ["FACE_MATCH_THRESHOLD"] = "0.60"
+os.environ["CLOUDFLARE_IMAGE_MODEL"] = "@cf/black-forest-labs/flux-2-klein-9b"
 # Generated documents go to a throwaway directory, never the dev output dir.
 os.environ.setdefault(
     "DOCUMENT_OUTPUT_DIR",

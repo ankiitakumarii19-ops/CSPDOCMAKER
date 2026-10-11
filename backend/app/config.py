@@ -176,7 +176,9 @@ class Settings(BaseSettings):
                                        alias="CLOUDFLARE_ACCOUNT_ID")
     cloudflare_api_token: str = Field(default="", alias="CLOUDFLARE_API_TOKEN")
     cloudflare_image_model: str = Field(
-        default="@cf/black-forest-labs/flux-2-klein-4b",
+        # The bigger model, chosen 11 Oct 2026 (tracker No. 68) for its
+        # studio look. ~1,500 of the 10,000 free daily units per portrait.
+        default="@cf/black-forest-labs/flux-2-klein-9b",
         alias="CLOUDFLARE_IMAGE_MODEL")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_image_model: str = Field(
@@ -189,15 +191,16 @@ class Settings(BaseSettings):
     # Measured 11 Oct 2026 on the user's samples and the agents' photos:
     # same person 0.84-0.92, different people at most 0.43. OpenCV's own
     # 0.363 would have accepted two different people. Raised from 0.60 to
-    # 0.75 the same day (tracker No. 65): the free Cloudflare model passed
-    # portraits at 0.63 that looked smoothed and younger. On an ID card only
-    # a strong match is used.
+    # 0.75 the same day (tracker No. 65), then set to 0.60 (No. 68) when the
+    # user chose the 9B model's studio look knowing faces come out similar
+    # rather than identical (its results: 0.62-0.73). 0.60 still sits well
+    # above every pair of different people measured (at most 0.43).
     # The same photo gives a different portrait each time (1A852340 scored
     # 0.85 once, 0.70 the next), so a photo gets a few tries before the
-    # original is settled on. Each try uses ~125 of Cloudflare's 10,000 free
-    # daily units.
+    # original is settled on. Each try uses ~1,500 of Cloudflare's 10,000
+    # free daily units with the 9B model.
     photo_ai_attempts: int = Field(default=3, alias="PHOTO_AI_ATTEMPTS")
-    face_match_threshold: float = Field(default=0.75,
+    face_match_threshold: float = Field(default=0.60,
                                         alias="FACE_MATCH_THRESHOLD")
     photo_placeholder_allowed: bool = Field(
         default=True, alias="PHOTO_PLACEHOLDER_ALLOWED")

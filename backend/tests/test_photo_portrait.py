@@ -169,7 +169,7 @@ def test_the_face_check_needs_a_face(tmp_path):
 
 
 def test_the_threshold_is_the_measured_one():
-    assert get_settings().face_match_threshold == pytest.approx(0.75)
+    assert get_settings().face_match_threshold == pytest.approx(0.60)
     assert get_settings().face_match_threshold > face_match.OPENCV_SAME_PERSON
 
 
@@ -231,7 +231,7 @@ def test_the_cloudflare_request(cloudflare, photo, monkeypatch):
     call = cloudflare[0]
     assert call["url"] == ("https://api.cloudflare.com/client/v4/accounts/"
                            "acct123/ai/run/@cf/black-forest-labs/"
-                           "flux-2-klein-4b")
+                           "flux-2-klein-9b")
     assert call["headers"]["Authorization"] == "Bearer cf-token"
     assert "white background" in call["data"]["prompt"]
     assert "glasses" not in call["data"]["prompt"].lower()
