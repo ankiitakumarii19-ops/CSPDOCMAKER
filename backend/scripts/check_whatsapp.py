@@ -7,7 +7,8 @@ Run from the backend directory:
     .venv/Scripts/python.exe scripts/check_whatsapp.py --status <job id>
 
 Without --send it only proves Eko's WhatsApp platform answers and offers the
-tools this app uses. Nothing is sent.
+tools this app uses, and shows whether Meta has approved the test wording.
+Nothing is sent.
 
 With --send it delivers a real test message to that number. The very first
 time, Meta has to approve the test wording (minutes to about a day): the
@@ -17,6 +18,7 @@ command again later and it is sent.
 With --status it asks Meta whether a past send was delivered / read.
 """
 import argparse
+import json
 import os
 import sys
 
@@ -65,6 +67,49 @@ def check_platform() -> bool:
     report(OK, f"platform answered; offers {len(names)} tools including "
                f"{', '.join(NEEDED_TOOLS)}")
     return True
+
+
+def meta_templates() -> list:
+    """Every template on the account. The platform returns them as JSON
+    objects written one after another, so they are read one at a time."""
+    answer = wa.call_tool("list_meta_templates", {})
+    if isinstance(answer.get("templates"), list):
+        return answer["templates"]
+    text, found, decoder = answer.get("text", ""), [], json.JSONDecoder()
+    i = 0
+    while i < len(text):
+        if text[i] != "{":
+            i += 1
+            continue
+        item, i = decoder.raw_decode(text, i)
+        found.append(item)
+    return found
+
+
+def check_test_approval() -> None:
+    print("\n=== Meta approval of the test message wording ===")
+    wording = wa.to_template(TEST_BODY)[0]
+    try:
+        templates = meta_templates()
+    except (wa.WhatsAppPlatformError, ValueError) as e:
+        report(WARN, f"could not read the approval list: {e}")
+        return
+    for t in templates:
+        body = next((c.get("text") for c in t.get("components", [])
+                     if c.get("type") == "BODY"), None)
+        if body == wording:
+            status = t.get("status", "?")
+            mark = OK if status == "APPROVED" else (BAD if status == "REJECTED" else WARN)
+            report(mark, f"{status} (template {t.get('name')})")
+            if status == "APPROVED":
+                print("       Approved — a --send now goes out for real.")
+            elif status == "REJECTED":
+                print(f"       Meta's reason: {t.get('rejected_reason')}")
+            else:
+                print("       Still with Meta. Nothing can be sent until this says "
+                      "APPROVED; run this check again later.")
+            return
+    report(WARN, "not submitted yet — the first --send submits it to Meta")
 
 
 def send_test(mobile: str) -> bool:
@@ -118,6 +163,8 @@ def main():
             ok = show_status(args.status)
         else:
             ok = check_platform()
+            if ok:
+                check_test_approval()
             if ok and args.send:
                 ok = send_test(args.send)
             elif ok:
