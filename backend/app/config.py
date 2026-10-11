@@ -170,6 +170,11 @@ class Settings(BaseSettings):
     photo_ai_portrait: bool = Field(default=True, alias="PHOTO_AI_PORTRAIT")
     # Which service makes it. Cloudflare Workers AI chosen 11 Oct 2026 for
     # its free daily allowance; Gemini kept as the paid alternative.
+    # Decided 12 Oct 2026 (tracker No. 70): while the AI portrait is on, a
+    # document with a photo WAITS for the agent's portrait rather than going
+    # out with a plainer photo. Shown to the RM as a Pending detail.
+    photo_require_ai_portrait: bool = Field(
+        default=True, alias="PHOTO_REQUIRE_AI_PORTRAIT")
     photo_ai_provider: str = Field(default="cloudflare",
                                    alias="PHOTO_AI_PROVIDER")
     cloudflare_account_id: str = Field(default="",

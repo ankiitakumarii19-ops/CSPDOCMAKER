@@ -250,3 +250,64 @@ def test_a_cloudflare_rejection_does_not_block_gemini(cloudflare, photo,
     import os
     assert not os.path.exists(rejected), (
         "Cloudflare's rejection must not stop Gemini being tried")
+
+
+# ---- documents wait for the portrait (tracker No. 70, 12 Oct 2026) -------
+
+def _agent(photo):
+    from app.models.csp_record import CSPRecord
+    return CSPRecord(csp_id="1A850344", csp_code="1A850344", name="Wait",
+                     branch_name="B", branch_code="1", address="A",
+                     mobile="9876543210", photo_url=photo)
+
+
+def test_a_document_with_a_photo_waits_for_the_portrait(switched_on, photo):
+    from app.services.missing_data_service import check_missing_data
+    check = check_missing_data(_agent(photo), [DocumentType.CSP_ID_CARD,
+                                               DocumentType.CSP_CERTIFICATE])
+    by_doc = {d.document_type: [f.field_name for f in d.missing_fields]
+              for d in check.documents}
+    assert "studio_photo" in by_doc[DocumentType.CSP_ID_CARD]
+    assert "studio_photo" not in by_doc[DocumentType.CSP_CERTIFICATE], (
+        "the Appointment Letter has no photo, so it never waits")
+
+
+def test_once_the_portrait_exists_nothing_waits(switched_on, photo, gemini,
+                                                monkeypatch):
+    from app.services.missing_data_service import check_missing_data
+    monkeypatch.setattr(face_match, "same_person", lambda a, b: True)
+    assert photo_portrait.prepare_for(_agent(photo))
+    check = check_missing_data(_agent(photo), [DocumentType.CSP_ID_CARD])
+    assert not any(f.field_name == "studio_photo"
+                   for d in check.documents for f in d.missing_fields)
+
+
+def test_the_check_itself_never_calls_the_ai(switched_on, photo, gemini):
+    from app.services.missing_data_service import check_missing_data
+    check_missing_data(_agent(photo), [DocumentType.CSP_ID_CARD])
+    assert gemini == [], "a dashboard or check must not spend AI calls"
+
+
+def test_nothing_waits_when_the_ai_is_off(photo, monkeypatch):
+    from app.services.missing_data_service import check_missing_data
+    monkeypatch.setattr(get_settings(), "photo_ai_portrait", False)
+    check = check_missing_data(_agent(photo), [DocumentType.CSP_ID_CARD])
+    assert not any(f.field_name == "studio_photo"
+                   for d in check.documents for f in d.missing_fields)
+
+
+def test_a_rejected_photo_gets_new_tries_the_next_day(switched_on, photo,
+                                                      gemini, monkeypatch):
+    import os
+    import time
+    monkeypatch.setattr(face_match, "same_person", lambda a, b: False)
+    assert photo_portrait.studio_portrait(photo) is None
+    tries = len(gemini)
+    assert photo_portrait.studio_portrait(photo) is None
+    assert len(gemini) == tries, "retried the same day"
+
+    _, rejected = photo_portrait._cache_paths(photo)
+    yesterday = time.time() - 86400
+    os.utime(rejected, (yesterday, yesterday))
+    photo_portrait.studio_portrait(photo)
+    assert len(gemini) == 2 * tries, "not retried the next day"

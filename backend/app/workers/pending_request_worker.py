@@ -102,6 +102,8 @@ def finish_ready(session) -> dict:
             if _try_photo(csp):
                 session.commit()
 
+            from app.services import photo_portrait
+            photo_portrait.prepare_for(csp)
             if check_missing_data(csp, types).has_missing_data:
                 waiting += 1
                 continue

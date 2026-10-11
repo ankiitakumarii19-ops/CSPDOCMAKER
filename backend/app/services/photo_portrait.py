@@ -59,6 +59,30 @@ _DONE = ".studio"
 _REJECTED = ".studio-rejected"
 
 
+def cached(photo_path: str) -> Optional[str]:
+    """The finished portrait for this photo, if one exists. Never calls out."""
+    if not photo_path or not os.path.isfile(photo_path):
+        return None
+    done, _ = _cache_paths(photo_path)
+    return done if os.path.isfile(done) else None
+
+
+def required() -> bool:
+    """Whether documents must wait for an AI portrait (No. 70)."""
+    from app.config import get_settings
+    return enabled() and get_settings().photo_require_ai_portrait
+
+
+def prepare_for(csp) -> Optional[str]:
+    """Make this agent's portrait now if it can be made. Safe to call often:
+    a finished portrait is reused, a rejection waits for the next day, and
+    an outage (e.g. the free daily limit) costs nothing."""
+    photo = (getattr(csp, "photo_url", None) or "").strip()
+    if not enabled() or not photo or not os.path.isfile(photo):
+        return None
+    return studio_portrait(photo)
+
+
 def provider() -> str:
     from app.config import get_settings
     return (get_settings().photo_ai_provider or "").strip().lower()
@@ -201,7 +225,14 @@ def studio_portrait(photo_path: str) -> Optional[str]:
     if os.path.isfile(done):
         return done
     if os.path.isfile(rejected):
-        return None
+        # A photo whose portraits did not match gets fresh tries the next
+        # day (No. 70: documents wait for a portrait, so giving up for good
+        # would leave them waiting for ever).
+        from datetime import date, datetime
+        tried = datetime.fromtimestamp(os.path.getmtime(rejected)).date()
+        if tried == date.today():
+            return None
+        os.remove(rejected)
 
     from app.services import face_match
 
