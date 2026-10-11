@@ -259,3 +259,4 @@ it — you said so.
 | 12 Oct 2026 | No. 79 done (telemetry). Added No. 82: safe cleanup done, review list waiting for you |
 | 12 Oct 2026 | No. 82 decisions applied; added No. 83 (WhatsApp test command) |
 | 12 Oct 2026 | No. 83: first test send is waiting for Meta approval; check now shows approval status |
+| 12 Oct 2026 | WhatsApp status reviewed with you: built, not yet proven (No. 78/83); backend restarted for testing |
