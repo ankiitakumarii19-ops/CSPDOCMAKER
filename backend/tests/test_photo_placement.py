@@ -166,31 +166,6 @@ def test_the_shipped_placeholder_is_passport_shaped():
     assert width / height == pytest.approx(35 / 45, rel=0.02)
 
 
-def test_the_id_card_address_wraps_before_the_photo():
-    """A real address must not disappear under the floating photo box.
-
-    The photo floats at margin-left 226.4pt, so the address paragraph needs a
-    right indent. Without it the text runs underneath the photo and is lost —
-    which deterministic validation cannot see, because the text is present in
-    the document either way.
-    """
-    import re
-    import zipfile
-
-    path = template_service.template_path(DocumentType.CSP_ID_CARD)
-    with zipfile.ZipFile(path) as zf:
-        xml = zf.read("word/document.xml").decode("utf-8")
-
-    start = xml.rfind("<w:p ", 0, xml.find("CSP Address-"))
-    paragraph = xml[start:xml.find("</w:p>", start)]
-    match = re.search(r'<w:ind[^>]*w:right="(\d+)"', paragraph)
-    assert match, "the ID Card address paragraph has no right indent"
-
-    # The photo starts 4528 twips from the left of a ~6955 twip text area.
-    assert int(match.group(1)) >= 2400, (
-        "the address indent is too small — text will reach under the photo")
-
-
 # ---- output is grouped per CSP ------------------------------------------
 
 def test_documents_are_written_into_a_folder_named_after_the_csp(tmp_path, monkeypatch):
@@ -277,47 +252,52 @@ def test_a_tall_photo_keeps_the_head(tmp_path):
     assert top_removed < removed - top_removed, "more must come off the bottom"
 
 
+def _marker_cell(document, doc_type):
+    """The table cell whose text is the photo marker (since 11 Oct 2026)."""
+    from docx.oxml.ns import qn
+
+    wanted = " ".join(template_service.photo_marker_for(doc_type).split())
+    for tc in document.element.body.iter(qn("w:tc")):
+        lines = ["".join(t.text or "" for t in p.iter(qn("w:t")))
+                 for p in tc.findall(qn("w:p"))]
+        text = " ".join(" ".join(lines).split())
+        if text == wanted:
+            return tc
+    return None
+
+
 @pytest.mark.parametrize("doc_type", [DocumentType.CSP_ID_CARD,
                                       DocumentType.TRAINING_CERTIFICATE])
-def test_every_photo_frame_can_hold_a_passport_photo(doc_type):
-    """A frame smaller than 35x45mm means the photo gets shrunk to fit.
+def test_every_photo_cell_can_hold_a_passport_photo(doc_type):
+    """The photo box is a table cell drawn at 35 x 45 mm (11 Oct 2026).
 
     If this fails the template was resized — check for a Word edit before
     changing any code.
     """
-    import re
-    import zipfile
+    import docx
+    from docx.oxml.ns import qn
 
-    # Word writes these as "99.2pt", rounded to two decimals, so a frame set
-    # to exactly 35x45mm reads back a hundredth of a point short. The
-    # tolerance is that rounding and nothing more: 0.1pt is 0.035mm, while a
-    # genuinely shrunk frame has been out by 6pt and 22pt.
-    ROUNDING = 0.1
-    need_w = template_service.PASSPORT_WIDTH_INCHES * 72 - ROUNDING
-    need_h = template_service.PASSPORT_HEIGHT_INCHES * 72 - ROUNDING
+    document = docx.Document(template_service.template_path(doc_type))
+    tc = _marker_cell(document, doc_type)
+    assert tc is not None, f"{doc_type.value}: no photo cell in the template"
 
-    with zipfile.ZipFile(template_service.template_path(doc_type)) as zf:
-        xml = zf.read("word/document.xml").decode("utf-8")
+    tbl = tc
+    while tbl.tag != qn("w:tbl"):
+        tbl = tbl.getparent()
+    tr = tc.getparent()
+    widths = [int(g.get(qn("w:w"))) for g in tbl.iter(qn("w:gridCol"))]
+    index = list(tr.findall(qn("w:tc"))).index(tc)
+    width_twips = widths[index] if index < len(widths) else min(widths)
+    heights = [int(h.get(qn("w:val"))) for h in tr.iter(qn("w:trHeight"))]
+    assert heights, f"{doc_type.value}: the photo row has no fixed height"
 
-    if doc_type is DocumentType.CSP_ID_CARD:
-        match = re.search(r'width:([\d.]+)pt;height:([\d.]+)pt', xml)
-        assert match, "no photo frame found in the ID Card template"
-        frame_w, frame_h = float(match.group(1)), float(match.group(2))
-    else:
-        # The narrowest column and shortest row are the photo cell.
-        widths = [int(v) / 20 for v in
-                  re.findall(r'<w:gridCol[^>]*w:w="(\d+)"', xml)]
-        heights = [int(v) / 20 for v in
-                   re.findall(r'<w:trHeight[^>]*w:val="(\d+)"', xml)]
-        assert widths and heights, "no photo cell found in the Training template"
-        frame_w, frame_h = min(widths), min(heights)
-
-    assert frame_w >= need_w, (
-        f"{doc_type.value} photo frame is {frame_w:.1f}pt wide, "
-        f"a passport photo needs {need_w:.1f}pt")
-    assert frame_h >= need_h, (
-        f"{doc_type.value} photo frame is {frame_h:.1f}pt tall, "
-        f"a passport photo needs {need_h:.1f}pt")
+    # 35 mm = 1984.25 twips, 45 mm = 2551.2 twips; Word stores whole twips.
+    assert width_twips >= 1984, (
+        f"{doc_type.value} photo cell is {width_twips / 56.7:.1f}mm wide, "
+        f"a passport photo needs 35mm")
+    assert heights[0] >= 2551, (
+        f"{doc_type.value} photo cell is {heights[0] / 56.7:.1f}mm tall, "
+        f"a passport photo needs 45mm")
 
 
 # ---- the photo must sit inside its frame, not merely be the right size ----
@@ -374,70 +354,30 @@ def test_nothing_pushes_the_photo_out_of_its_frame(doc_type, tmp_path):
     assert not after, f"{doc_type.value}: space after the photograph"
 
 
-def test_the_id_cards_photo_box_does_not_inset_its_contents():
-    """A 35mm photo does not fit a 35mm box that pads its contents.
+@pytest.mark.parametrize("doc_type", PHOTO_TYPES)
+def test_the_photo_cell_has_no_padding_and_nothing_else_in_it(doc_type):
+    """A 35 x 45 mm photo fits a 35 x 45 mm cell only with no padding.
 
-    Word insets a text box by 0.1 inch either side by default, which would
-    steal 5mm from a 35mm-wide photograph and clip it.
+    A Word table cell pads its contents left and right by default, which
+    would squeeze the photograph. The caption lines are removed so they
+    cannot push it down. The template file itself is not changed.
     """
-    import zipfile
+    import docx
+    from docx.oxml.ns import qn
 
     (_, path), = document_service.generate_documents(
-        _csp(photo_url=template_service.PLACEHOLDER_PHOTO),
-        [DocumentType.CSP_ID_CARD])
+        _csp(photo_url=template_service.PLACEHOLDER_PHOTO), [doc_type])
+    para = _passport_paragraph(path)
+    assert para is not None, f"{doc_type.value}: no 35x45mm photograph"
 
-    with zipfile.ZipFile(path) as zf:
-        xml = zf.read("word/document.xml").decode("utf-8")
+    tc = para._p.getparent()
+    assert tc.tag == qn("w:tc"), f"{doc_type.value}: photo is not in a cell"
+    assert len(tc.findall(qn("w:p"))) == 1, (
+        f"{doc_type.value}: caption lines were left beside the photo")
+    margins = tc.find(qn("w:tcPr") + "/" + qn("w:tcMar"))
+    assert margins is not None, f"{doc_type.value}: cell padding not cleared"
+    for side in margins:
+        assert side.get(qn("w:w")) in ("0", None), (
+            f"{doc_type.value}: cell still pads its contents")
 
-    assert 'inset="0,0,0,0"' in xml, (
-        "the ID Card photo box still insets its contents, so a 35x45mm "
-        "photograph cannot fit inside its 35x45mm frame")
 
-
-def test_the_id_cards_photo_frame_is_widened_to_fit_the_photograph():
-    """A 35mm frame cannot hold a 35mm photograph once padding is added.
-
-    LibreOffice reserves 3.2mm on each side of a text box whatever `inset`
-    says, so a frame drawn exactly as wide as the photograph pushes it
-    sideways until it hangs off the edge of the card. The frame is widened
-    by that padding and moved left by half of it, which puts the photograph
-    back on the rectangle the template drew for it.
-    """
-    import re
-    import zipfile
-
-    def frame(path):
-        with zipfile.ZipFile(path) as zf:
-            xml = zf.read("word/document.xml").decode("utf-8")
-        shape = re.search(r'<v:rect id="_x0000_s1040"[^>]*>', xml)
-        assert shape, f"no photo frame in {os.path.basename(path)}"
-        style = dict(p.split(":", 1) for p in
-                     re.search(r'style="([^"]*)"', shape.group(0)).group(1)
-                     .split(";") if ":" in p)
-        return shape.group(0), float(style["width"][:-2]), \
-            float(style["margin-left"][:-2])
-
-    _, template_w, template_x = frame(
-        template_service.template_path(DocumentType.CSP_ID_CARD))
-
-    (_, path), = document_service.generate_documents(
-        _csp(photo_url=template_service.PLACEHOLDER_PHOTO),
-        [DocumentType.CSP_ID_CARD])
-    shape, made_w, made_x = frame(path)
-
-    needed = template_service.PASSPORT_WIDTH_INCHES * 72
-    inset = template_service._LIBREOFFICE_SIDE_INSET_PT
-
-    assert made_w == pytest.approx(template_w + 2 * inset), (
-        "the frame was not widened to make room for the photograph")
-    assert made_x == pytest.approx(template_x - inset), (
-        "the frame was widened but not moved, so the photo sits too far right")
-    assert made_w - 2 * inset >= needed - 0.1, (
-        f"the widened frame still leaves only {made_w - 2 * inset:.1f}pt "
-        f"for a photograph needing {needed:.1f}pt")
-
-    # The photograph covers the frame completely, so a white fill and an
-    # outline on a now-larger frame would only draw a border in the wrong
-    # place.
-    assert 'filled="f"' in shape and 'stroked="f"' in shape, (
-        "the widened frame is still painted, so it shows around the photo")

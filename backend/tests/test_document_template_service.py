@@ -119,12 +119,16 @@ async def test_editing_the_wording_keeps_the_passport_photo_frame():
         DocumentType.CSP_ID_CARD, lambda t: t + " LIMITED")
 
     def frames(data):
+        # Since 11 Oct 2026 the frame is a 35 x 45 mm table cell: its column
+        # width and its exact row height.
         xml = zipfile.ZipFile(__import__("io").BytesIO(data)).read(
             "word/document.xml").decode("utf-8")
-        return re.findall(r"width:([\d.]+)pt;height:([\d.]+)pt", xml)
+        return (re.findall(r'<w:gridCol w:w="(\d+)"', xml),
+                re.findall(r'<w:trHeight[^>]*>', xml))
 
     assert frames(edited) == frames(original)
-    assert frames(edited), "the ID Card has no photo frame at all"
+    assert "2551" in "".join(frames(edited)[1]), (
+        "the ID Card has no 45 mm photo row at all")
 
 
 async def test_editing_the_wording_keeps_every_image():
@@ -134,7 +138,8 @@ async def test_editing_the_wording_keeps_every_image():
 
     def images(data):
         names = zipfile.ZipFile(__import__("io").BytesIO(data)).namelist()
-        return sorted(n for n in names if n.startswith("word/media/"))
+        return sorted(n for n in names if n.startswith("word/media/")
+                      and not n.endswith("/"))
 
     assert images(edited) == images(original)
     assert images(edited), "the ID Card has no embedded images"

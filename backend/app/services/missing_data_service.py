@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Human-readable labels for document types.
 DOCUMENT_LABELS: Dict[DocumentType, str] = {
     DocumentType.CSP_ID_CARD: "CSP ID Card",
-    DocumentType.CSP_CERTIFICATE: "CSP Certificate",
+    DocumentType.CSP_CERTIFICATE: "Appointment Letter",
     DocumentType.TRAINING_CERTIFICATE: "Training Certificate",
     DocumentType.BCP: "Business Continuity Plan (BCP)",
 }
@@ -88,6 +88,12 @@ def check_missing_data(
     """
     documents: List[DocumentMissingData] = []
     total_missing = 0
+
+    # A Sub-KO never gets a BCP (No. 57), so nothing is "missing" for one.
+    from app.services import ko_level
+    document_types = ko_level.allowed_documents(
+        getattr(csp, "csp_code", None) or getattr(csp, "csp_id", None),
+        document_types)
 
     for doc_type in document_types:
         missing_fields: List[MissingField] = []

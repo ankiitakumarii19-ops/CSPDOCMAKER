@@ -36,7 +36,7 @@ settings = get_settings()
 # without anyone editing this.
 _FILENAME_PREFIX = {
     DocumentType.CSP_ID_CARD: "CSP_ID_Card",
-    DocumentType.CSP_CERTIFICATE: "CSP_Certificate",
+    DocumentType.CSP_CERTIFICATE: "Appointment_Letter",   # renamed 11 Oct 2026
     DocumentType.TRAINING_CERTIFICATE: "Training_Certificate",
     DocumentType.BCP: "BCP",
 }
@@ -163,6 +163,12 @@ def generate_documents(
     """
     output_dir = _ensure_output_dir(csp.csp_id)
     results: List[Tuple[DocumentType, str]] = []
+
+    # The BCP is made for a KO only, never a Sub-KO (No. 57) — enforced here
+    # so no path, screen or job can make one by accident.
+    from app.services import ko_level
+    document_types = ko_level.allowed_documents(
+        csp.csp_code or csp.csp_id, document_types)
 
     for doc_type in document_types:
         # Configured documents, not a fixed four: an uploaded one is as

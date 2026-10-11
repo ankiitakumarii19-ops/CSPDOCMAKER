@@ -96,7 +96,10 @@ def process_new_csps(self):
                 if _try_photo(csp):
                     session.commit()
 
-                missing = check_missing_data(csp, all_doc_types)
+                from app.services import ko_level
+                doc_types = ko_level.allowed_documents(
+                    csp.csp_code or csp.csp_id, all_doc_types)
+                missing = check_missing_data(csp, doc_types)
                 if missing.has_missing_data:
                     message, details = alert_service.describe_missing(missing)
                     alert_service.raise_alert(
@@ -109,7 +112,7 @@ def process_new_csps(self):
                                 csp.csp_id, message)
                     continue
 
-                _process_one(session, csp, all_doc_types)
+                _process_one(session, csp, doc_types)
                 processed += 1
 
             except Exception as e:

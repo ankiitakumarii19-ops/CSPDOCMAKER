@@ -482,8 +482,13 @@ async def csp_metrics(
         # three buckets partition the population: mailed, failed (and not
         # since mailed), and everything else still pending.
         mailed_ids, failed_ids = await _delivery_sets(session, doc_type)
-        mailed = len(scoped_ids & mailed_ids)
-        failed = len(scoped_ids & failed_ids)
+        # Only the CSPs this document is for: a Sub-KO never gets a BCP
+        # (No. 57), so it is not "pending" one either.
+        from app.services import ko_level
+        eligible = {i for i in scoped_ids
+                    if ko_level.allowed_documents(i, [doc_type])}
+        mailed = len(eligible & mailed_ids)
+        failed = len(eligible & failed_ids)
 
         per_document.append({
             "document_type": doc_type.value,
@@ -493,7 +498,7 @@ async def csp_metrics(
             "generated": done,
             "mailed": mailed,
             "failed": failed,
-            "pending": max(total - mailed - failed, 0),
+            "pending": max(len(eligible) - mailed - failed, 0),
         })
 
     waiting = (await session.execute(

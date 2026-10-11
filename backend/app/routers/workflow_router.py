@@ -120,6 +120,19 @@ async def process_workflow(
             detail=f"CSP with ID '{csp_id}' not found.",
         )
 
+    # The BCP is for a KO only (No. 57). Asking for it for a Sub-KO is
+    # dropped; asking for nothing else is refused, plainly.
+    from app.services import ko_level
+    allowed = ko_level.allowed_documents(csp.csp_code or csp.csp_id,
+                                         request.document_types)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The BCP is made for a KO only, and this CSP is a "
+                   "Sub-KO. Choose another document.",
+        )
+    request.document_types = allowed
+
     job_id = f"JOB-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{uuid.uuid4().hex[:6]}"
     job = ProcessingJob(
         job_id=job_id,

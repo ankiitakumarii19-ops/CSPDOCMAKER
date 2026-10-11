@@ -60,7 +60,9 @@ _PLACEHOLDER_RE = re.compile(f"[{_OPEN_QUOTES}]([^{_OPEN_QUOTES}]{{1,60}}?)[{_OP
 
 BUILTIN_LABELS: Dict[DocumentType, str] = {
     DocumentType.CSP_ID_CARD: "CSP ID Card",
-    DocumentType.CSP_CERTIFICATE: "CSP Certificate",
+    # Renamed by the user on 11 Oct 2026 (tracker No. 57). The internal code
+    # stays CSP_CERTIFICATE so the documents already stored keep their type.
+    DocumentType.CSP_CERTIFICATE: "Appointment Letter",
     DocumentType.TRAINING_CERTIFICATE: "Training Certificate",
     DocumentType.BCP: "Business Continuity Plan (BCP)",
 }
@@ -68,7 +70,7 @@ BUILTIN_LABELS: Dict[DocumentType, str] = {
 # Template file names as supplied.
 TEMPLATE_FILES: Dict[DocumentType, str] = {
     DocumentType.CSP_ID_CARD: "ID Card.docx",
-    DocumentType.CSP_CERTIFICATE: "CSP Certificate.docx",
+    DocumentType.CSP_CERTIFICATE: "Appointment Letter.docx",
     DocumentType.TRAINING_CERTIFICATE: "Training Certificate.docx",
     DocumentType.BCP: "BCP.docx",
 }
@@ -109,8 +111,8 @@ PLACEHOLDER_FIELDS: Dict[DocumentType, Dict[str, str]] = {
         "RBO Name": "rbo_name",
         "Address": "address",
         "CSP Contact Number": "mobile",
-        "CSP Email Id": "email",
-        "Making month, year": "certificate_month_year",
+        "CSP Email ID": "email",
+        "Making Month, year": "certificate_month_year",
         "ASM": "asm_name",
         "ASM Email": "asm_email",
         "ASM Contact Number": "asm_contact",
@@ -125,9 +127,12 @@ PLACEHOLDER_FIELDS: Dict[DocumentType, Dict[str, str]] = {
 # Matched on the paragraph's exact stripped text, so renaming one in Word
 # stops generation with a clear error rather than producing a document with
 # the marker still printed on it.
+# Since 11 Oct 2026 both are a 35 x 45 mm table cell holding three lines —
+# "Affix Passport" / "Size Photo" / "(35 × 45 mm)" — so a marker is matched
+# against a whole cell's text as well as a single paragraph's.
 PHOTO_MARKERS: Dict[DocumentType, str] = {
-    DocumentType.CSP_ID_CARD: "Affix Passport Size Photo (35 x 45 mm)",
-    DocumentType.TRAINING_CERTIFICATE: "Photo",
+    DocumentType.CSP_ID_CARD: "Affix Passport Size Photo (35 × 45 mm)",
+    DocumentType.TRAINING_CERTIFICATE: "Affix Passport Size Photo (35 × 45 mm)",
 }
 
 IMAGE_FIELDS: Dict[DocumentType, tuple] = {
@@ -700,18 +705,16 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
     width, height = passport_size()
     cropped = passport_crop(photo_path)
     try:
-        for para in _all_paragraphs(doc):
-            text = "".join(run.text for run in para.runs).strip()
-            if text != marker:
-                continue
-            for run in para.runs[1:]:
-                run.text = ""
-            target = para.runs[0]
-            target.text = ""
-            _clear_frame_padding(para)
-            target.add_picture(cropped, width=width, height=height)
-            return True
-        return False
+        para = _photo_marker_paragraph(doc, marker)
+        if para is None:
+            return False
+        for run in para.runs[1:]:
+            run.text = ""
+        target = para.runs[0]
+        target.text = ""
+        _clear_frame_padding(para)
+        target.add_picture(cropped, width=width, height=height)
+        return True
     finally:
         if cropped != photo_path:
             try:
@@ -720,23 +723,70 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
                 pass
 
 
+def _squash(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _photo_marker_paragraph(doc: Document, marker: str, remove_rest=True):
+    """The paragraph the photo goes into, or None.
+
+    Either one paragraph whose text is the marker, or a table cell whose
+    paragraphs together read as the marker (the 35 x 45 mm cell used since
+    11 Oct 2026). For a cell, the first line receives the photo and the
+    other lines are removed, so nothing else takes up room in the cell.
+    """
+    wanted = _squash(marker)
+    for para in _all_paragraphs(doc):
+        if para.runs and _squash("".join(r.text for r in para.runs)) == wanted:
+            return para
+
+    for part in _document_parts(doc):
+        element = getattr(part, "element", None)
+        if element is None:
+            element = getattr(part, "_element", None)
+        if element is None:
+            continue
+        for tc in element.iter(qn("w:tc")):
+            paras = [Paragraph(p, part) for p in tc.findall(qn("w:p"))]
+            if _squash(" ".join(p.text for p in paras)) != wanted:
+                continue
+            lines = [p for p in paras if p.text.strip()]
+            first = lines[0]
+            if remove_rest:
+                for p in paras:
+                    if p is not first:
+                        p._p.getparent().remove(p._p)
+            return first
+    return None
+
+
+def _document_parts(doc: Document):
+    yield doc
+    for section in doc.sections:
+        for part in (section.header, section.footer,
+                     section.first_page_header, section.first_page_footer,
+                     section.even_page_header, section.even_page_footer):
+            if part is not None:
+                yield part
+
+
 def has_photo_marker(path: str, doc_type) -> bool:
     """True when a generated file still shows the unreplaced photo marker."""
     marker = photo_marker_for(doc_type)
     if not marker:
         return False
-    doc = Document(path)
-    return any(
-        "".join(r.text for r in p.runs).strip() == marker
-        for p in _all_paragraphs(doc)
-    )
+    return _photo_marker_paragraph(Document(path), marker,
+                                   remove_rest=False) is not None
 
 
 def count_images(path: str) -> int:
     """Number of image parts in a DOCX package."""
     import zipfile
     with zipfile.ZipFile(path) as z:
-        return len([n for n in z.namelist() if n.startswith("word/media/")])
+        # A folder entry ("word/media/") is not an image; Word sometimes
+        # writes one when a template is re-saved.
+        return len([n for n in z.namelist()
+                    if n.startswith("word/media/") and not n.endswith("/")])
 
 
 def _trim_repeated_address(values: Dict[str, str],
@@ -836,6 +886,15 @@ def fill_template(
     if salutation:
         for para in _all_paragraphs(doc):
             _replace_literal(para, SALUTATION_TOKEN, salutation)
+
+    # "bearing KO/Sub-KO Code ..." becomes "KO Code" or "Sub-KO Code" by the
+    # length of the CSP code (No. 57). An unknown length keeps the general
+    # wording rather than guessing.
+    from app.services import ko_level
+    level_label = ko_level.label_for(values.get("csp_code", ""))
+    if level_label:
+        for para in _all_paragraphs(doc):
+            _replace_literal(para, ko_level.TOKEN, level_label)
 
     replaced = 0
     for para in _all_paragraphs(doc):

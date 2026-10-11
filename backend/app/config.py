@@ -119,10 +119,24 @@ class Settings(BaseSettings):
     # District. Used to fill in a CSP row's blank DC / ASM / RM.
     google_sheets_info_tab_name: str = Field(
         default="INFO", alias="GOOGLE_SHEETS_INFO_TAB_NAME")
+    # KOs' tab. Renamed by the user from "CSPData" to "KOData" on 11 Oct 2026.
     google_sheets_csp_sheet_name: str = Field(
-        default="CSPs", alias="GOOGLE_SHEETS_CSP_SHEET_NAME",
-        description="Tab/sheet name within the CSP Google Sheet",
+        default="KOData", alias="GOOGLE_SHEETS_CSP_SHEET_NAME",
+        description="Tab holding the KOs (8-character CSP codes)",
     )
+    # Sub-KOs' tab (9- or 10-character codes), added 11 Oct 2026. Optional:
+    # if the tab does not exist the KOs are still read.
+    google_sheets_subko_sheet_name: str = Field(
+        default="SUBKOData", alias="GOOGLE_SHEETS_SUBKO_SHEET_NAME",
+        description="Tab holding the Sub-KOs",
+    )
+
+    def csp_tab_for(self, code: str) -> str:
+        """The tab a CSP's row lives in: KOData or SUBKOData, by code."""
+        from app.services import ko_level
+        return (self.google_sheets_subko_sheet_name
+                if ko_level.level_of(code) == ko_level.SUB_KO
+                else self.google_sheets_csp_sheet_name)
     csp_sync_interval_minutes: int = Field(default=1, alias="CSP_SYNC_INTERVAL_MINUTES")
 
 

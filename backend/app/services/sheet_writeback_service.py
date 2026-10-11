@@ -102,7 +102,8 @@ def write_values(
     from app.services import csp_gsheet_service as sheets
 
     settings = get_settings()
-    tab = tab or settings.google_sheets_csp_sheet_name
+    # KOData or SUBKOData, by the length of the code (No. 57).
+    tab = tab or settings.csp_tab_for(csp_code)
 
     # A blank never overwrites a value.
     wanted = {f: str(v).strip() for f, v in (values or {}).items()

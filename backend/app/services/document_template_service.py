@@ -23,6 +23,7 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from docx import Document
+from docx.oxml.ns import qn
 
 from app.services import template_service as ts
 
@@ -163,6 +164,16 @@ def guess_photo_marker(source) -> Optional[str]:
         lowered = text.lower()
         if any(hint in lowered for hint in _PHOTO_HINTS):
             if not ts._PLACEHOLDER_RE.search(text):
+                # A photo box drawn as a table cell spreads its caption over
+                # several lines ("Affix Passport" / "Size Photo" /
+                # "(35 × 45 mm)"); the marker is the whole cell's text.
+                cell = para._p.getparent()
+                if cell is not None and cell.tag == qn("w:tc"):
+                    whole = ts._squash(" ".join(
+                        "".join(t.text or "" for t in p.iter(qn("w:t")))
+                        for p in cell.findall(qn("w:p"))))
+                    if whole and len(whole) <= 80:
+                        return whole
                 return text
     return None
 
@@ -330,6 +341,8 @@ async def sync_builtin_data_sources(session) -> int:
             "connection": {
                 "spreadsheet_id": settings.google_sheets_csp_sheet_id,
                 "tab": settings.google_sheets_csp_sheet_name,
+                "tabs": [settings.google_sheets_csp_sheet_name,
+                         settings.google_sheets_subko_sheet_name],
             },
             "column_map": dict(csp_mapping.SHEET_COLUMN_TO_FIELD),
             "sync_interval_minutes": settings.csp_sync_interval_minutes,

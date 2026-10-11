@@ -89,7 +89,8 @@ async def test_the_next_read_builds_a_fresh_client(monkeypatch):
     assert csp_sheets._csp_sheets_service is None
 
     csp_sheets.read_csp_sheet()          # must not raise
-    assert len(built) == 2, "the client was not rebuilt"
+    # 1 failed build, then one per tab read: KOData and SUBKOData (No. 57).
+    assert len(built) == 3, "the client was not rebuilt"
 
 
 # ---- the authorization sheet -------------------------------------------

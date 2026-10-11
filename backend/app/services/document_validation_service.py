@@ -126,6 +126,24 @@ def validate_document(
                 "found": "NO_IMAGE_ADDED",
             })
 
+    # KO or Sub-KO, by the length of the code (No. 57). Checked only where
+    # the template asks for it and the level is known.
+    from app.services import ko_level
+    level_label = ko_level.label_for(getattr(csp, "csp_code", None))
+    if level_label and ko_level.TOKEN in _extract_document_text(
+            str(template_service.template_path(doc_type))):
+        wrong = (ko_level.TOKEN in doc_text
+                 or f"{level_label} Code" not in doc_text
+                 # "Sub-KO Code" contains "KO Code", so a KO's certificate is
+                 # also checked for not saying Sub-KO.
+                 or (level_label == "KO" and "Sub-KO Code" in doc_text))
+        if wrong:
+            issues.append({
+                "field": "KO / Sub-KO",
+                "expected": f"{level_label} Code",
+                "found": "WRONG_KO_WORDING",
+            })
+
     # The template must not still contain any placeholder token.
     leftover = template_service.find_leftover_placeholders_in_file(filepath, doc_type)
     for name in sorted(leftover):

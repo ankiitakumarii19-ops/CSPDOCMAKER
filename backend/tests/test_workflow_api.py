@@ -305,3 +305,17 @@ async def test_confirm_refuses_when_the_stored_pdf_is_gone(client, db, csp):
     confirm = await client.post(f"/api/workflows/{job_id}/confirm", headers=_auth(rm))
     assert confirm.status_code == 409
     assert "Stored PDFs are missing" in confirm.json()["detail"]
+
+
+async def test_a_sub_kos_bcp_alone_is_refused_plainly(client, db):
+    """Tracker No. 57: the BCP is made for a KO only."""
+    rm = await _user(db, "rm1@eko.co.in")
+    db.add(CSPRecord(csp_id="1A8503447", csp_code="1A8503447",
+                     name="Sub Ko", email="subko@example.com"))
+    await db.commit()
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "1A8503447", "document_types": ["bcp"]},
+    )
+    assert r.status_code == 400
+    assert "KO only" in r.json()["detail"]

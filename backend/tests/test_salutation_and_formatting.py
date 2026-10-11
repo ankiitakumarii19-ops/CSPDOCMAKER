@@ -71,10 +71,13 @@ async def test_the_alternatives_are_all_removed():
         assert t.SALUTATION_TOKEN not in text
 
 
-async def test_both_occurrences_are_replaced():
-    """The Training Certificate says it twice."""
+async def test_every_occurrence_is_replaced():
+    """However many times the template says it (once since 11 Oct 2026)."""
+    template = _text(str(t.template_path(DocumentType.TRAINING_CERTIFICATE)))
+    expected = template.count(t.SALUTATION_TOKEN)
+    assert expected >= 1
     text = _text(_build(DocumentType.TRAINING_CERTIFICATE, gender="Male"))
-    assert text.count("Mr.") >= 2
+    assert text.count("Mr.") == expected
 
 
 async def test_an_unknown_gender_keeps_the_general_form():
@@ -97,11 +100,24 @@ async def test_gender_is_read_the_way_the_sheet_and_form_write_it(given, expecte
 
 @pytest.mark.parametrize("doc_type", list(DocumentType))
 async def test_no_paragraph_mixes_sizes_or_typefaces(doc_type):
-    """A filled value must look like the sentence it sits in."""
+    """A filled value must look like the sentence it sits in.
+
+    Only lines that carry a filled-in value are checked: a designer may
+    deliberately set words of their own text larger (the Appointment Letter
+    prints "SBI Kiosk Customer Service Point" at 16pt after "as" at 12pt).
+    """
+    template_lines = [
+        "".join(r.text for r in p.runs)
+        for p in t._all_paragraphs(Document(str(t.template_path(doc_type))))]
+    carries_value = {i for i, text in enumerate(template_lines)
+                     if any(q in text for q in t._OPEN_QUOTES)
+                     or t.SALUTATION_TOKEN in text}
     path = _build(doc_type, gender="Female")
     doc = Document(path)
 
     for index, para in enumerate(t._all_paragraphs(doc)):
+        if index not in carries_value:
+            continue
         runs = [r for r in para.runs if r.text.strip()]
         if len(runs) < 2:
             continue

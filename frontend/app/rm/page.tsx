@@ -53,6 +53,14 @@ function uniqueFields(data: MissingData): MissingField[] {
   return [...seen.values()];
 }
 
+/** A Sub-KO's code has 9 or 10 characters, a KO's 8. The BCP is made for a
+ *  KO only, so a Sub-KO is never offered it (tracker No. 57). */
+function documentsFor(record: { csp_id: string; csp_code?: string | null }) {
+  const code = (record.csp_code || record.csp_id || "").trim();
+  const subKo = code.length === 9 || code.length === 10;
+  return subKo ? DOCUMENT_TYPES.filter((d) => d.key !== "bcp") : DOCUMENT_TYPES;
+}
+
 function blockedBy(data: MissingData, fieldName: string): string[] {
   return data.documents
     .filter((d) => d.missing_fields.some((f) => f.field_name === fieldName))
@@ -144,7 +152,7 @@ export default function RMDashboard() {
       setResults(res.results);
       if (res.results.length === 1) {
         setCsp(res.results[0]);
-        setSelectedDocs(DOCUMENT_TYPES.map((d) => d.key));
+        setSelectedDocs(documentsFor(res.results[0]).map((d) => d.key));
         setRmStep("search_result");
       } else if (res.results.length === 0) {
         setSearchError(`No CSP found for "${text}".`);
@@ -158,7 +166,7 @@ export default function RMDashboard() {
 
   const pick = (record: CSPDetail) => {
     setCsp(record);
-    setSelectedDocs(DOCUMENT_TYPES.map((d) => d.key));
+    setSelectedDocs(documentsFor(record).map((d) => d.key));
     setRmStep("search_result");
   };
 
@@ -510,7 +518,7 @@ export default function RMDashboard() {
                     )}
 
                     <div className="space-y-3 flex-grow">
-                      {DOCUMENT_TYPES.map((doc) => {
+                      {(csp ? documentsFor(csp) : DOCUMENT_TYPES).map((doc) => {
                         const on = selectedDocs.includes(doc.key);
                         return (
                           <label

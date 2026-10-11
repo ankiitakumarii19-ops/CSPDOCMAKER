@@ -128,14 +128,48 @@ def read_info_sheet() -> List[List[str]]:
 
 
 def read_csp_sheet() -> List[Dict[str, str]]:
-    """Read all CSP records from the live Google Sheet.
+    """Every CSP row: the KOs' tab and the Sub-KOs' tab together.
+
+    Since 11 Oct 2026 KOs live in KOData and Sub-KOs in SUBKOData, with the
+    same columns. The KO tab is required; the Sub-KO tab is optional, so a
+    spreadsheet without one still syncs its KOs.
+    """
+    from app.services import ko_level
+
+    rows = _read_csp_tab(settings.google_sheets_csp_sheet_name)
+    try:
+        sub_rows = _read_csp_tab(settings.google_sheets_subko_sheet_name)
+    except RuntimeError as e:
+        logger.warning(
+            "csp_gsheet_service.read_csp_sheet: Sub-KO tab '%s' not read "
+            "(%s); continuing with the KOs only",
+            settings.google_sheets_subko_sheet_name, e)
+        sub_rows = []
+
+    for tab, tab_rows, expected in (
+            (settings.google_sheets_csp_sheet_name, rows, ko_level.KO),
+            (settings.google_sheets_subko_sheet_name, sub_rows,
+             ko_level.SUB_KO)):
+        for row in tab_rows:
+            code = (row.get("CSP Code") or "").strip()
+            if code and ko_level.level_of(code) != expected:
+                # Kept, not dropped — but said, because the code's length
+                # decides the documents and the wording it gets.
+                logger.warning(
+                    "csp_gsheet_service.read_csp_sheet: %s in tab '%s' has a "
+                    "%d-character code, which is not a %s code", code, tab,
+                    len(code), "KO" if expected == ko_level.KO else "Sub-KO")
+    return rows + sub_rows
+
+
+def _read_csp_tab(sheet_name: str) -> List[Dict[str, str]]:
+    """Read one tab of the CSP spreadsheet.
 
     Returns:
         List of dicts, one per CSP row, mapping header → value.
-        Returns empty list if sheet is empty or not configured.
+        Returns empty list if the tab is empty or not configured.
     """
     sheet_id = settings.google_sheets_csp_sheet_id
-    sheet_name = settings.google_sheets_csp_sheet_name
 
     if not sheet_id:
         logger.warning(
