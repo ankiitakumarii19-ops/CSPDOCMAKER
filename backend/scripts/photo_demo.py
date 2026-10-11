@@ -77,18 +77,32 @@ with Session(engine) as db, all_workspaces():
                              final=None, card=None))
             continue
         docs = document_service.generate_documents(
-            csp, [DocumentType.CSP_ID_CARD])
+            csp, [DocumentType.CSP_ID_CARD, DocumentType.TRAINING_CERTIFICATE])
         ok = dv.validate_all_documents(csp, docs)[0]
-        (_, pdf), = pdf_service.convert_all([docs[0][1]],
-                                            output_dir=os.path.join(OUT, "docs"))
-        card = fitz.open(pdf)[0].get_pixmap(dpi=110)
-        card_img = Image.open(io.BytesIO(card.tobytes("png")))
-        print(f"{csp.csp_id} {csp.name[:24]:24} -> {how} | ID card valid: {ok}")
+        pdfs = dict(pdf_service.convert_all(
+            [p for _, p in docs], output_dir=os.path.join(OUT, "docs")))
+        pages, sizes = {}, {}
+        for doc_type, docx in docs:
+            page = fitz.open(pdfs[docx])[0]
+            # The photo's real printed size, measured on the PDF page.
+            for img in page.get_images(full=True):
+                for r in page.get_image_rects(img[0]):
+                    w_mm, h_mm = r.width / 72 * 25.4, r.height / 72 * 25.4
+                    if 30 < w_mm < 40 and 40 < h_mm < 50:
+                        sizes[doc_type] = f"{w_mm:.1f} x {h_mm:.1f} mm"
+            pix = page.get_pixmap(dpi=110 if doc_type == DocumentType.CSP_ID_CARD else 75)
+            pages[doc_type] = Image.open(io.BytesIO(pix.tobytes("png")))
+        print(f"{csp.csp_id} {csp.name[:24]:24} -> {how} | valid: {ok} | "
+              f"ID card photo {sizes.get(DocumentType.CSP_ID_CARD)} | "
+              f"Training photo {sizes.get(DocumentType.TRAINING_CERTIFICATE)}")
         rows.append(dict(
             id=csp.csp_id, name=csp.name, how=how, ok=ok,
             original=b64(Image.open(t.passport_crop(photo)), 260),
             final=b64(Image.open(t.passport_crop(used)), 260),
-            card=b64(card_img, 520)))
+            card=b64(pages[DocumentType.CSP_ID_CARD], 520),
+            card_size=sizes.get(DocumentType.CSP_ID_CARD, "?"),
+            cert=b64(pages[DocumentType.TRAINING_CERTIFICATE], 700),
+            cert_size=sizes.get(DocumentType.TRAINING_CERTIFICATE, "?")))
     db.rollback()
 
 cards = "\n".join(f"""
@@ -98,7 +112,8 @@ cards = "\n".join(f"""
   <div class="row">
     <figure><img src="data:image/jpeg;base64,{r['original']}"><figcaption>Original photo</figcaption></figure>
     {'' if r['final'] is None else f"<figure><img src='data:image/jpeg;base64,{r['final']}'><figcaption>On the documents</figcaption></figure>"}
-    {'' if r['card'] is None else f"<figure class='wide'><img src='data:image/jpeg;base64,{r['card']}'><figcaption>ID Card</figcaption></figure>"}
+    {'' if r['card'] is None else f"<figure class='wide'><img src='data:image/jpeg;base64,{r['card']}'><figcaption>ID Card — photo printed at <b>{r['card_size']}</b></figcaption></figure>"}
+    {'' if r.get('cert') is None else f"<figure class='cert'><img src='data:image/jpeg;base64,{r['cert']}'><figcaption>Training Certificate — photo printed at <b>{r['cert_size']}</b></figcaption></figure>"}
   </div>
 </section>""" for r in rows)
 
@@ -112,10 +127,10 @@ h2{{margin:0;font-size:18px}} h2 span{{color:#888;font-weight:400;font-size:14px
 .how{{margin:4px 0 12px;color:#0a7d3c;font-size:14px}}
 .row{{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-start}}
 figure{{margin:0;text-align:center}} figure img{{width:200px;border-radius:6px;border:1px solid #ddd}}
-figure.wide img{{width:420px}} figcaption{{font-size:13px;color:#555;margin-top:4px}}
+figure.wide img{{width:420px}} figure.cert img{{width:560px}} figcaption{{font-size:13px;color:#555;margin-top:4px}}
 </style></head><body>
 <h1>Agent photo demo</h1>
-<p class="sub">Every agent with a photo, through exactly what the app does now. Nothing was emailed or saved as a document.</p>
+<p class="sub">Every agent with a photo, exactly as the app makes it: real face, white background, passport size (35 x 45 mm, measured on each PDF). Nothing was emailed or saved as a document.</p>
 {cards}
 </body></html>"""
 path = os.path.join(OUT, "photo-demo.html")
