@@ -160,6 +160,23 @@ class Settings(BaseSettings):
     # (tracker No. 58): colour, contrast, brightness, a little sharpening.
     # Nothing is moved, stretched, added or removed.
     photo_touch_up: bool = Field(default=True, alias="PHOTO_TOUCH_UP")
+
+    # AI studio portrait by Google Gemini (tracker No. 61). Only used when a
+    # key is set; every portrait is face-checked against the CSP's photo.
+    photo_ai_portrait: bool = Field(default=True, alias="PHOTO_AI_PORTRAIT")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
+    gemini_image_model: str = Field(
+        default="gemini-nano-banana-2.1", alias="GEMINI_IMAGE_MODEL")
+    gemini_api_base: str = Field(
+        default="https://generativelanguage.googleapis.com/v1",
+        alias="GEMINI_API_BASE")
+    gemini_timeout_seconds: int = Field(default=120,
+                                        alias="GEMINI_TIMEOUT_SECONDS")
+    # Measured 11 Oct 2026 on the user's samples and the agents' photos:
+    # same person 0.84-0.92, different people at most 0.43. OpenCV's own
+    # 0.363 would have accepted two different people.
+    face_match_threshold: float = Field(default=0.60,
+                                        alias="FACE_MATCH_THRESHOLD")
     photo_placeholder_allowed: bool = Field(
         default=True, alias="PHOTO_PLACEHOLDER_ALLOWED")
 

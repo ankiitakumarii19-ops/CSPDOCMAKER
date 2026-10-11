@@ -22,6 +22,9 @@ os.environ["SMS_PROVIDER"] = "stub"
 # Pinned so the suite does not change behaviour with the developer's .env.
 # Tests that care about photos being required turn this off themselves.
 os.environ["PHOTO_PLACEHOLDER_ALLOWED"] = "true"
+# Never call Google from the test suite: it costs money and sends photos out.
+os.environ["PHOTO_AI_PORTRAIT"] = "false"
+os.environ["GEMINI_API_KEY"] = ""
 # Generated documents go to a throwaway directory, never the dev output dir.
 os.environ.setdefault(
     "DOCUMENT_OUTPUT_DIR",

@@ -758,8 +758,19 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
     if not marker:
         return False
     width, height = passport_size()
-    cropped = passport_crop(photo_path)
-    if settings.photo_touch_up:
+    # A checked AI studio portrait when there is one (No. 61); otherwise the
+    # CSP's own photo with the light touch-up.
+    from app.services import photo_portrait
+    portrait = photo_portrait.studio_portrait(photo_path)
+    cropped = passport_crop(portrait or photo_path)
+    if portrait and cropped == portrait:
+        # Never hand the cached portrait to the clean-up below.
+        import shutil, tempfile
+        handle, copy = tempfile.mkstemp(suffix=".png", prefix="portrait_")
+        os.close(handle)
+        shutil.copyfile(portrait, copy)
+        cropped = copy
+    if settings.photo_touch_up and not portrait:
         finished = touch_up(cropped)
         if cropped != photo_path:
             try:
