@@ -666,6 +666,27 @@ def _zero_cell_margins(tc) -> None:
 # is to make its frame wider by this much on each side.
 _LIBREOFFICE_SIDE_INSET_PT = 9.1          # 3.21mm
 
+# The same LibreOffice reserve applies inside a TABLE CELL photo box (the
+# design used since 11 Oct 2026): a 35 mm photo in a 35 mm cell started
+# 3.19 mm in from the left border and ran 3.2 mm past the right one — the
+# "gap on the left" the user saw on 12 Oct (tracker No. 76). Cell margins,
+# border spacing, alignment and indents were all already zero; the reserve
+# cannot be turned off, so the photo is pulled left by exactly that much.
+# Measured: gap 3.19 mm -> 0.00 mm on the ID Card and Training Certificate.
+_LIBREOFFICE_CELL_OFFSET_TWIPS = 181       # 3.19mm
+
+
+def _pull_left_in_cell(para) -> None:
+    """Start the photo exactly at the cell's left border (see above)."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Twips
+
+    fmt = para.paragraph_format
+    fmt.left_indent = Twips(-_LIBREOFFICE_CELL_OFFSET_TWIPS)
+    fmt.right_indent = Twips(0)
+    fmt.first_line_indent = Twips(0)
+    para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+
 
 def _style_properties(shape) -> Dict[str, str]:
     out: Dict[str, str] = {}
@@ -791,6 +812,8 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
         target = para.runs[0]
         target.text = ""
         _clear_frame_padding(para)
+        if para._p.getparent().tag == qn("w:tc"):
+            _pull_left_in_cell(para)
         target.add_picture(cropped, width=width, height=height)
         return True
     finally:

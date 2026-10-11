@@ -425,3 +425,45 @@ def test_the_original_photo_file_is_never_changed(tmp_path):
     document_service.generate_documents(_csp(photo_url=str(photo)),
                                         [DocumentType.CSP_ID_CARD])
     assert hashlib.sha256(photo.read_bytes()).hexdigest() == before
+
+
+# ---- no gap on the left (tracker No. 76, 12 Oct 2026) --------------------
+
+@pytest.mark.parametrize("doc_type", PHOTO_TYPES)
+def test_the_photo_is_pulled_left_by_libreoffices_reserve(doc_type):
+    (_, path), = document_service.generate_documents(
+        _csp(photo_url=template_service.PLACEHOLDER_PHOTO), [doc_type])
+    para = _passport_paragraph(path)
+    assert para.paragraph_format.left_indent.twips == \
+        -template_service._LIBREOFFICE_CELL_OFFSET_TWIPS
+
+
+@pytest.mark.parametrize("doc_type", PHOTO_TYPES)
+def test_in_the_pdf_the_photo_starts_at_the_border(doc_type, tmp_path):
+    """Measured on the real PDF: no gap on the left, nothing past the right."""
+    import pymupdf as fitz
+    from app.services import pdf_service
+
+    (_, path), = document_service.generate_documents(
+        _csp(photo_url=template_service.PLACEHOLDER_PHOTO), [doc_type])
+    try:
+        (_, pdf), = pdf_service.convert_all([path], output_dir=str(tmp_path))
+    except pdf_service.PDFConversionError:
+        pytest.skip("LibreOffice is not installed here")
+    page = fitz.open(pdf)[0]
+    mm = lambda v: v / 72 * 25.4
+    photo = [r for img in page.get_images(full=True)
+             for r in page.get_image_rects(img[0])
+             if 30 < mm(r.width) < 40 and 40 < mm(r.height) < 50][0]
+    verticals = [d["rect"].x0 for d in page.get_drawings()
+                 if d["rect"].width < 1 and 44 < mm(d["rect"].height) < 46]
+    boxes = [d["rect"] for d in page.get_drawings()
+             if 34.5 < mm(d["rect"].width) < 35.5
+             and 44.5 < mm(d["rect"].height) < 45.5]
+    if boxes:
+        left, right = boxes[0].x0, boxes[0].x1
+    else:
+        left = min(verticals, key=lambda v: abs(v - photo.x0))
+        right = min(verticals, key=lambda v: abs(v - photo.x1))
+    assert abs(mm(photo.x0 - left)) < 0.3, "gap on the left of the photo"
+    assert abs(mm(right - photo.x1)) < 0.3, "photo runs past the right border"
