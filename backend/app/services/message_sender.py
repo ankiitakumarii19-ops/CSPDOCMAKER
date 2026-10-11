@@ -7,9 +7,9 @@ tokenised link. Nothing actually sent.
 
 Email is implemented because it works today — SMTP is already how documents
 reach CSPs, it needs no provider approval, and most CSPs have an address on
-file. WhatsApp is a channel kind this will dispatch to the moment a sender
-exists for it; until then a WhatsApp channel reports plainly that it cannot
-send rather than failing somewhere obscure.
+file. WhatsApp goes through Eko's internal WhatsApp Bulk Sender platform
+(whatsapp_platform.py, tracker No. 78), which handles Meta's template
+approval.
 
 Three rules this holds to:
 
@@ -148,12 +148,11 @@ def send_via(channel: MessageChannel, to: str, subject: str, body: str
     if channel.kind == EMAIL:
         return _send_email(to, subject, body)
     if channel.kind == WHATSAPP:
-        # Said plainly rather than pretending. A WhatsApp channel can be
-        # configured today; the sender for it is not written yet, and
-        # silently doing nothing would look like a delivery failure.
+        # WhatsApp needs a Meta-approved template with values filled in, not
+        # a finished text; it is sent by whatsapp_platform.send (No. 78).
         return False, (
-            "WhatsApp sending is not implemented yet. Configure an email "
-            "channel, or wait for the WhatsApp integration."
+            "Free-text WhatsApp is not allowed by Meta; send through "
+            "whatsapp_platform.send with the stored wording."
         )
     return False, f"No sender exists for a {channel.kind!r} channel."
 
@@ -244,7 +243,19 @@ def ask_for_details(session: Session, record, *,
                   record.csp_id, link=link, fields=fields)
     subject = template.subject or "Please confirm your details"
 
-    sent, why = send_via(channel, to, subject, body)
+    if via == VIA_WHATSAPP:
+        # Through Eko's WhatsApp platform (No. 78): the stored wording is
+        # sent as a Meta-approved template with the values filled in.
+        from app.services import whatsapp_platform as wa
+        readable = ", ".join(fo.label_of(f) for f in fields)
+        outcome = wa.send(
+            to, template.body,
+            {"name": getattr(record, "name", "") or record.csp_id,
+             "link": link, "fields": readable},
+            source_name=f"CSPdocMaker details request {record.csp_id}")
+        sent, why = outcome["status"] == wa.SENT, outcome["reason"]
+    else:
+        sent, why = send_via(channel, to, subject, body)
 
     request.sent_via = via
     request.sent_to = to

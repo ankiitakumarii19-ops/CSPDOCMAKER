@@ -285,6 +285,9 @@ def _process_one(session, csp, document_types, job=None) -> None:
     if sent:
         logger.info("new_csp_worker: CSP %s — %d document(s) sent to %s",
                     csp.csp_id, len(pdf_paths), csp.email)
+        # And on WhatsApp, with the PDFs (No. 78). Never fails the delivery.
+        from app.services import documents_whatsapp
+        documents_whatsapp.notify(session, csp, job, names)
     else:
         # The documents are stored and the CSP stays processed; only delivery
         # failed, and that is an operational problem, not a reason to

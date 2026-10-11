@@ -143,7 +143,8 @@ async def health_check():
 # is worse than refusing it. The public CSP form is exempt: it has no signed
 # in user and sets its own workspace from the token in the link.
 
-_UNSCOPED_PATHS = ("/api/csp-form", "/api/auth", "/health", "/docs", "/openapi")
+_UNSCOPED_PATHS = ("/api/csp-form", "/api/auth", "/api/public", "/health",
+                   "/docs", "/openapi")
 
 
 @app.middleware("http")
@@ -237,4 +238,6 @@ app.include_router(agent_router)     # already has /api/admin/agents prefix
 app.include_router(messaging_router) # already has /api/admin/messaging prefix
 app.include_router(sheet_router)     # already has /api/admin/sheets prefix
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
+from app.routers.public_document_router import router as public_document_router
+app.include_router(public_document_router)  # PUBLIC — signed 7-day link (No. 78)
 

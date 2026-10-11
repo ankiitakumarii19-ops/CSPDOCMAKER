@@ -225,12 +225,14 @@ async def test_the_failure_reason_is_kept_on_the_channel(db, monkeypatch):
 
 # ---- a channel with no sender says so -----------------------------------
 
-async def test_a_whatsapp_channel_says_it_cannot_send_yet(db):
+async def test_free_text_whatsapp_is_refused_plainly(db):
+    """Changed 12 Oct 2026 (No. 78): WhatsApp now sends, but only as a
+    Meta-approved template through whatsapp_platform — never free text."""
     channel = MessageChannel(name="WA", kind=WHATSAPP,
-                             provider="meta_cloud")
+                             provider="eko_wabs")
     sent, why = sender.send_via(channel, "919671943504", "s", "b")
     assert sent is False
-    assert "not implemented yet" in why
+    assert "whatsapp_platform" in why
 
 
 # ---- nothing configured --------------------------------------------------

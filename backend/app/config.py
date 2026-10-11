@@ -73,6 +73,15 @@ class Settings(BaseSettings):
     google_sheets_id: str = Field(default="", alias="GOOGLE_SHEETS_ID")
     google_sheets_rm_sheet_name: str = Field(default="RMs", alias="GOOGLE_SHEETS_RM_SHEET_NAME")
     google_sheets_admin_sheet_name: str = Field(default="Admins", alias="GOOGLE_SHEETS_ADMIN_SHEET_NAME")
+    # Eko's internal WhatsApp Bulk Sender (tracker No. 78). Its hosted
+    # connection carries Eko's shared key, so none is stored here.
+    whatsapp_platform_url: str = Field(
+        default="https://indev.eko.in/whatsapp/mcp",
+        alias="WHATSAPP_PLATFORM_URL")
+    whatsapp_platform_timeout_seconds: int = Field(
+        default=60, alias="WHATSAPP_PLATFORM_TIMEOUT_SECONDS")
+    whatsapp_language: str = Field(default="en_US", alias="WHATSAPP_LANGUAGE")
+
     # Decided 11 Oct 2026 (tracker No. 53): a CSP is asked for missing
     # details on WhatsApp only, and waits until WhatsApp works rather than
     # being asked by email. Switching this on allows the email fallback.

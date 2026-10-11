@@ -569,12 +569,22 @@ async def confirm_and_send(
     now = datetime.now(timezone.utc)
     email_job.status = EmailStatus.SENT
     email_job.sent_at = now
-    # The CSP notification (WhatsApp) that follows a successful email is not
-    # implemented yet, so the job stops at email_sent rather than claiming
-    # the whole workflow is completed.
     job.current_state = JobState.EMAIL_SENT
     job.error_message = None
     await session.commit()
+
+    # Then on WhatsApp, with the PDFs (No. 78). Never fails the delivery the
+    # email already completed.
+    from app.services import documents_whatsapp
+    try:
+        sent_names = [DOCUMENT_LABELS.get(d.document_type, d.document_type.value)
+                      for d in email_job.documents]
+        await session.run_sync(lambda s: documents_whatsapp.notify(
+            s, csp, job, sent_names))
+    except Exception as e:
+        logger.error("workflow_router.confirm_and_send: WhatsApp notice "
+                     "for CSP %s failed: %s: %s", job.csp_id,
+                     type(e).__name__, e)
 
     logger.info(
         "workflow_router.confirm_and_send: documents sent for job %s (CSP %s)",
