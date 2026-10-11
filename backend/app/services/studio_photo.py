@@ -18,7 +18,11 @@ same photo always gives the same result.
   4. Frame it like a passport photo: the face centred, a little space above
      the head, head and shoulders, 35:45. A distant selfie is zoomed in;
      where the frame runs past the photo's edge it is simply white.
-  5. The light touch-up (template_service.touch_up).
+  5. Studio tone (tracker No. 73), on the person only, all deterministic:
+     clean edges (no leftover wall colour, no coloured rim, no green cast
+     in dark hair), exposure measured ON THE FACE and only ever raised,
+     a gentle colour balance from the skin, a little local contrast and
+     a light sharpen. No pixel is moved, invented or smoothed away.
 
 Pixels of the person are never invented or changed, only moved as a whole
 (turned, zoomed). If any step cannot be done — no face found, the cut-out
@@ -46,6 +50,7 @@ MAX_FACE_HEIGHT = 0.62    # zoomed in no further than this
 MAX_TILT_DEGREES = 15
 
 _TAG = ".white"
+STYLE_VERSION = "v2"      # v2 = studio tone (No. 73)
 _session = None
 
 
@@ -72,7 +77,9 @@ def _cache_path(photo_path: str) -> str:
     stem, _ = os.path.splitext(photo_path)
     w, h = output_size()
     # The size is part of the name, so changing it makes a fresh photo.
-    return f"{stem}{_TAG}.{w}x{h}.{key}.png"
+    # The version is part of the name too: a change to how photos look
+    # remakes them instead of reusing ones made the old way.
+    return f"{stem}{_TAG}.{STYLE_VERSION}.{w}x{h}.{key}.png"
 
 
 def prepare_for(csp) -> Optional[str]:
@@ -139,7 +146,7 @@ def _build(photo_path: str):
     with Image.open(photo_path) as source:
         image = ImageOps.exif_transpose(source).convert("RGB")
     # Big phone photos are reduced first: plenty for a 35 x 45 mm print.
-    image.thumbnail((2000, 2000))
+    image.thumbnail((1400, 1400))   # ample for a 35 x 45 mm print
 
     bgr = cv2.cvtColor(np.asarray(image), cv2.COLOR_RGB2BGR)
     face = _face(bgr)
@@ -156,17 +163,23 @@ def _build(photo_path: str):
     angle = max(-MAX_TILT_DEGREES, min(MAX_TILT_DEGREES, angle))
     centre = (x + w / 2, y + h / 2)
 
-    # 3. Cut out, then onto white.
+    # 3. Cut out; clean the edge; studio tone; then onto white.
     from rembg import remove
     cut = remove(image, session=_session_for_cutout())        # RGBA
+    alpha_np = np.asarray(cut.split()[3])
+    rgb = _decontaminate(np.asarray(image), alpha_np)
+    rgb = _suppress_spill(rgb, alpha_np)
+    rgb = _studio_tone(rgb, (x, y, w, h))
+    alpha_np = _tighten(alpha_np)
+    cut = Image.fromarray(np.dstack([rgb, alpha_np]), "RGBA")
+
     valid = Image.new("L", cut.size, 255)    # where the photo has pixels
     if abs(angle) > 0.5:
         cut = cut.rotate(angle, resample=Image.BICUBIC, center=centre,
                          expand=False)
         valid = valid.rotate(angle, resample=Image.NEAREST, center=centre,
                              expand=False)
-    # Soften the very edge so a coloured wall does not leave a fringe.
-    alpha = cut.split()[3].point(lambda a: 0 if a < 24 else a)
+    alpha = cut.split()[3]
     white = Image.new("RGB", cut.size, "white")
     white.paste(cut.convert("RGB"), mask=alpha)
 
@@ -174,22 +187,100 @@ def _build(photo_path: str):
     box = _frame(centre, h, np.asarray(alpha) > 128, np.asarray(valid) > 0)
     canvas = Image.new("RGB", (box[2] - box[0], box[3] - box[1]), "white")
     canvas.paste(white, (-box[0], -box[1]))
-    framed = canvas.resize(output_size(), Image.LANCZOS)
+    return canvas.resize(output_size(), Image.LANCZOS)
 
-    # 5. The light touch-up, on the finished photo.
-    import tempfile
-    handle, staged = tempfile.mkstemp(suffix=".png", prefix="white_")
-    os.close(handle)
-    try:
-        framed.save(staged, "PNG")
-        touched = template_service_touch_up(staged)
-        try:
-            with Image.open(touched) as finished:
-                return finished.copy()
-        finally:
-            os.remove(touched)
-    finally:
-        os.remove(staged)
+
+# ---- studio tone (tracker No. 73) ----------------------------------------
+#
+# Tuned over six rounds on the real agents' photos and the user's sample,
+# with face brightness MEASURED each time (their sample studio photos:
+# face lightness 189-198; the old touch-up: 101-181; this: 142-185).
+
+FACE_TARGET_L = 176.0        # studio-bright face (OpenCV LAB, 0-255)
+SKIN_A, SKIN_B = 141.0, 150.0   # a natural warm skin tone, LAB a/b
+
+
+def _decontaminate(rgb, alpha):
+    """At soft edges, the person's own colour instead of the wall's."""
+    import numpy as np
+    from pymatting import estimate_foreground_ml
+
+    fg = estimate_foreground_ml(rgb.astype(np.float64) / 255.0,
+                                alpha.astype(np.float64) / 255.0)
+    return (np.clip(fg, 0, 1) * 255).astype(np.uint8)
+
+
+def _suppress_spill(rgb, alpha):
+    """Remove a coloured rim and a green cast on dark areas.
+
+    A bright wall lights the edge of the hair and cheek with its own colour
+    (a green or pink outline once the wall is gone). In a thin band along
+    the edge the brightness is kept and the tint is taken from just inside.
+    Dark, green-leaning pixels (hair lit by a green or yellow wall) are
+    pulled towards neutral; navy, black and red clothes and a red sindoor
+    are not green-leaning, so they keep their colour.
+    """
+    import cv2
+    import numpy as np
+
+    solid = (alpha > 128).astype(np.uint8)
+    present = (alpha > 10).astype(np.uint8)
+    k = max(3, int(min(rgb.shape[:2]) / 120))
+    inner = cv2.erode(solid, np.ones((2 * k + 1, 2 * k + 1), np.uint8))
+    band = ((present - inner) > 0).astype(np.uint8)
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)
+    if band.any():
+        for ch in (1, 2):
+            lab[..., ch] = cv2.inpaint(lab[..., ch], band * 255, k,
+                                       cv2.INPAINT_TELEA)
+    L = lab[..., 0].astype(np.float32)
+    a = lab[..., 1].astype(np.float32)
+    b = lab[..., 2].astype(np.float32)
+    pull = 0.65 * np.clip((95.0 - L) / 40.0, 0, 1) * (a < 128)
+    a = 128 + (a - 128) * (1 - pull)
+    b = 128 + (b - 128) * (1 - pull * np.clip((b - 128) / 20.0, 0, 1))
+    lab[..., 1] = np.clip(a, 0, 255).astype(np.uint8)
+    lab[..., 2] = np.clip(b, 0, 255).astype(np.uint8)
+    return cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
+
+
+def _studio_tone(rgb, face_box):
+    """Exposure and colour from the face; a little local contrast."""
+    import cv2
+    import numpy as np
+    from PIL import Image, ImageFilter
+
+    x, y, w, h = [int(v) for v in face_box]
+    lab = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB).astype(np.float32)
+    y0, y1 = max(0, y + h // 4), min(rgb.shape[0], y + 3 * h // 4)
+    x0, x1 = max(0, x + w // 5), min(rgb.shape[1], x + 4 * w // 5)
+    face = lab[y0:y1, x0:x1].reshape(-1, 3)
+    if len(face):
+        # Colour balance: a third of the way to a natural skin tone, capped.
+        lab[..., 1] += np.clip((SKIN_A - np.median(face[:, 1])) * 0.35, -4, 4)
+        lab[..., 2] += np.clip((SKIN_B - np.median(face[:, 2])) * 0.35, -5, 5)
+        # Exposure measured on the face; only ever brightened.
+        l_face = float(np.median(face[:, 0]))
+        if 1 < l_face < FACE_TARGET_L:
+            gamma = np.log(FACE_TARGET_L / 255) / np.log(l_face / 255)
+            gamma = float(np.clip(gamma, 0.70, 1.0))
+            lab[..., 0] = 255.0 * np.power(lab[..., 0] / 255.0, gamma)
+    lab = np.clip(lab, 0, 255).astype(np.uint8)
+
+    clahe = cv2.createCLAHE(clipLimit=1.3, tileGridSize=(8, 8))
+    l = lab[..., 0]
+    lab[..., 0] = cv2.addWeighted(l, 0.85, clahe.apply(l), 0.15, 0)
+    out = Image.fromarray(cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)).filter(
+        ImageFilter.UnsharpMask(radius=2, percent=70, threshold=2))
+    return np.asarray(out)
+
+
+def _tighten(alpha):
+    """Firm up the soft edge so faint edge pixels do not smudge."""
+    import numpy as np
+    a = alpha.astype(np.float32) / 255.0
+    a = np.clip((a - 0.12) / 0.88, 0, 1) ** 1.25
+    return (a * 255).astype(np.uint8)
 
 
 def _frame(centre, face_h, person, valid):
@@ -269,8 +360,3 @@ def _frame(centre, face_h, person, valid):
         top = limits["top"]
     return tuple(int(round(v)) for v in
                  (left, top, left + frame_w, top + frame_h))
-
-
-def template_service_touch_up(path: str) -> str:
-    from app.services import template_service
-    return template_service.touch_up(path)

@@ -161,3 +161,65 @@ def test_the_automation_edits_a_new_agents_photo(monkeypatch):
     from app.workers import new_csp_worker, pending_request_worker
     for module in (new_csp_worker, pending_request_worker):
         assert "studio_photo.prepare_for(csp)" in inspect.getsource(module)
+
+
+# ---- studio tone (tracker No. 73, 12 Oct 2026) ---------------------------
+
+def _disc(colour_inside, rim=None, size=200):
+    """A 'person' disc with an optional coloured rim, and its matte."""
+    import cv2
+    rgb = np.full((size, size, 3), 255, np.uint8)
+    alpha = np.zeros((size, size), np.uint8)
+    cv2.circle(rgb, (100, 100), 70, colour_inside, -1)
+    cv2.circle(alpha, (100, 100), 70, 255, -1)
+    if rim:
+        cv2.circle(rgb, (100, 100), 70, rim, 4)
+    return rgb, alpha
+
+
+def test_a_coloured_rim_from_the_wall_is_removed():
+    import cv2
+    rgb, alpha = _disc((150, 120, 100), rim=(120, 200, 60))   # green rim
+    out = studio_photo._suppress_spill(rgb, alpha)
+    lab_in = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)[100, 168]
+    lab_out = cv2.cvtColor(out, cv2.COLOR_RGB2LAB)[100, 168]
+    inside = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)[100, 100]
+    assert abs(int(lab_out[1]) - int(inside[1])) < abs(int(lab_in[1]) - int(inside[1]))
+
+
+def test_the_middle_of_the_person_is_not_touched_by_the_rim_fix():
+    rgb, alpha = _disc((150, 120, 100), rim=(120, 200, 60))
+    out = studio_photo._suppress_spill(rgb, alpha)
+    assert (out[100, 100].astype(int) - rgb[100, 100].astype(int)).max() <= 2
+
+
+def test_navy_and_red_keep_their_colour():
+    for colour in ((30, 40, 90), (160, 20, 30)):            # navy, red
+        rgb, alpha = _disc(colour)
+        out = studio_photo._suppress_spill(rgb, alpha)
+        assert np.abs(out[100, 100].astype(int) - np.array(colour)).max() <= 3
+
+
+def test_a_dark_face_is_brightened_and_a_bright_one_never_darkened():
+    import cv2
+    for level, should_rise in ((90, True), (200, False)):
+        rgb = np.full((300, 300, 3), level, np.uint8)
+        out = studio_photo._studio_tone(rgb, (100, 100, 100, 100))
+        before = cv2.cvtColor(rgb, cv2.COLOR_RGB2LAB)[150, 150, 0]
+        after = cv2.cvtColor(out, cv2.COLOR_RGB2LAB)[150, 150, 0]
+        if should_rise:
+            assert after > before + 10
+        else:
+            assert after >= before - 2, "a bright face was darkened"
+
+
+def test_studio_tone_keeps_size_and_is_repeatable():
+    rng = np.random.default_rng(7)
+    rgb = rng.integers(60, 200, (240, 200, 3), dtype=np.uint8)
+    a = studio_photo._studio_tone(rgb, (50, 50, 100, 120))
+    b = studio_photo._studio_tone(rgb, (50, 50, 100, 120))
+    assert a.shape == rgb.shape and np.array_equal(a, b)
+
+
+def test_a_style_change_remakes_saved_photos(photo):
+    assert f".{studio_photo.STYLE_VERSION}." in studio_photo._cache_path(photo)
