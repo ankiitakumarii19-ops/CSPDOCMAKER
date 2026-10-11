@@ -64,4 +64,3 @@ httpx==0.28.1
 # (176 MB) downloads on first use into app/assets/models/rembg.
 rembg==2.0.67
 onnxruntime==1.31.0
-PyMatting==1.1.16                # clean photo edges (installed with rembg)
