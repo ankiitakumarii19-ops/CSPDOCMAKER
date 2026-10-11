@@ -760,8 +760,12 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
     width, height = passport_size()
     # A checked AI studio portrait when there is one (No. 61); otherwise the
     # CSP's own photo with the light touch-up.
-    from app.services import photo_portrait
+    from app.services import photo_portrait, studio_photo
     portrait = photo_portrait.studio_portrait(photo_path)
+    if portrait is None and settings.photo_white_background:
+        # White background and passport framing, real face (No. 67). It is
+        # already touched up, so it is treated like a finished portrait.
+        portrait = studio_photo.make(photo_path)
     cropped = passport_crop(portrait or photo_path)
     if portrait and cropped == portrait:
         # Never hand the cached portrait to the clean-up below.

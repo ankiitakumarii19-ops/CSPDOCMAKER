@@ -160,6 +160,10 @@ class Settings(BaseSettings):
     # (tracker No. 58): colour, contrast, brightness, a little sharpening.
     # Nothing is moved, stretched, added or removed.
     photo_touch_up: bool = Field(default=True, alias="PHOTO_TOUCH_UP")
+    # White background + passport framing, made on this machine with the
+    # person's real face (tracker No. 67). Used unless an AI portrait is on.
+    photo_white_background: bool = Field(default=True,
+                                         alias="PHOTO_WHITE_BACKGROUND")
 
     # AI studio portrait by Google Gemini (tracker No. 61). Only used when a
     # key is set; every portrait is face-checked against the CSP's photo.

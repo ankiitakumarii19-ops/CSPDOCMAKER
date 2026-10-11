@@ -113,3 +113,4 @@ celerybeat-schedule*
 # OpenCV face models (37 MB) — fetched by scripts/download_face_models.py
 backend/app/assets/models/*.onnx
 # AI studio portraits are cached beside the photos, which are personal data
+backend/app/assets/models/rembg/

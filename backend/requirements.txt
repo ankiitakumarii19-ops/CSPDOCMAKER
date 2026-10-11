@@ -59,3 +59,8 @@ pytest==8.3.4
 pytest-asyncio==0.25.0
 pytest-cov==6.0.0
 httpx==0.28.1
+
+# White-background passport photo (studio_photo.py). Model u2net_human_seg
+# (176 MB) downloads on first use into app/assets/models/rembg.
+rembg==2.0.67
+onnxruntime==1.31.0
