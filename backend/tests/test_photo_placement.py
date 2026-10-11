@@ -381,3 +381,47 @@ def test_the_photo_cell_has_no_padding_and_nothing_else_in_it(doc_type):
             f"{doc_type.value}: cell still pads its contents")
 
 
+
+
+# ---- the light touch-up (tracker No. 58, 11 Oct 2026) --------------------
+#
+# "Make it look professional; don't change the look or the face." Only the
+# tone may change: every pixel stays where it was.
+
+def _correlation(a, b):
+    import numpy as np
+    x = np.asarray(a.convert("L"), dtype=float).ravel()
+    y = np.asarray(b.convert("L"), dtype=float).ravel()
+    return float(np.corrcoef(x, y)[0, 1])
+
+
+def test_the_touch_up_keeps_size_and_structure(tmp_path):
+    from PIL import Image
+
+    source = template_service.passport_crop(template_service.PLACEHOLDER_PHOTO)
+    done = template_service.touch_up(source)
+    with Image.open(source) as a, Image.open(done) as b:
+        assert a.size == b.size, "the touch-up changed the photo's size"
+        assert _correlation(a, b) > 0.97, (
+            "the touch-up changed the picture itself, not just its tone")
+
+
+def test_a_dark_photo_is_lifted_and_a_good_one_barely_moves(tmp_path):
+    from PIL import Image, ImageDraw, ImageStat
+
+    dark = Image.new("RGB", (350, 450), (40, 35, 30))
+    ImageDraw.Draw(dark).ellipse((100, 100, 250, 300), fill=(90, 70, 60))
+    dark.save(tmp_path / "dark.png")
+    lifted = Image.open(template_service.touch_up(str(tmp_path / "dark.png")))
+    assert (ImageStat.Stat(lifted.convert("L")).mean[0]
+            > ImageStat.Stat(dark.convert("L")).mean[0])
+
+
+def test_the_original_photo_file_is_never_changed(tmp_path):
+    import hashlib
+    photo = tmp_path / "csp.png"
+    shutil.copy(template_service.PLACEHOLDER_PHOTO, photo)
+    before = hashlib.sha256(photo.read_bytes()).hexdigest()
+    document_service.generate_documents(_csp(photo_url=str(photo)),
+                                        [DocumentType.CSP_ID_CARD])
+    assert hashlib.sha256(photo.read_bytes()).hexdigest() == before

@@ -156,6 +156,10 @@ class Settings(BaseSettings):
     # TEMPORARY: while CSP photos are still being extracted from the CRM,
     # documents are generated with a placeholder photo box. Set to false and
     # the CSP photo becomes required data (missing photo blocks generation).
+    # A light, studio-style touch-up of every photo placed on a document
+    # (tracker No. 58): colour, contrast, brightness, a little sharpening.
+    # Nothing is moved, stretched, added or removed.
+    photo_touch_up: bool = Field(default=True, alias="PHOTO_TOUCH_UP")
     photo_placeholder_allowed: bool = Field(
         default=True, alias="PHOTO_PLACEHOLDER_ALLOWED")
 

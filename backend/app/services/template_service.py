@@ -514,6 +514,61 @@ PASSPORT_ASPECT = PASSPORT_WIDTH_INCHES / PASSPORT_HEIGHT_INCHES   # 0.778
 PASSPORT_TOP_BIAS = 0.25
 
 
+def touch_up(photo_path: str) -> str:
+    """A light, studio-style touch-up. Returns a new file's path.
+
+    Confirmed 11 Oct 2026 (tracker No. 58): make the photo look
+    professional WITHOUT changing the look or the face. So only the tone of
+    the picture changes, the way a good photo print would:
+
+      * colour balance — a yellow or blue cast is pulled half-way to
+        neutral, never further;
+      * contrast — a gentle auto-levels, so a dull grey scan reads crisp;
+      * brightness — a dark photo is lifted a little; a well-lit one is
+        left alone;
+      * a light sharpen.
+
+    Every pixel stays where it was: nothing is cropped, moved, stretched,
+    smoothed, added or removed, so the face and its shape are exactly the
+    camera's. The original file is never changed.
+    """
+    import tempfile
+
+    from PIL import Image, ImageFilter, ImageOps, ImageStat
+
+    with Image.open(photo_path) as source:
+        image = source.convert("RGB")
+
+    # 1. Colour balance: grey-world, at half strength, gains capped.
+    means = ImageStat.Stat(image).mean
+    grey = sum(means) / 3 or 1
+    gains = [min(1.15, max(0.87, 1 + ((grey / (m or 1)) - 1) * 0.5))
+             for m in means]
+    bands = [band.point(lambda v, g=g: min(255, int(v * g + 0.5)))
+             for band, g in zip(image.split(), gains)]
+    image = Image.merge("RGB", bands)
+
+    # 2. Contrast: auto-levels ignoring the extreme 1%, blended 60%.
+    image = Image.blend(image, ImageOps.autocontrast(image, cutoff=1), 0.6)
+
+    # 3. Brightness: only a dark photo is lifted, and only a little.
+    luminance = ImageStat.Stat(image.convert("L")).mean[0]
+    if luminance < 115:
+        gamma = max(0.8, min(1.0, (luminance / 128) ** 0.5))
+        table = [min(255, int(255 * (v / 255) ** gamma + 0.5))
+                 for v in range(256)]
+        image = image.point(table * 3)
+
+    # 4. A light sharpen.
+    image = image.filter(ImageFilter.UnsharpMask(radius=1.5, percent=60,
+                                                 threshold=3))
+
+    handle, destination = tempfile.mkstemp(suffix=".png", prefix="touchup_")
+    os.close(handle)
+    image.save(destination, "PNG", optimize=True)
+    return destination
+
+
 def passport_crop(photo_path: str) -> str:
     """Return a copy of the photo cropped to passport proportions (35:45).
 
@@ -704,6 +759,14 @@ def _insert_photo(doc: Document, doc_type: DocumentType, photo_path: str) -> boo
         return False
     width, height = passport_size()
     cropped = passport_crop(photo_path)
+    if settings.photo_touch_up:
+        finished = touch_up(cropped)
+        if cropped != photo_path:
+            try:
+                os.remove(cropped)
+            except OSError:
+                pass
+        cropped = finished
     try:
         para = _photo_marker_paragraph(doc, marker)
         if para is None:
