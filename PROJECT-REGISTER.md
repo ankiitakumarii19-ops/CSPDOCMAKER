@@ -96,7 +96,7 @@ it — you said so.
 | 44 | 7–9 Oct | Whatever happened on these days | **Missing — please tell me** |
 | 45 | 10 Oct | Keep this tracker and update it every time | Done — this file |
 | 46 | 10 Oct | Make this tracker readable, in plain language | Done — this version |
-| 47 | 10 Oct | **One central database under the Super Admin.** Super Admin sees everything; RMs see their own agents; Admins only watch; each agent's sheet details, photos, original papers and documents are kept together on their record. **No company-by-company separation for now**, but build so it can be added later. A new searchable "Database" section for the Super Admin. Back up before any big change. Ask before changing anything existing. | **Waiting for you** — plan proposed, see section 3 (S1–S9). Partly replaces No. 33 (company separation is paused) |
+| 47 | 10 Oct | **One central database under the Super Admin.** Super Admin sees everything; RMs see their own agents; Admins only watch; each agent's sheet details, photos, original papers and documents are kept together on their record. **No company-by-company separation for now**, but build so it can be added later. A new searchable "Database" section for the Super Admin. Back up before any big change. Ask before changing anything existing. | **Done 12 Oct** (S5 photos in the database, S7 Database page, S8 security, S9 testing). S6 stays on hold — workspaces (No. 48) do that job |
 | 48 | 11 Oct | **Super Admins create workspaces.** A Super Admin creates a workspace and adds other Super Admins, Admins or RMs to it. Anyone new who signs up as a Super Admin gets their **own empty workspace**, and cannot see any other workspace unless a Super Admin there adds them. | **Decided 11 Oct:** (a) Yes, turn workspaces on — **replaces the "no separation" part of No. 47**. (b) The present workspace is renamed **"Eko SBI Kiosk CSP"**; every new Super Admin is asked to **name their own** workspace. (c) Anyone with an @eko.co.in or @ekosupport.in email may sign up as a Super Admin and get a new workspace — **changes No. 11** for Super Admins only. (d) Super Admins add Super Admins, Admins and RMs **inside the app**; the Authorization sheet keeps working for Eko SBI Kiosk CSP only. Status: **Waiting for you** — screen designs shown 11 Oct, need approval (W1–W8) |
 | 49 | 11 Oct | Give me the login page so I can test everything myself | **Done** — app started on this laptop: http://localhost:3000/auth/login. Workspace screens not built yet, so those can't be tested on screen |
 | 50 | 11 Oct | You reported: Access screen crashes ("Cannot read properties of undefined (reading 'length')") | **Fixed** — Claude's mistake: the access data was changed for workspaces without the screen. Data put back in the shape the screen expects; a test now guards it. Checked live |
@@ -183,8 +183,8 @@ it — you said so.
 | S5 | Move photos and papers into private storage | **Done 12 Oct (No. 89)** — photos (as obtained + passport version) are kept in the database; papers stay in Zoho (S4) |
 | S6 | Link each RM / Admin to a Super Admin | **On hold** — No. 48 (11 Oct) may replace this with workspaces. Waiting for you |
 | S7 | Build the new **Database** section for the Super Admin | **Done 12 Oct (No. 89)** — you asked for it |
-| S8 | Security checks: nobody can see records by changing the web address | To do |
-| S9 | Testing of all the above | To do |
+| S8 | Security checks: nobody can see records by changing the web address | **Done 12 Oct** — the server checks the role on every request (not only the screen), every query is limited to your workspace, unknown or other records answer "not found"; covered by tests |
+| S9 | Testing of all the above | **Done 12 Oct** — 909 tests pass |
 
 ### Workspaces (request No. 48)
 
