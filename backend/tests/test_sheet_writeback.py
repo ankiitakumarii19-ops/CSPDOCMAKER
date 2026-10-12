@@ -17,9 +17,9 @@ HEADER = ["CSP Code", "CSP Name", "CSP Mobile Number", "CSP Email Id",
           "Gender", "Address", "District", "State"]
 ROWS = [
     HEADER,
-    ["1A850466", "Abhishek Anand", "9955776279", "a@x.com", "Male",
+    ["1A850466", "Abhishek Anand", "9812345671", "a@x.com", "Male",
      "Saharsa", "Saharsa", "Bihar"],
-    ["1A851727", "Nitasha", "9671943504", "", "", "", "", ""],
+    ["1A851727", "Nitasha", "9812345670", "", "", "", "", ""],
 ]
 
 

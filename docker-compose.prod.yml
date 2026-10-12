@@ -1,0 +1,119 @@
+# CSPdocMaker on a server. See DEPLOY.md.
+#
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
+#
+# Only Caddy is reachable from outside (ports 80 and 443). It gets the HTTPS
+# certificate for DOMAIN by itself and passes /api/* to the backend and
+# everything else to the website. The database and Redis are not exposed.
+
+x-backend: &backend
+  build:
+    context: .
+    dockerfile: backend/Dockerfile
+  image: cspdocmaker-backend
+  restart: unless-stopped
+  env_file: deploy/.env.production
+  environment:
+    DATABASE_HOST: postgres
+    DATABASE_PORT: "5432"
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    CELERY_BROKER_URL: redis://redis:6379/1
+    CELERY_RESULT_BACKEND: redis://redis:6379/2
+    LOG_DIR: /app/backend/logs
+    # Paths inside the container — fixed here so a value copied from a
+    # laptop's .env cannot point somewhere that does not exist.
+    DOCUMENT_TEMPLATES_DIR: /app/templates/documents
+    DOCUMENT_OUTPUT_DIR: /app/backend/generated_documents
+    LIBREOFFICE_PATH: ""
+    GOOGLE_SHEETS_CREDENTIALS_FILE: /app/backend/credentials/google_service_account.json
+    GMAIL_CREDENTIALS_FILE: /app/backend/credentials/gmail_service_account.json
+  volumes:
+    - ./backend/credentials:/app/backend/credentials:ro
+    - documents:/app/backend/generated_documents
+    - logs:/app/backend/logs
+    - models:/app/backend/app/assets/models
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DATABASE_NAME:-cspdocmaker}
+      POSTGRES_USER: ${DATABASE_USER:-cspdocmaker}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in deploy/.env.production}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DATABASE_USER:-cspdocmaker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    <<: *backend
+    command: ["api"]
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  worker:
+    <<: *backend
+    command: ["worker"]
+
+  beat:
+    <<: *backend
+    command: ["beat"]
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    image: cspdocmaker-frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env.production}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - frontend
+
+volumes:
+  postgres_data:
+  redis_data:
+  documents:
+  logs:
+  models:
+  caddy_data:
+  caddy_config:

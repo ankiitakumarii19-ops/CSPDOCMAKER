@@ -138,7 +138,7 @@ INDIA_CC = "91"
 def normalize_mobile(value: str) -> str:
     """A WhatsApp number: digits only, with the country code.
 
-    Sheet cells carry '+91 96719 43504', '09671943504' and '9671943504' for
+    Sheet cells carry '+91 98123 45670', '09812345670' and '9812345670' for
     the same person. Anything that is not a plausible Indian mobile returns
     empty rather than being sent to a wrong number.
     """

@@ -96,18 +96,18 @@ async def test_two_csps_differ_only_where_they_should():
 # ---- phone numbers -------------------------------------------------------
 
 @pytest.mark.parametrize("raw,expected", [
-    ("9671943504", "919671943504"),
-    ("+91 96719 43504", "919671943504"),
-    ("09671943504", "919671943504"),
-    ("919671943504", "919671943504"),
-    ("  9671943504  ", "919671943504"),
+    ("9812345670", "919812345670"),
+    ("+91 98123 45670", "919812345670"),
+    ("09812345670", "919812345670"),
+    ("919812345670", "919812345670"),
+    ("  9812345670  ", "919812345670"),
 ])
 async def test_the_same_person_normalizes_the_same_way(raw, expected):
     assert c.normalize_mobile(raw) == expected
 
 
 @pytest.mark.parametrize("raw", ["", "   ", "12345", "not a number",
-                                 "7291988624 / 7291988625"])
+                                 "9812345672 / 9812345673"])
 async def test_an_implausible_number_is_refused_not_guessed(raw):
     """Sending to a wrong number is worse than not sending."""
     assert c.normalize_mobile(raw) == ""
@@ -123,17 +123,17 @@ class _CSP:
 async def test_a_csp_without_a_mobile_is_left_out():
     """They are emailed instead; they must not silently fail at send time."""
     rows = c.contacts_for([
-        (_CSP("1A1", "Has Phone", "9671943504"), LINK),
+        (_CSP("1A1", "Has Phone", "9812345670"), LINK),
         (_CSP("1A2", "No Phone", ""), LINK),
     ])
     assert [r["csp_code"] for r in rows] == ["1A1"]
-    assert rows[0]["phone"] == "919671943504"
+    assert rows[0]["phone"] == "919812345670"
 
 
 async def test_each_row_carries_its_own_message():
     rows = c.contacts_for([
-        (_CSP("1A1", "Nitasha", "9671943504"), "https://x/a"),
-        (_CSP("1A2", "Abhishek", "9955776279"), "https://x/b"),
+        (_CSP("1A1", "Nitasha", "9812345670"), "https://x/a"),
+        (_CSP("1A2", "Abhishek", "9812345671"), "https://x/b"),
     ])
     assert "Nitasha" in rows[0]["message"]
     assert "Abhishek" in rows[1]["message"]

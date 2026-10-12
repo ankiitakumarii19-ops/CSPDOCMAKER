@@ -24,21 +24,21 @@ def _lead(**fields):
 # ---- how a Lead is identified ------------------------------------------
 
 async def test_phone_and_name_together_identify_a_lead():
-    record = _lead(Full_Name="Nitasha", Phone="9671943504")
-    assert z._lead_matches(record, "9671943504", "nitasha", "")
+    record = _lead(Full_Name="Nitasha", Phone="9812345670")
+    assert z._lead_matches(record, "9812345670", "nitasha", "")
 
 
 async def test_phone_and_branch_together_identify_a_lead():
-    record = _lead(Full_Name="Someone Else", Phone="9671943504",
+    record = _lead(Full_Name="Someone Else", Phone="9812345670",
                    Branch_Code="12204")
-    assert z._lead_matches(record, "9671943504", "nitasha", "12204")
+    assert z._lead_matches(record, "9812345670", "nitasha", "12204")
 
 
 async def test_name_and_branch_identify_a_lead_when_the_phone_differs():
     """The sheet and the CRM disagree about phone numbers in real data."""
     record = _lead(Full_Name="Nitasha", Phone="9999999999",
                    Branch_Code="12204")
-    assert z._lead_matches(record, "9671943504", "nitasha", "12204")
+    assert z._lead_matches(record, "9812345670", "nitasha", "12204")
 
 
 async def test_the_name_alone_is_never_enough():
@@ -48,8 +48,8 @@ async def test_the_name_alone_is_never_enough():
 
 
 async def test_the_phone_alone_is_never_enough():
-    record = _lead(Full_Name="Someone Else", Phone="9671943504")
-    assert not z._lead_matches(record, "9671943504", "nitasha", "12204")
+    record = _lead(Full_Name="Someone Else", Phone="9812345670")
+    assert not z._lead_matches(record, "9812345670", "nitasha", "12204")
 
 
 async def test_the_branch_alone_is_never_enough():
@@ -60,8 +60,8 @@ async def test_the_branch_alone_is_never_enough():
 
 
 async def test_matching_ignores_case_and_spacing():
-    record = _lead(Full_Name="  NITASHA  ", Phone="+91 96719 43504")
-    assert z._lead_matches(record, "9671943504", "nitasha", "")
+    record = _lead(Full_Name="  NITASHA  ", Phone="+91 98123 45670")
+    assert z._lead_matches(record, "9812345670", "nitasha", "")
 
 
 # ---- Leads is always consulted -----------------------------------------

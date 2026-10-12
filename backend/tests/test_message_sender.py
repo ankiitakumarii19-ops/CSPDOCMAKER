@@ -94,7 +94,7 @@ def sent(monkeypatch):
 
 def _csp(session, csp_id="C1", **fields):
     defaults = {"name": "Test Csp", "origin": "new",
-                "mobile": "9671943504", "email": "csp@example.com"}
+                "mobile": "9812345670", "email": "csp@example.com"}
     defaults.update(fields)
     record = CSPRecord(csp_id=csp_id, csp_code=csp_id, **defaults)
     session.add(record)
@@ -124,7 +124,7 @@ async def test_an_unrecognised_brace_is_left_alone():
 
 async def test_whatsapp_prefers_the_mobile(db):
     record = _csp(db)
-    assert sender.address_for(record, WHATSAPP)[0] == "919671943504"
+    assert sender.address_for(record, WHATSAPP)[0] == "919812345670"
 
 
 async def test_it_falls_back_to_email_when_there_is_no_mobile(db):
@@ -230,7 +230,7 @@ async def test_free_text_whatsapp_is_refused_plainly(db):
     Meta-approved template through whatsapp_platform — never free text."""
     channel = MessageChannel(name="WA", kind=WHATSAPP,
                              provider="eko_wabs")
-    sent, why = sender.send_via(channel, "919671943504", "s", "b")
+    sent, why = sender.send_via(channel, "919812345670", "s", "b")
     assert sent is False
     assert "whatsapp_platform" in why
 

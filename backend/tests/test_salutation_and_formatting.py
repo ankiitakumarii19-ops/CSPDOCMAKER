@@ -27,7 +27,7 @@ PHOTO = os.path.join("app", "assets", "placeholder_photo.png")
 VALUES = {
     "csp_name": "Abhishek Anand", "csp_code": "1A850466",
     "branch_name": "Dhabauli", "branch_code": "8567",
-    "address": "chotesagaon, Saharsa, Bihar", "mobile": "9955776279",
+    "address": "chotesagaon, Saharsa, Bihar", "mobile": "9812345671",
     "email": "a@example.com", "district": "Saharsa", "state": "Bihar",
     "ao": "Bhagalpur", "rbo_name": "Bhowesh Bhawan",
     "asm_name": "Munna Pathak", "asm_email": "munna.pathak@eko.co.in",

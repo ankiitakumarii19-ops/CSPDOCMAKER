@@ -62,6 +62,7 @@ processing and every "agent" are deterministic code. See §3, decision D1.
 | D11 | **Workspaces**: Super Admins create workspaces; membership per workspace re-checked on every request. Sheet-reading jobs run only for the Eko workspace. | Decided 11 Oct 2026. |
 | D12 | **Roles**: Super Admin (configures, adds people), Admin (watches only), RM (searches, chooses documents). | Confirmed. |
 | D13 | **Secrets only in environment variables** (`backend/.env`, never committed; `.env.example` lists names only). | Security. |
+| D14 | **Server = Docker Compose on one Linux machine, Caddy in front** (`docker-compose.prod.yml`, `DEPLOY.md`). Caddy gets HTTPS itself and sends `/api/*` to the backend, the rest to the website. LibreOffice uses Carlito/Caladea in place of Calibri/Cambria (same letter widths). Server settings in `deploy/.env.production` (git-ignored). | One command to start or update; HTTPS without manual certificates; documents lay out as on Windows (verified 12 Oct 2026). |
 
 ---
 
@@ -125,3 +126,4 @@ this (or does it, with the user's OK).
 |---|---|
 | 12 Oct 2026 | Initial version |
 | 12 Oct 2026 | §4 rewritten: telemetry layer implemented (No. 79) |
+| 12 Oct 2026 | D14 added: server deployment (No. 86) |

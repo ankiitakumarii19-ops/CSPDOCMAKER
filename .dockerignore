@@ -1,0 +1,21 @@
+# Never sent into a Docker build: secrets, data, caches, local tools.
+.git
+**/.env
+**/.env.*
+!**/.env.example
+**/.env.production.example
+backend/.venv
+backend/credentials
+backend/generated_documents
+backend/exported_documents
+backend/logs
+backend/app/assets/models
+backend/celerybeat-schedule*
+**/__pycache__
+**/.pytest_cache
+frontend/node_modules
+frontend/.next
+sample_output
+reference/samples
+.runlogs
+LOGIN-FOR-TESTING.txt

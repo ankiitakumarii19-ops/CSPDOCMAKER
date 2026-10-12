@@ -15,9 +15,9 @@ from app.services.info_directory import (
 # Trimmed from the real sheet, keeping every awkward case it contains.
 INFO_ROWS = [
     ["Relationship Manager Name", "Email ID", "Mobile Number", "LHO", "State"],
-    ["Vandana Kumar", "vandana.kumar.intern@eko.co.in", "7291988625 / 7291988624",
+    ["Vandana Kumar", "vandana.kumar.intern@eko.co.in", "9812345673 / 9812345672",
      "Patna", "Bihar, Jharkhand"],
-    ["Shiwani Kumari", "shiwani.kumari@ekosupport.in", "7291988624",
+    ["Shiwani Kumari", "shiwani.kumari@ekosupport.in", "9812345672",
      "Lucknow, New Delhi, Jaipur", "Uttar Pradesh, NCT of Delhi, Rajasthan"],
     [" Amuda Murgesh", "amuda.murgesh@eko.co.in", "9217060639",
      "Chandigarh", "Haryana, Punjab, Himachal Pradesh"],

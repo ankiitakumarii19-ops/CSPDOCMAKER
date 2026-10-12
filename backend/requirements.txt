@@ -40,7 +40,7 @@ Pillow==12.3.0                    # crop and size the photo
 numpy==2.5.3                      # block analysis to locate it
 # Pinned below 5: OpenCV 5 removed CascadeClassifier, and its replacement
 # needs a model file downloaded at runtime. 4.x bundles the cascade.
-opencv-python-headless==4.14.0    # confirm the crop contains a face
+opencv-python-headless==4.14.0.94    # confirm the crop contains a face
 
 # ---- HTTP Client ----
 httpx==0.28.1

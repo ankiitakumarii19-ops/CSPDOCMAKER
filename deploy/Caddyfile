@@ -1,0 +1,17 @@
+# HTTPS front door. Caddy fetches and renews the certificate for $DOMAIN
+# itself (Let's Encrypt) — the domain must point at this server and ports
+# 80 and 443 must be open.
+{$DOMAIN} {
+	encode gzip
+
+	# The backend: the app's API, and the private PDF / details links
+	# that WhatsApp and the CSPs open.
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	# Everything else is the website.
+	handle {
+		reverse_proxy frontend:3000
+	}
+}
