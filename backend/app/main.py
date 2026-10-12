@@ -7,6 +7,7 @@ and lifecycle events.
 
 import logging
 import re
+from urllib.parse import urlparse
 from contextlib import asynccontextmanager
 
 from sqlalchemy import select
@@ -82,11 +83,14 @@ app.add_middleware(
     # PUBLIC_APP_URL is the address CSPs are sent to, so browser calls
     # arrive with that origin — without it here they are blocked, and the
     # failure looks like the app is broken rather than misconfigured.
+    # An origin is scheme + host only: PUBLIC_APP_URL may carry a path
+    # (https://indev.eko.in/csp-docmaker), which a browser never sends.
     allow_origins=[
         o for o in (
             "http://localhost:3000",
             "http://127.0.0.1:3000",
-            settings.public_app_url.rstrip("/"),
+            "{0.scheme}://{0.netloc}".format(urlparse(settings.public_app_url))
+            if urlparse(settings.public_app_url).netloc else "",
         ) if o
     ],
     allow_credentials=True,

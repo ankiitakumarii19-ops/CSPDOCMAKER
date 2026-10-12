@@ -138,6 +138,43 @@ Every line in `ps` says `running` (the `api` line also `healthy`), and the
 health check prints `"status":"healthy"`. Then open
 `https://<your-domain>` in a browser — the padlock shows HTTPS — and sign in.
 
+**B8. Only if the app lives under a path of a domain another web server
+already serves** — e.g. `https://indev.eko.in/csp-docmaker` (make-env.sh
+set this up when you gave it `indev.eko.in/csp-docmaker`).
+
+The app then does not touch ports 80/443: it listens privately on
+`127.0.0.1:8088`, and the web server that owns the domain forwards the path
+to it. Check locally first:
+
+```bash
+curl -s http://127.0.0.1:8088/csp-docmaker/api/health
+```
+
+Then whoever runs that web server adds the forwarding rule. For **nginx**,
+inside the `server { ... }` block for the domain (the one with its HTTPS
+certificate):
+
+```nginx
+# One block for /csp-docmaker and everything under it. No redirect of its
+# own: the app already sends /csp-docmaker/ to /csp-docmaker.
+location /csp-docmaker {
+    proxy_pass http://127.0.0.1:8088;          # no path here: keep /csp-docmaker
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    client_max_body_size 25m;                  # template and photo uploads
+    proxy_read_timeout 180s;                   # making documents takes ~30 s
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+curl -s https://indev.eko.in/csp-docmaker/api/health
+```
+
+The last line prints `"status":"healthy"`; then open
+`https://indev.eko.in/csp-docmaker` in a browser.
+
 ---
 
 ## Good to know

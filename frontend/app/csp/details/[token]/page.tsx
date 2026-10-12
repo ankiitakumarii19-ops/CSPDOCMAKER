@@ -17,6 +17,8 @@
 
 import { use, useCallback, useEffect, useState } from "react";
 
+import { withBase } from "../../../lib/basePath";
+
 interface FormField {
   name: string;
   label: string;
@@ -67,7 +69,7 @@ export default function CSPDetailsForm({
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/csp-form/${encodeURIComponent(token)}`);
+      const response = await fetch(withBase(`/api/csp-form/${encodeURIComponent(token)}`));
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         const detail = body?.detail;
@@ -99,7 +101,7 @@ export default function CSPDetailsForm({
     setError("");
     try {
       const response = await fetch(
-        `/api/csp-form/${encodeURIComponent(token)}`,
+        withBase(`/api/csp-form/${encodeURIComponent(token)}`),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },

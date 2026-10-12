@@ -2,9 +2,15 @@
 #
 #   docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
 #
-# Only Caddy is reachable from outside (ports 80 and 443). It gets the HTTPS
-# certificate for DOMAIN by itself and passes /api/* to the backend and
-# everything else to the website. The database and Redis are not exposed.
+# Only Caddy is reachable from outside. Two ways to run it (set by
+# deploy/make-env.sh):
+#   * own domain   — Caddy takes ports 80/443 and gets the HTTPS certificate
+#                    for DOMAIN itself (deploy/Caddyfile);
+#   * behind a web server that already owns the domain, under a path such
+#     as https://indev.eko.in/csp-docmaker — Caddy listens on HTTP_BIND
+#     (127.0.0.1:8088) and that web server forwards BASE_PATH to it
+#     (deploy/Caddyfile.behind-proxy, DEPLOY.md).
+# The database and Redis are never exposed.
 
 x-backend: &backend
   build:
@@ -88,6 +94,8 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        NEXT_PUBLIC_BASE_PATH: ${BASE_PATH:-}
     image: cspdocmaker-frontend
     restart: unless-stopped
     depends_on:
@@ -97,12 +105,13 @@ services:
     image: caddy:2.8-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_BIND:-80}:80"
+      - "${HTTPS_BIND:-443}:443"
     environment:
       DOMAIN: ${DOMAIN:?set DOMAIN in deploy/.env.production}
+      BASE_PATH: ${BASE_PATH:-}
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./deploy/${CADDYFILE:-Caddyfile}:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

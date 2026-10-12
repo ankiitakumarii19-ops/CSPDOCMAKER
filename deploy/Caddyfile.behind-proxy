@@ -1,0 +1,20 @@
+# Behind a web server that already owns the domain (e.g. indev.eko.in).
+# That server handles HTTPS and forwards {$BASE_PATH} (e.g. /csp-docmaker)
+# here, keeping the path; this sends the API on to the backend without the
+# prefix and everything else to the website (built with the same base path).
+{
+	auto_https off
+}
+
+:80 {
+	encode gzip
+
+	handle {$BASE_PATH}/api/* {
+		uri strip_prefix {$BASE_PATH}
+		reverse_proxy api:8000
+	}
+
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

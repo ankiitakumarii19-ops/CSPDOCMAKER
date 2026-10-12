@@ -27,6 +27,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
 import type { ApiError, SheetSource, SheetTabData } from "../lib/api";
+import { withBase } from "../lib/basePath";
 
 export default function Sheets() {
   const [sources, setSources] = useState<SheetSource[]>([]);
@@ -705,7 +706,7 @@ function Cell({ column, value }: { column: string; value: string }) {
 
 function SheetPhoto({ path, alt }: { path: string; alt: string }) {
   const [failed, setFailed] = useState(false);
-  const src = `/api/admin/sheets/_photo?path=${encodeURIComponent(path)}`;
+  const src = withBase(`/api/admin/sheets/_photo?path=${encodeURIComponent(path)}`);
 
   if (failed) {
     // Said plainly rather than showing a broken frame: the cell has a

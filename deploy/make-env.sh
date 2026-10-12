@@ -1,7 +1,13 @@
 #!/bin/sh
 # Build deploy/.env.production on the server (see DEPLOY.md).
 #
-#   sh deploy/make-env.sh <domain> <laptop-env-file>
+#   sh deploy/make-env.sh <address> <laptop-env-file>
+#
+# <address> is where people open the app, without https://:
+#   docs.example.com              its own domain (Caddy takes 80/443)
+#   indev.eko.in/csp-docmaker     a path on a domain another web server
+#                                 already serves (Caddy listens privately
+#                                 on 127.0.0.1:8088; see DEPLOY.md)
 #
 # Takes the values marked COPY in deploy/.env.production.example from the
 # laptop's backend/.env (copied to the server), makes fresh random secrets
@@ -10,16 +16,20 @@
 set -e
 cd "$(dirname "$0")/.."
 
-DOMAIN="$1"
+ADDRESS="$1"
 LAPTOP_ENV="$2"
 OUT=deploy/.env.production
-if [ -z "$DOMAIN" ] || [ ! -f "$LAPTOP_ENV" ]; then
-    echo "usage: sh deploy/make-env.sh <domain> <laptop-env-file>" >&2
+if [ -z "$ADDRESS" ] || [ ! -f "$LAPTOP_ENV" ]; then
+    echo "usage: sh deploy/make-env.sh <address> <laptop-env-file>" >&2
     exit 1
 fi
-case "$DOMAIN" in
-    http*|*/*) echo "give the domain only, e.g. docs.eko.in (no https://, no /)" >&2; exit 1 ;;
+case "$ADDRESS" in
+    http*|*//*|*" "*) echo "give the address without https://, e.g. indev.eko.in/csp-docmaker" >&2; exit 1 ;;
 esac
+ADDRESS="${ADDRESS%/}"
+DOMAIN="${ADDRESS%%/*}"
+BASE_PATH=""
+[ "$DOMAIN" != "$ADDRESS" ] && BASE_PATH="/${ADDRESS#*/}"
 if [ -f "$OUT" ]; then
     echo "$OUT already exists — remove it first if you mean to rebuild it" >&2
     exit 1
@@ -65,7 +75,14 @@ for key in $COPY_KEYS; do
 done
 
 set_value DOMAIN "$DOMAIN"
-set_value PUBLIC_APP_URL "https://$DOMAIN"
+set_value PUBLIC_APP_URL "https://$ADDRESS"
+set_value BASE_PATH "$BASE_PATH"
+if [ -n "$BASE_PATH" ]; then
+    # Another web server owns the domain: stay off its ports.
+    set_value CADDYFILE "Caddyfile.behind-proxy"
+    set_value HTTP_BIND "127.0.0.1:8088"
+    set_value HTTPS_BIND "127.0.0.1:8443"
+fi
 set_value APP_SECRET_KEY "$(openssl rand -hex 32)"
 set_value JWT_SECRET_KEY "$(openssl rand -hex 32)"
 set_value DATABASE_PASSWORD "$(openssl rand -hex 24)"
@@ -74,7 +91,10 @@ chmod 600 "$OUT"
 # The laptop file held every secret; it is not needed any more.
 if command -v shred >/dev/null 2>&1; then shred -u "$LAPTOP_ENV"; else rm -f "$LAPTOP_ENV"; fi
 
-echo "Created $OUT for https://$DOMAIN ($copied values copied, 3 new secrets made)."
+echo "Created $OUT for https://$ADDRESS ($copied values copied, 3 new secrets made)."
+if [ -n "$BASE_PATH" ]; then
+    echo "Served under $BASE_PATH: the app will listen on 127.0.0.1:8088 for the web server of $DOMAIN (see DEPLOY.md)."
+fi
 empty="$(grep -E '^[A-Z_]+=$' "$OUT" | cut -d= -f1 | tr '\n' ' ')"
 if [ -n "$empty" ]; then
     echo "Still empty (fill in with: nano $OUT): $empty"

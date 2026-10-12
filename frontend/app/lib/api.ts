@@ -5,7 +5,9 @@
  * Handles authentication tokens, error responses, and type safety.
  */
 
-const API_BASE = "/api";
+import { withBase } from "./basePath";
+
+const API_BASE = withBase("/api");
 
 /** Document types — must match backend DocumentType enum values. */
 export const DOCUMENT_TYPES = [
@@ -452,8 +454,7 @@ class ApiClient {
       if (typeof window !== "undefined") {
         // A full page load on purpose: it drops every screen's in-memory
         // state from the expired session (there is no router in this file).
-        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-        window.location.assign("/auth/login?expired=1");
+        window.location.assign(withBase("/auth/login?expired=1"));
       }
     }
     return { detail, status: response.status, data };

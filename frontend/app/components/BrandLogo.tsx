@@ -1,5 +1,7 @@
 import Image from "next/image";
 
+import { withBase } from "../lib/basePath";
+
 /**
  * The eko KIOSK logo, top-left on every page.
  *
@@ -20,7 +22,7 @@ export default function BrandLogo({
   const width = Math.round((139 / 78) * height);
   return (
     <Image
-      src="/brand/eko-kiosk.png"
+      src={withBase("/brand/eko-kiosk.png")}
       alt="eko KIOSK"
       width={width}
       height={height}

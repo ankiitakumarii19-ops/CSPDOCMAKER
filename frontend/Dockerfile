@@ -2,7 +2,9 @@
 #   docker build -f frontend/Dockerfile .
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
-ENV NEXT_TELEMETRY_DISABLED=1
+# Where the site is served from, e.g. /csp-docmaker (empty = the root).
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
@@ -10,7 +12,8 @@ RUN npm run build
 
 FROM node:22-bookworm-slim
 WORKDIR /app
-ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1
+ARG NEXT_PUBLIC_BASE_PATH=""
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 NEXT_PUBLIC_BASE_PATH=$NEXT_PUBLIC_BASE_PATH
 COPY --from=build /app/package.json /app/package-lock.json ./
 # Full install: `next start` reads next.config.ts, which needs TypeScript.
 RUN npm ci
