@@ -270,3 +270,4 @@ it — you said so.
 | 12 Oct 2026 | No. 83 done: you received the WhatsApp test. Plain WhatsApp messages work; messages with links (PDFs, details form) wait for the server (No. 84) |
 | 12 Oct 2026 | Added No. 86: server kit + DEPLOY.md, tested; disk-full incident recovered |
 | 12 Oct 2026 | Added No. 87: PDF-only storage; what goes to GitHub |
+| 12 Oct 2026 | No. 86: code pushed to GitHub (private: ankiitakumarii19-ops/CSPDOCMAKER); next = server steps |
