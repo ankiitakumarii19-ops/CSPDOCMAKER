@@ -601,6 +601,8 @@ class ApiClient {
       /** Set when status is "pending_data": what is missing, read-only. */
       missing_fields?: string[];
       missing_data?: unknown;
+      /** Whether the CSP was actually asked for the missing details, and if not, why. */
+      csp_asked?: { sent: boolean; via: string; reason: string };
     }>("/workflows/process", {
       method: "POST",
       body: JSON.stringify(data),

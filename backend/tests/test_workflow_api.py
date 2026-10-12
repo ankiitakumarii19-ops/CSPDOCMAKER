@@ -112,6 +112,50 @@ async def test_missing_data_keeps_the_request_pending(client, db):
     assert job.requested_documents == ["csp_certificate"]
 
 
+async def test_a_pending_request_says_truthfully_whether_the_csp_was_asked(client, db):
+    """12 Oct 2026: the CSP is asked straight away, and the RM is told what
+    really happened — never "will be asked" when nothing went out."""
+    rm = await _user(db, "rm1@eko.co.in")
+    db.add(CSPRecord(csp_id="TESTCSP003", name="No Code Csp", email="x@example.com",
+                     district="Testdistrict", state="Teststate"))
+    await db.commit()
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "TESTCSP003", "document_types": ["csp_certificate"]},
+    )
+    body = r.json()
+    assert body["status"] == "pending_data"
+    asked = body["csp_asked"]
+    assert asked["sent"] is False and asked["reason"], asked
+    assert "has been asked" not in body["message"]
+    assert asked["reason"] in body["message"]
+
+
+async def test_a_pending_request_reports_a_successful_ask(client, db, monkeypatch):
+    from app.services import message_sender
+    calls = []
+
+    def fake_ask(session, record, **kwargs):
+        calls.append(record.csp_id)
+        return {"csp_id": record.csp_id, "sent": True, "via": "whatsapp",
+                "to": "91**", "reason": ""}
+    monkeypatch.setattr(message_sender, "ask_for_details", fake_ask)
+    rm = await _user(db, "rm1@eko.co.in")
+    db.add(CSPRecord(csp_id="TESTCSP004", name="No Code Csp", email="x@example.com",
+                     district="Testdistrict", state="Teststate"))
+    await db.commit()
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "TESTCSP004", "document_types": ["csp_certificate"]},
+    )
+    body = r.json()
+    assert calls == ["TESTCSP004"], "the CSP is asked once, right away"
+    assert body["csp_asked"] == {"sent": True, "via": "whatsapp", "reason": ""}
+    assert "has been asked for them on WhatsApp" in body["message"]
+    job = (await db.execute(select(ProcessingJob))).scalar_one()
+    assert job.current_state == JobState.PENDING_DATA, "still pending until the data is in"
+
+
 async def test_confirm_sends_only_this_jobs_documents_and_persists_email(client, db, csp):
     rm = await _user(db, "rm1@eko.co.in")
     h = _auth(rm)

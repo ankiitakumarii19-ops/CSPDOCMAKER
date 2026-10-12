@@ -83,9 +83,15 @@ def link_is_reachable(link: str) -> bool:
 
 
 def why_unreachable(link: str) -> str:
+    # Names the address only: the full link carries the CSP's private token,
+    # and this reason is shown on screens and stored as the channel's error.
+    from urllib.parse import urlparse
+
+    parts = urlparse(link)
     return (
-        f"The link would be {link} — nobody outside this machine can open "
-        f"that. Set PUBLIC_APP_URL to a real address before messaging "
+        f"the app is at {parts.scheme}://{parts.netloc}, which nobody "
+        f"outside this machine can open, so the CSP could not use the form "
+        f"link. Set PUBLIC_APP_URL to a real address before messaging "
         f"anyone."
     )
 

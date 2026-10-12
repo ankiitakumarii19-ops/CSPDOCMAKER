@@ -11,6 +11,7 @@ Every step is persisted — ProcessingJob, DocumentJob, ValidationResult and
 EmailJob rows are what the admin dashboard reports on.
 """
 
+import asyncio
 import shutil
 import tempfile
 import uuid
@@ -47,6 +48,7 @@ from app.services import document_storage_service
 from app.services import document_validation_service
 from app.services import email_service
 from app.services import pdf_service
+from app.workspace_context import current_workspace_id
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,46 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
 # Admins monitor only — generating and sending is an RM action.
 require_rm = require_role("rm")
+
+
+def _ask_csp_now(csp_id: str, workspace_id) -> dict:
+    """Send this CSP the request for their missing details (WhatsApp).
+
+    Runs in a worker thread with its own synchronous session, scoped to
+    the request's workspace like every other query.
+    Returns {"sent": bool, "via": str, "reason": str}. Never raises: the
+    request is already safely pending, whatever happens here.
+    """
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.config import get_settings
+    from app.services import message_sender as sender
+    from app.workspace_context import workspace
+
+    engine = create_engine(get_settings().database_url.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://"))
+    try:
+        with workspace(workspace_id), Session(engine) as sync:
+            record = sync.execute(
+                select(CSPRecord).where(CSPRecord.csp_id == csp_id)
+            ).scalars().first()
+            if record is None:
+                return {"sent": False, "via": "", "reason": "CSP not found"}
+            outcome = sender.ask_for_details(sync, record)
+    except (sender.NoChannel, sender.NoTemplate) as e:
+        logger.warning("workflow: CSP %s not asked: %s", csp_id, e)
+        return {"sent": False, "via": "", "reason": str(e)}
+    except Exception as e:
+        # Logged with the traceback and shown to the RM as a reason — the
+        # pending request itself is unaffected.
+        logger.exception("workflow: asking CSP %s for details failed", csp_id)
+        return {"sent": False, "via": "",
+                "reason": f"sending failed ({type(e).__name__})"}
+    finally:
+        engine.dispose()
+    return {"sent": bool(outcome.get("sent")), "via": outcome.get("via", ""),
+            "reason": outcome.get("reason", "")}
 
 
 async def _get_requesting_user(session: AsyncSession, token_user: dict) -> User:
@@ -146,7 +188,6 @@ async def process_workflow(
 
     # The agent's AI studio portrait, if it can be made now (No. 70). Run
     # off the request loop: it can take a few seconds.
-    import asyncio
     from app.services import photo_portrait
     await asyncio.to_thread(photo_portrait.prepare_for, csp)
 
@@ -169,15 +210,24 @@ async def process_workflow(
             f"{missing_check.total_missing_fields} detail(s) missing — "
             f"waiting for the CSP.")
         await session.commit()
+        # Ask the CSP now rather than on the next scheduled run, and tell the
+        # RM what actually happened — never "will be asked" when it was not.
+        asked = await asyncio.to_thread(_ask_csp_now, csp_id,
+                                        current_workspace_id())
         return {
             "job_id": job_id,
             "csp_id": csp_id,
             "csp_name": csp.name,
             "status": "pending_data",
             "message": (
-                "Some details are missing. The CSP will be asked for them on "
-                "WhatsApp. The documents will be made and sent automatically "
-                "once the details are in the sheet."),
+                "Some details are missing, so this request is pending. "
+                + ("The CSP has been asked for them on WhatsApp. "
+                   if asked["sent"] else
+                   f"The CSP could not be asked on WhatsApp yet: "
+                   f"{asked['reason']} ")
+                + "The documents will be made and sent automatically once "
+                  "the details are in the sheet."),
+            "csp_asked": asked,
             "missing_fields": sorted({
                 f.field_label for d in missing_check.documents
                 for f in d.missing_fields}),

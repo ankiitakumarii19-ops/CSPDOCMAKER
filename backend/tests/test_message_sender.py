@@ -302,6 +302,7 @@ async def test_a_localhost_link_is_refused_rather_than_emailed(db, sent,
     result = sender.ask_for_details(db, _csp(db))
     assert result["sent"] is False
     assert "nobody outside this machine" in result["reason"]
+    assert "/csp/details/" not in result["reason"], "the private link leaked"
     assert sent == [], "a dead link was emailed to somebody"
 
 

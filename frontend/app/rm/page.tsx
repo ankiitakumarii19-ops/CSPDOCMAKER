@@ -90,6 +90,16 @@ export default function RMDashboard() {
   const [busy, setBusy] = useState(false);
 
   const [missing, setMissing] = useState<MissingData | null>(null);
+  // What really happened when the CSP was asked for the missing details.
+  const [cspAsked, setCspAsked] = useState<{ sent: boolean; via: string; reason: string } | null>(null);
+  // Seconds spent on "Preparing Documents" — the PDFs take ~30 s to make.
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (rmStep !== "generating") return;
+    const timer = setInterval(() => setElapsed((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, [rmStep]);
 
   const [rmAlerts, setRmAlerts] = useState<AlertItem[]>([]);
 
@@ -208,6 +218,8 @@ export default function RMDashboard() {
     if (!target || selectedDocs.length === 0) return;
     setBusy(true);
     setProcessingError("");
+    setCspAsked(null);
+    setElapsed(0);
     setRmStep("generating");
     try {
       const res = await api.processWorkflow({
@@ -220,6 +232,7 @@ export default function RMDashboard() {
         // The RM fills nothing (tracker No. 53): the CSP is asked, and the
         // documents are made and sent automatically once the data is in.
         setMissing(res.missing_data as MissingData);
+        setCspAsked(res.csp_asked ?? null);
         setRmStep("missing_data");
         return;
       }
@@ -618,16 +631,37 @@ export default function RMDashboard() {
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
                 Preparing Documents...
               </h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                This usually takes about 30 seconds.{elapsed > 0 && ` (${elapsed}s)`}
+              </p>
               <div className="w-64 space-y-3 mt-4 text-sm text-gray-600 dark:text-gray-300">
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-check text-green-500"></i> Checking CSP data
-                </div>
-                <div className="flex items-center gap-2">
-                  <i className="fas fa-circle-notch fa-spin"></i> Verifying required fields
-                </div>
-                <div className="flex items-center gap-2 opacity-50">
-                  <i className="fas fa-circle-notch fa-spin"></i> Analyzing templates
-                </div>
+                {[
+                  { label: "Checking CSP data", from: 0 },
+                  { label: "Making the documents", from: 2 },
+                  { label: "Checking them against the data", from: 5 },
+                  { label: "Converting to PDF", from: 8 },
+                ].map((stage, i, all) => {
+                  const next = all[i + 1]?.from ?? Infinity;
+                  const done = elapsed >= next;
+                  const active = elapsed >= stage.from && !done;
+                  return (
+                    <div
+                      key={stage.label}
+                      className={`flex items-center gap-2 ${!done && !active ? "opacity-50" : ""}`}
+                    >
+                      <i
+                        className={
+                          done
+                            ? "fas fa-check text-green-500"
+                            : active
+                            ? "fas fa-circle-notch fa-spin"
+                            : "far fa-circle"
+                        }
+                      ></i>{" "}
+                      {stage.label}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -644,10 +678,29 @@ export default function RMDashboard() {
                     Details Missing
                   </h2>
                   <p className="text-gray-600 dark:text-gray-300 mt-2 text-sm">
-                    The CSP will be asked for these on WhatsApp. The documents
-                    will be made and sent to them automatically once the
-                    details are in the sheet. Nothing else is needed from you.
+                    These details are not in the sheet yet, so this request is
+                    pending. The documents will be made and sent to the CSP
+                    automatically once the details are in. Nothing else is
+                    needed from you.
                   </p>
+                  {cspAsked && (
+                    <div
+                      className={`mt-4 w-full text-left text-sm rounded-lg px-4 py-3 border ${
+                        cspAsked.sent
+                          ? "bg-green-50 border-green-200 text-green-800 dark:bg-green-900/30 dark:border-green-800 dark:text-green-300"
+                          : "bg-white border-orange-200 text-orange-800 dark:bg-gray-800 dark:border-orange-800 dark:text-orange-300"
+                      }`}
+                    >
+                      <i className={`fab fa-whatsapp mr-2 ${cspAsked.sent ? "text-green-600" : ""}`}></i>
+                      {cspAsked.sent ? (
+                        <>The CSP has been asked for these on {cspAsked.via === "email" ? "email" : "WhatsApp"}.</>
+                      ) : (
+                        <>
+                          <strong>Not sent to the CSP yet:</strong> {cspAsked.reason || "unknown reason"}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Alert Context: CSP Details */}
