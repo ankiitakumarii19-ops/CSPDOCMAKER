@@ -167,7 +167,9 @@ async def agent_runs(
 @router.post("/{key}/run")
 async def run_agent(
     key: str,
-    user=Depends(require_role("admin", "super_admin")),
+    # Acting on agents is the Super Admin's (decided 12 Oct 2026, No. 88);
+    # Admins can watch them.
+    user=Depends(require_role("super_admin")),
 ):
     """Run an agent now rather than waiting for its schedule."""
     if not agent_registry.exists(key):
@@ -205,7 +207,9 @@ async def toggle_agent(
     key: str,
     body: AgentToggle,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("admin", "super_admin")),
+    # Acting on agents is the Super Admin's (decided 12 Oct 2026, No. 88);
+    # Admins can watch them.
+    user=Depends(require_role("super_admin")),
 ):
     """Switch an agent on or off for this workspace."""
     if not agent_registry.exists(key):
@@ -235,7 +239,9 @@ async def accept_finding(
     finding_id: str,
     body: Decision,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("admin", "super_admin")),
+    # Acting on agents is the Super Admin's (decided 12 Oct 2026, No. 88);
+    # Admins can watch them.
+    user=Depends(require_role("super_admin")),
 ):
     """Agree to what an agent proposed.
 
@@ -272,7 +278,9 @@ async def reject_finding(
     finding_id: str,
     body: Decision,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("admin", "super_admin")),
+    # Acting on agents is the Super Admin's (decided 12 Oct 2026, No. 88);
+    # Admins can watch them.
+    user=Depends(require_role("super_admin")),
 ):
     """Decline what an agent proposed, so it stops being asked."""
     finding = await _finding(session, finding_id)

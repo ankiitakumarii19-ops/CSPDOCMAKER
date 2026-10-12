@@ -47,11 +47,6 @@ SHAPING = [
     ("PATCH", "/api/admin/dashboards/not-real"),
     ("DELETE", "/api/admin/dashboards/not-real"),
     ("GET", "/api/admin/dashboards/metrics"),
-    # Running the agents is part of running the operation.
-    ("PATCH", "/api/admin/agents/data"),
-    ("POST", "/api/admin/agents/setup/run"),
-    ("POST", "/api/admin/agents/findings/not-a-uuid/accept"),
-    ("POST", "/api/admin/agents/findings/not-a-uuid/reject"),
 ]
 
 # Controlling the platform. The Workspace Owner alone.
@@ -60,6 +55,12 @@ OWNER_ONLY = [
     ("POST", "/api/admin/access/grant"),
     ("POST", "/api/admin/access/revoke"),
     ("POST", "/api/admin/access/sync"),
+    # Acting on the agents (decided 12 Oct 2026, No. 88): an approval can
+    # message many CSPs, so it is the Owner's; Admins can watch them.
+    ("PATCH", "/api/admin/agents/data"),
+    ("POST", "/api/admin/agents/setup/run"),
+    ("POST", "/api/admin/agents/findings/not-a-uuid/accept"),
+    ("POST", "/api/admin/agents/findings/not-a-uuid/reject"),
 ]
 
 # Looking at what already happened.

@@ -369,6 +369,62 @@ class ApiClient {
     }
   }
 
+  /** fetch, but a network failure becomes an ApiError the screens can show
+   *  instead of a bare "Failed to fetch". */
+  private async send(url: string, init: RequestInit): Promise<Response> {
+    try {
+      return await fetch(url, init);
+    } catch {
+      throw {
+        detail: "Cannot reach the server. Check your connection and try again.",
+        status: 0,
+      } as ApiError;
+    }
+  }
+
+  /** Turn any failed response into the ApiError the screens display. */
+  private async failure(
+    response: Response,
+    path: string,
+    fallback: string
+  ): Promise<ApiError> {
+    let detail = fallback;
+    let data: unknown;
+    let readable = false;
+    try {
+      const err = await response.json();
+      readable = true;
+      if (typeof err.detail === "string") {
+        detail = err.detail;
+      } else if (err.detail && typeof err.detail === "object") {
+        data = err.detail;
+        if (typeof err.detail.message === "string") detail = err.detail.message;
+      }
+    } catch {
+      // Not JSON: a proxy or gateway page rather than the app's own answer.
+    }
+    if (!readable && response.status >= 500) {
+      detail = "The server is not responding right now. Please try again in a minute.";
+    }
+    // The Error ID support needs (the server sends it on every response).
+    const errorId = response.headers.get("X-Request-ID");
+    if (response.status >= 500 && errorId && !detail.includes(errorId)) {
+      detail += ` (Error ID: ${errorId})`;
+    }
+    // A login lasts a limited time. When the server no longer accepts it,
+    // start again at sign-in rather than leaving every screen failing.
+    if (response.status === 401 && !path.startsWith("/auth/") && this.getToken()) {
+      this.clearToken();
+      if (typeof window !== "undefined") {
+        // A full page load on purpose: it drops every screen's in-memory
+        // state from the expired session (there is no router in this file).
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign("/auth/login?expired=1");
+      }
+    }
+    return { detail, status: response.status, data };
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {}
@@ -383,27 +439,13 @@ class ApiClient {
       headers["Authorization"] = `Bearer ${token}`;
     }
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await this.send(`${API_BASE}${path}`, {
       ...options,
       headers,
     });
 
     if (!response.ok) {
-      let detail = "An unexpected error occurred";
-      let data: unknown;
-      try {
-        const err = await response.json();
-        if (typeof err.detail === "string") {
-          detail = err.detail;
-        } else if (err.detail && typeof err.detail === "object") {
-          data = err.detail;
-          if (typeof err.detail.message === "string") detail = err.detail.message;
-        }
-      } catch {
-        // ignore parse errors
-      }
-      const error: ApiError = { detail, status: response.status, data };
-      throw error;
+      throw await this.failure(response, path, "An unexpected error occurred");
     }
 
     return response.json() as Promise<T>;
@@ -536,23 +578,14 @@ class ApiClient {
     const body = new FormData();
     body.append("file", file);
     const token = this.getToken();
-    const response = await fetch(
-      `/api/documents/upload-photo/${encodeURIComponent(cspId)}`,
-      {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body,
-      }
-    );
+    const path = `/documents/upload-photo/${encodeURIComponent(cspId)}`;
+    const response = await this.send(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
     if (!response.ok) {
-      let detail = "Photo upload failed";
-      try {
-        const err = await response.json();
-        if (typeof err.detail === "string") detail = err.detail;
-      } catch {
-        // keep the default message
-      }
-      throw { detail, status: response.status } as ApiError;
+      throw await this.failure(response, path, "Photo upload failed");
     }
     return response.json();
   }
@@ -740,20 +773,13 @@ class ApiClient {
     const headers: Record<string, string> = {};
     if (token) headers["Authorization"] = `Bearer ${token}`;
 
-    const response = await fetch(`${API_BASE}${path}`, {
+    const response = await this.send(`${API_BASE}${path}`, {
       method: "POST",
       headers,
       body: form,
     });
     if (!response.ok) {
-      let detail = "Upload failed";
-      try {
-        const err = await response.json();
-        if (typeof err.detail === "string") detail = err.detail;
-      } catch {
-        // ignore parse errors
-      }
-      throw { detail, status: response.status } as ApiError;
+      throw await this.failure(response, path, "Upload failed");
     }
     return response.json() as Promise<T>;
   }

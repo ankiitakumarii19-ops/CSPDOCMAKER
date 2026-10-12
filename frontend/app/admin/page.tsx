@@ -68,12 +68,13 @@ export default function AdminDashboard() {
   const user = useSessionUser();
 
   const [adminRoute, setAdminRoute] = useState("overview");
-  // Only a Workspace Owner configures anything. An Admin never sees the
-  // Setup section, so the difference between the roles needs no explaining.
-  // Two different things, deliberately separated.
+  // What each role may do, deliberately separated. The server enforces the
+  // same split; hiding a button here is for clarity, not security.
   //
-  // canConfigure — shaping the work: dashboards and document templates.
-  //                Both Admins and Workspace Owners do this.
+  // canConfigure — shaping the work: dashboards, document templates and
+  //                messaging. Both Admins and Workspace Owners do this
+  //                (confirmed 12 Oct 2026, No. 88). Acting on agents is the
+  //                Owner's alone (Agents canAct).
   // isOwner      — controlling who may sign in. The Owner alone, because
   //                an Admin who could grant access could grant themselves
   //                anything.
@@ -397,7 +398,7 @@ export default function AdminDashboard() {
             )}
 
             {canConfigure && adminRoute === "agents" && (
-              <Agents canSeeHistory={isOwner} />
+              <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}

@@ -19,7 +19,12 @@ import type { AgentInfo, AgentFinding, AgentRun, ApiError } from "../lib/api";
 
 export default function Agents({
   canSeeHistory = false,
+  canAct = false,
 }: {
+  /** Running, switching and approving agents is the Super Admin's
+   *  (decided 12 Oct 2026, tracker No. 88). An Admin sees everything but
+   *  the buttons; the server refuses those actions too. */
+  canAct?: boolean;
   /** The run history is the Workspace Owner's alone: it records who
    *  triggered each pass and every error raised, which is an audit of how
    *  the workspace has been operated rather than a view of the work. The
@@ -172,6 +177,7 @@ export default function Agents({
                   </p>
                 )}
                 <div className="flex items-center gap-3 mt-3">
+                  {canAct && (<>
                   <button
                     onClick={() => decide(f.id, true)}
                     disabled={busy === f.id}
@@ -186,6 +192,7 @@ export default function Agents({
                   >
                     Decline
                   </button>
+                  </>)}
                   <span className="text-xs text-gray-400 ml-auto">
                     from the {f.agent} agent
                   </span>
@@ -257,6 +264,7 @@ export default function Agents({
                     {history === a.key ? "Hide history" : "History"}
                   </button>
                 )}
+                {canAct && (<>
                 <button
                   onClick={() => runNow(a.key)}
                   disabled={busy === a.key}
@@ -275,6 +283,7 @@ export default function Agents({
                 >
                   {a.enabled ? "Turn off" : "Turn on"}
                 </button>
+                </>)}
               </div>
             </div>
 

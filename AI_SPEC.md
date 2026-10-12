@@ -60,7 +60,7 @@ processing and every "agent" are deterministic code. See §3, decision D1.
 | D9 | **Zoho CRM read-only**, search both `sbi_kiosk` and `Leads`; code AND phone must match. | KYC packs live on Leads. |
 | D10 | **WhatsApp through Eko's internal WhatsApp Bulk Sender** (hosted MCP connection, Meta Cloud API underneath). No key stored in this app. Nothing is sent while `PUBLIC_APP_URL` is localhost. | Eko's own platform handles Meta approval (12 Oct 2026). |
 | D11 | **Workspaces**: Super Admins create workspaces; membership per workspace re-checked on every request. Sheet-reading jobs run only for the Eko workspace. | Decided 11 Oct 2026. |
-| D12 | **Roles**: Super Admin (configures, adds people), Admin (watches only), RM (searches, chooses documents). | Confirmed. |
+| D12 | **Roles**: Super Admin — everything, incl. access, sheets and acting on agents (run, on/off, approve). Admin — watches everything; may also build dashboards, edit document templates and send messages to CSPs; may not act on agents (updated 12 Oct 2026, No. 88). RM — searches, chooses documents. Enforced on the server; screens hide what a role cannot do. | Confirmed by the user 12 Oct 2026. |
 | D13 | **Secrets only in environment variables** (`backend/.env`, never committed; `.env.example` lists names only). | Security. |
 | D14 | **Server = Docker Compose on one Linux machine, Caddy in front** (`docker-compose.prod.yml`, `DEPLOY.md`). Caddy gets HTTPS itself and sends `/api/*` to the backend, the rest to the website. LibreOffice uses Carlito/Caladea in place of Calibri/Cambria (same letter widths). Server settings in `deploy/.env.production` (git-ignored). | One command to start or update; HTTPS without manual certificates; documents lay out as on Windows (verified 12 Oct 2026). |
 
@@ -128,3 +128,4 @@ this (or does it, with the user's OK).
 | 12 Oct 2026 | §4 rewritten: telemetry layer implemented (No. 79) |
 | 12 Oct 2026 | D14 added: server deployment (No. 86) |
 | 12 Oct 2026 | D5 changed: PDF only is stored (No. 87) |
+| 12 Oct 2026 | D12 updated: Admin rights (No. 88) |

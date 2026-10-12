@@ -75,6 +75,12 @@ export default function AuthPage() {
       })
       .catch(() => {
         /* Leave it open; the server is the authority either way. */
+      })
+      .finally(() => {
+        // Sent here because the login ran out (api.ts): say so.
+        if (!cancelled && new URLSearchParams(window.location.search).has("expired")) {
+          setError("Your session has expired. Please sign in again.");
+        }
       });
     return () => {
       cancelled = true;
