@@ -12,11 +12,11 @@
 #     (deploy/Caddyfile.behind-proxy, DEPLOY.md).
 # The database and Redis are never exposed.
 
+# One image for api, worker and beat. Only "api" builds it: three services
+# building the same image at once collide ("image ... already exists").
 x-backend: &backend
-  build:
-    context: .
-    dockerfile: backend/Dockerfile
   image: cspdocmaker-backend
+  pull_policy: never
   restart: unless-stopped
   env_file: deploy/.env.production
   environment:
@@ -74,6 +74,9 @@ services:
 
   api:
     <<: *backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
     command: ["api"]
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health"]
@@ -85,10 +88,24 @@ services:
   worker:
     <<: *backend
     command: ["worker"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
 
   beat:
     <<: *backend
     command: ["beat"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
 
   frontend:
     build:
