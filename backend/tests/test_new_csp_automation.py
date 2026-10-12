@@ -188,10 +188,10 @@ def test_a_complete_csp_is_documented_stored_and_sent(db, monkeypatch, sent, tmp
     assert result["documents_sent"] == 1, result
     assert result["rm_alerted"] == 0
 
-    # Both formats stored for all four documents.
+    # Only the PDF is stored, for all four documents (No. 87).
     rows = db.execute(select(StoredDocument)).scalars().all()
-    assert len(rows) == 8
-    assert {r.file_format.value for r in rows} == {"docx", "pdf"}
+    assert len(rows) == 4
+    assert {r.file_format.value for r in rows} == {"pdf"}
 
     # Emailed the PDFs.
     assert len(sent) == 1

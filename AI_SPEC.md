@@ -53,7 +53,7 @@ processing and every "agent" are deterministic code. See §3, decision D1.
 | D2 | **FastAPI + SQLAlchemy (async) + PostgreSQL; Celery + Redis** for scheduled work. Next.js 16 / React 19 front end. | Already in place and proven; Postgres holds the documents themselves. |
 | D3 | **Google Sheet is the source of truth** for CSP data; synced every minute, field-level diff. Tabs `KOData`, `SUBKOData`, `INFO`; Authorization sheet tabs `RMs`, `Admins`, `SuperAdmins`. | The business works in the sheet. |
 | D4 | **Documents from the supplied Word templates** (python-docx), **PDF via LibreOffice headless** on Windows and Linux. | One renderer everywhere. LibreOffice reserves 3.19 mm inside a cell; the photo is pulled left to compensate (`_LIBREOFFICE_CELL_OFFSET_TWIPS`). |
-| D5 | **DOCX and PDF stored permanently in Postgres**, versioned, SHA-256 checksummed. | No document is ever lost or overwritten. |
+| D5 | **The PDF is stored permanently in Postgres**, versioned, SHA-256 checksummed. The DOCX is only a working file (template → DOCX → LibreOffice → PDF) and is deleted once its PDF is stored (changed 12 Oct 2026, No. 87; it used to be kept too). Photos are files in `generated_documents/photos`; the record holds their path. | No document a CSP received is ever lost or overwritten; the PDF is what they receive. |
 | D6 | **Certificate date = the day the document is made**, always. | Decided 11 Oct 2026. |
 | D7 | **The RM fills nothing.** Missing details keep a request PENDING_DATA and are asked of the CSP; INFO fills organisation fields. | Decided 11 Oct 2026. |
 | D8 | **Photos: deterministic, local, real face.** Find face (OpenCV YuNet) → level → cut out (rembg `u2net_human_seg`) → white → passport framing → light touch-up. 35 × 45 mm. AI portrait code (Cloudflare/Gemini) exists but is **off**. | User chose free + real over generative (12 Oct 2026). |
@@ -127,3 +127,4 @@ this (or does it, with the user's OK).
 | 12 Oct 2026 | Initial version |
 | 12 Oct 2026 | §4 rewritten: telemetry layer implemented (No. 79) |
 | 12 Oct 2026 | D14 added: server deployment (No. 86) |
+| 12 Oct 2026 | D5 changed: PDF only is stored (No. 87) |

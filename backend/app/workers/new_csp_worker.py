@@ -237,8 +237,8 @@ def _process_one(session, csp, document_types, job=None) -> None:
     for doc_type, docx_path in generated:
         version = document_storage_service.next_version(
             session, csp.csp_id, doc_type)
-        session.add_all(document_storage_service.build_pair(
-            csp.csp_id, doc_type, docx_path, converted[docx_path], version,
+        session.add(document_storage_service.build_pdf_row(
+            csp.csp_id, doc_type, converted[docx_path], version,
             processing_job_id=job.id))
         session.flush()
 
@@ -247,6 +247,9 @@ def _process_one(session, csp, document_types, job=None) -> None:
         csp.new_csp_processed_at = datetime.now(timezone.utc)
     alert_service.resolve_alerts(session, csp.csp_id)
     session.commit()
+    # Only the PDF is kept (No. 87); the working DOCX is no longer needed.
+    document_storage_service.discard_working_files(
+        [path for _, path in generated])
 
     pdf_paths = [converted[path] for _, path in generated]
     names = [DOCUMENT_LABELS.get(dt, dt.value) for dt, _ in generated]

@@ -42,7 +42,7 @@ DEFAULT_OUT = os.path.join(
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--csp", help="only this CSP ID")
-    parser.add_argument("--format", choices=["pdf", "docx"],
+    parser.add_argument("--format", choices=["pdf"],
                         help="only this file format")
     parser.add_argument("--all-versions", action="store_true",
                         help="export every version, not just the newest")

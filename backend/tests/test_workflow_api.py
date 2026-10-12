@@ -234,8 +234,9 @@ async def test_admin_endpoints_return_real_counts(client, db, csp):
 
 # ---- PDF conversion, permanent storage, and what the CSP receives --------
 
-async def test_process_stores_both_docx_and_pdf_in_postgres(client, db, csp):
-    """Confirmed rule: both formats are kept permanently, in the database."""
+async def test_process_stores_only_the_pdf_in_postgres(client, db, csp, tmp_path):
+    """Rule since 12 Oct 2026 (No. 87): only the PDF is kept, in the
+    database; the working DOCX is discarded."""
     from app.models.stored_document import StoredDocument
     from app.models.enums import DocumentFormat, DocumentType
 
@@ -263,11 +264,11 @@ async def test_process_stores_both_docx_and_pdf_in_postgres(client, db, csp):
     rows = (await db.execute(select(StoredDocument))).scalars().all()
     stored = {(row.document_type, row.file_format) for row in rows}
     assert stored == {
-        (DocumentType.CSP_CERTIFICATE, DocumentFormat.DOCX),
         (DocumentType.CSP_CERTIFICATE, DocumentFormat.PDF),
-        (DocumentType.BCP, DocumentFormat.DOCX),
         (DocumentType.BCP, DocumentFormat.PDF),
-    }
+    }, "only the PDF is kept (No. 87)"
+    leftover = [p.name for p in tmp_path.rglob("*.docx")]
+    assert leftover == [], f"working DOCX files left on disk: {leftover}"
     # The bytes are really there, not just a row.
     for row in rows:
         assert row.file_size > 0

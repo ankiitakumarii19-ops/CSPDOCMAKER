@@ -1,8 +1,10 @@
 """
 CSP DocMaker — Permanent Document Storage
 
-Stores generated documents in PostgreSQL. Both formats are kept: the DOCX that
-generation produced and the PDF that was emailed to the CSP.
+Stores generated documents in PostgreSQL — the PDF only, which is what the
+CSP receives (decided 12 Oct 2026, tracker No. 87). The DOCX is a working
+file: the template is filled as a DOCX and LibreOffice turns it into the PDF,
+after which the DOCX is discarded (discard_working_files).
 
 Storing a document never overwrites an earlier one. Each store allocates the
 next version for that CSP and document type, so the exact file a CSP received
@@ -97,25 +99,38 @@ def build_row(
     )
 
 
-def build_pair(
+def build_pdf_row(
     csp_id: str,
     doc_type: DocumentType,
-    docx_path: str,
     pdf_path: str,
     version: int,
     processing_job_id=None,
-) -> Tuple[StoredDocument, StoredDocument]:
-    """Build the DOCX row and its PDF row, sharing one version number."""
-    docx_row = build_row(csp_id, doc_type, DocumentFormat.DOCX,
-                         docx_path, version, processing_job_id)
+) -> StoredDocument:
+    """Build the stored row for one generated document's PDF."""
     pdf_row = build_row(csp_id, doc_type, DocumentFormat.PDF,
                         pdf_path, version, processing_job_id)
     logger.info(
-        "document_storage_service: prepared %s %s v%d "
-        "(docx %d bytes, pdf %d bytes)",
-        csp_id, registry.code_of(doc_type), version, docx_row.file_size, pdf_row.file_size,
+        "document_storage_service: prepared %s %s v%d (pdf %d bytes)",
+        csp_id, registry.code_of(doc_type), version, pdf_row.file_size,
     )
-    return docx_row, pdf_row
+    return pdf_row
+
+
+def discard_working_files(paths: Sequence[str]) -> None:
+    """Delete the working DOCX files once their PDFs are stored.
+
+    A file that is already gone is fine; one that cannot be deleted is
+    logged (it is only disk clutter, never a reason to fail a delivery).
+    """
+    for path in dict.fromkeys(paths):
+        try:
+            os.remove(path)
+        except FileNotFoundError:
+            continue
+        except OSError as e:
+            logger.warning(
+                "document_storage_service: could not delete working file %s: %s",
+                path, e)
 
 
 def store_generated_documents(
@@ -124,19 +139,19 @@ def store_generated_documents(
     pairs: Sequence[Tuple[DocumentType, str, str]],
     processing_job_id=None,
 ) -> List[StoredDocument]:
-    """Store every (doc_type, docx_path, pdf_path) produced by one run.
+    """Store the PDF of every (doc_type, docx_path, pdf_path) one run produced.
 
     Commits once, so a run either stores all of its documents or none of them.
     """
     stored: List[StoredDocument] = []
     try:
-        for doc_type, docx_path, pdf_path in pairs:
+        for doc_type, _docx_path, pdf_path in pairs:
             version = next_version(session, csp_id, doc_type)
-            rows = build_pair(csp_id, doc_type, docx_path, pdf_path,
-                              version, processing_job_id)
-            session.add_all(rows)
+            row = build_pdf_row(csp_id, doc_type, pdf_path,
+                                version, processing_job_id)
+            session.add(row)
             session.flush()  # so the next version query sees this one
-            stored.extend(rows)
+            stored.append(row)
         session.commit()
     except Exception:
         session.rollback()
@@ -161,13 +176,13 @@ async def store_generated_documents_async(
     storage lands or rolls back with the rest of the job.
     """
     stored: List[StoredDocument] = []
-    for doc_type, docx_path, pdf_path in pairs:
+    for doc_type, _docx_path, pdf_path in pairs:
         version = await next_version_async(session, csp_id, doc_type)
-        rows = build_pair(csp_id, doc_type, docx_path, pdf_path,
-                          version, processing_job_id)
-        session.add_all(rows)
+        row = build_pdf_row(csp_id, doc_type, pdf_path,
+                            version, processing_job_id)
+        session.add(row)
         await session.flush()
-        stored.extend(rows)
+        stored.append(row)
     return stored
 
 

@@ -1,9 +1,11 @@
 """Permanent document storage in PostgreSQL.
 
-Confirmed rule: both the generated DOCX and the emailed PDF are kept, for
-good. Regenerating a document adds a version rather than replacing one, so the
+Rule since 12 Oct 2026 (tracker No. 87): only the PDF — what the CSP
+receives — is kept, for good; the DOCX is a working file and is discarded. Regenerating a document adds a version rather than replacing one, so the
 exact file a CSP was sent stays retrievable.
 """
+
+import os
 
 import pytest
 from sqlalchemy import create_engine, select
@@ -50,14 +52,20 @@ def files(tmp_path):
     return str(docx), str(pdf)
 
 
-def test_both_formats_are_stored(store_db, files):
+def test_only_the_pdf_is_stored(store_db, files):
     docx, pdf = files
     storage.store_generated_documents(
         store_db, CSP_ID, [(DocumentType.BCP, docx, pdf)])
 
     rows = store_db.execute(select(StoredDocument)).scalars().all()
-    assert {r.file_format for r in rows} == {DocumentFormat.DOCX, DocumentFormat.PDF}
-    assert len(rows) == 2
+    assert [r.file_format for r in rows] == [DocumentFormat.PDF]
+
+
+def test_the_working_docx_is_discarded(files):
+    docx, pdf = files
+    storage.discard_working_files([docx, docx, "/no/such/file.docx"])
+    assert not os.path.exists(docx), "the working DOCX should be gone"
+    assert os.path.exists(pdf), "the PDF is never touched"
 
 
 def test_the_bytes_survive_the_round_trip(store_db, files):
@@ -114,14 +122,6 @@ def test_regenerating_adds_a_version_and_keeps_the_old_one(store_db, files, tmp_
     assert first.file_data == PDF_BYTES
 
 
-def test_the_docx_and_its_pdf_share_a_version(store_db, files):
-    docx, pdf = files
-    storage.store_generated_documents(
-        store_db, CSP_ID, [(DocumentType.BCP, docx, pdf)])
-    rows = store_db.execute(select(StoredDocument)).scalars().all()
-    assert len({r.version for r in rows}) == 1
-
-
 def test_each_document_type_versions_independently(store_db, files):
     docx, pdf = files
     storage.store_generated_documents(store_db, CSP_ID, [
@@ -151,8 +151,8 @@ def test_a_failed_store_saves_nothing(store_db, files):
 def test_an_empty_file_is_refused(store_db, tmp_path):
     docx = tmp_path / "empty.docx"
     pdf = tmp_path / "empty.pdf"
-    docx.write_bytes(b"")
-    pdf.write_bytes(PDF_BYTES)
+    docx.write_bytes(DOCX_BYTES)
+    pdf.write_bytes(b"")
     with pytest.raises(storage.DocumentStorageError, match="empty"):
         storage.store_generated_documents(
             store_db, CSP_ID, [(DocumentType.BCP, str(docx), str(pdf))])

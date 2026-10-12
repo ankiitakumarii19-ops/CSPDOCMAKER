@@ -293,7 +293,7 @@ async def process_workflow(
             "ready_to_send": False,
         }
 
-    # 5. Convert to PDF and store both formats permanently.
+    # 5. Convert to PDF and store the PDF permanently (No. 87: PDF only).
     # Only validated documents get here, so nothing unchecked is ever stored
     # or sent. A conversion failure stops the workflow: the CSP is sent PDFs,
     # so a missing PDF means there is nothing to send.
@@ -334,6 +334,9 @@ async def process_workflow(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"message": job.error_message, "job_id": job_id},
         )
+    # Only the PDF is kept (No. 87); the working DOCX is no longer needed.
+    document_storage_service.discard_working_files(
+        [path for _, path in generated])
 
     # 6. Validate CSP email
     job.current_state = JobState.EMAIL_VALIDATING
