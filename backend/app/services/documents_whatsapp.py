@@ -45,7 +45,7 @@ BODY = (
     "Namaste {name}, aapke CSP documents ({documents}) jaari kar diye gaye "
     "hain. Ye is message ke saath attached hain aur {email} par email bhi "
     "kiye gaye hain.\n\n"
-    "— Team"
+    "— Team Eko"
 )
 
 

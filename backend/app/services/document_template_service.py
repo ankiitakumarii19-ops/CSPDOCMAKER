@@ -525,7 +525,7 @@ async def sync_builtin_messages(session) -> int:
                 "confirm karni hain. Upar diye gaye link par jaakar pehle se "
                 "bhari hui details dekhein, kuch galat ho to sudhaarein aur "
                 "submit karein. Aap sirf EK HI BAAR submit kar sakte hain.\n\n"
-                "— Team"
+                "— Team Eko"
             ),
         },
         {
@@ -538,7 +538,7 @@ async def sync_builtin_messages(session) -> int:
                 "documents can be issued: {fields}. Please open this link to "
                 "supply them.\n\n{link}\n\n"
                 "नमस्ते {name}, आपके दस्तावेज़ जारी करने के लिए यह जानकारी "
-                "चाहिए: {fields}।\n\n— Team"
+                "चाहिए: {fields}।\n\n— Team Eko"
             ),
         },
         {
