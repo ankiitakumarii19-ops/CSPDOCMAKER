@@ -185,7 +185,7 @@ def _process_one(session, csp, document_types, job=None) -> None:
     from app.models.enums import EmailStatus, JobState, WorkflowType
     from app.models.processing_job import ProcessingJob
     from app.services import (
-        alert_service, csp_mapping, document_service,
+        alert_service, csp_mapping, csp_photo_store, document_service,
         document_storage_service, document_validation_service,
         email_service, pdf_service,
     )
@@ -241,6 +241,8 @@ def _process_one(session, csp, document_types, job=None) -> None:
             csp.csp_id, doc_type, converted[docx_path], version,
             processing_job_id=job.id))
         session.flush()
+    # The photo (original + passport version) joins the record (No. 89).
+    csp_photo_store.capture(session, csp)
 
     job.current_state = JobState.EMAIL_SENDING
     if not finishing_request:

@@ -76,6 +76,15 @@ def _cache_path(photo_path: str) -> str:
     return f"{stem}{_TAG}.{w}x{h}.{key}.png"
 
 
+def cached_for(photo_path: str) -> Optional[str]:
+    """The passport version already made for this photo, or None. Never
+    builds one (that is make()); used to file it in the database."""
+    if not photo_path or not os.path.isfile(photo_path):
+        return None
+    done = _cache_path(photo_path)
+    return done if os.path.isfile(done) else None
+
+
 def prepare_for(csp) -> Optional[str]:
     """Edit this agent's photo now, if they have one (No. 72).
 

@@ -337,6 +337,9 @@ async def process_workflow(
     # Only the PDF is kept (No. 87); the working DOCX is no longer needed.
     document_storage_service.discard_working_files(
         [path for _, path in generated])
+    # The photo used on these documents joins the CSP's record (No. 89).
+    from app.services import csp_photo_store
+    await session.run_sync(lambda sync: csp_photo_store.capture(sync, csp))
 
     # 6. Validate CSP email
     job.current_state = JobState.EMAIL_VALIDATING

@@ -23,6 +23,7 @@ from app.models.validation_result import ValidationResult
 from app.models.audit_log import AuditLog
 from app.models.sync_run import SyncRun
 from app.models.stored_document import StoredDocument
+from app.models.csp_photo import CSPPhoto
 from app.models.rm_alert import RMAlert
 from app.models.email_document import EmailDocument
 from app.models.data_request import DataRequest
@@ -51,6 +52,7 @@ __all__ = [
     "AuditLog",
     "SyncRun",
     "StoredDocument",
+    "CSPPhoto",
     "RMAlert",
     "EmailDocument",
     "DataRequest",

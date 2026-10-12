@@ -7,6 +7,7 @@ import BrandLogo from "../components/BrandLogo";
 import DocumentTemplates from "./DocumentTemplates";
 import AccessControl from "./AccessControl";
 import Sheets from "./Sheets";
+import Database from "./Database";
 import Agents from "./Agents";
 import Messaging from "./Messaging";
 import DashboardView from "./DashboardView";
@@ -313,13 +314,26 @@ export default function AdminDashboard() {
                   <i className="fas fa-table w-5 text-center"></i> Sheets
                 </button>
               )}
+              {/* Every CSP's complete record (No. 89). Owner only. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("database")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "database"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-database w-5 text-center"></i> Database
+                </button>
+              )}
             </>
           )}
         </nav>
         <div className="px-6 py-4 text-[11px] text-gray-500 border-t border-gray-800">
           {isOwner
             ? "Workspace Owner — you also control who may sign in."
-            : "Admin — dashboards and templates. Access is the Owner's."}
+            : "Admin — dashboards, templates and messaging. Access, sheets, the database and agent actions are the Owner's."}
         </div>
       </aside>
 
@@ -404,6 +418,7 @@ export default function AdminDashboard() {
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
             {isOwner && adminRoute === "access" && <AccessControl />}
             {isOwner && adminRoute === "sheets" && <Sheets />}
+            {isOwner && adminRoute === "database" && <Database />}
 
             {adminRoute === "overview" && (
             <>

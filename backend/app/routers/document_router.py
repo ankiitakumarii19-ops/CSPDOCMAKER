@@ -178,6 +178,9 @@ async def upload_photo(
     # Update CSP record
     csp.photo_url = photo_path
     session.add(csp)
+    # Keep the photo itself with the CSP's record (No. 89).
+    from app.services import csp_photo_store
+    await session.run_sync(lambda sync: csp_photo_store.capture(sync, csp))
     await session.commit()
 
     logger.info(

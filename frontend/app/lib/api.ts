@@ -314,6 +314,40 @@ interface ApiError {
 
 /** Mirrors the backend CSPDetailResponse. Fields dropped when the schema
  *  moved to the real CSP sheet (module_name, onboarding_*, status) are gone. */
+/** The Database section (Super Admin, No. 89). */
+export interface DatabaseRow {
+  csp_id: string;
+  csp_code: string | null;
+  name: string | null;
+  level: string;
+  district: string | null;
+  state: string | null;
+  rm_name: string | null;
+  photo: string[];
+  documents: string[];
+  updated_at: string | null;
+}
+
+export interface DatabaseField {
+  key: string;
+  label: string;
+  value: string | number | boolean | null;
+}
+
+export interface DatabaseRecord {
+  csp_id: string;
+  name: string | null;
+  level: string;
+  sheet: DatabaseField[];
+  app: DatabaseField[];
+  photos: { kind: string; filename: string; size: number; updated_at: string | null }[];
+  documents: {
+    document_type: string;
+    label: string;
+    versions: { id: string; version: number; filename: string; size: number; created_at: string | null }[];
+  }[];
+}
+
 export interface CSPDetail {
   csp_id: string;
   csp_code?: string | null;
@@ -762,6 +796,34 @@ class ApiClient {
       page: number;
       page_size: number;
     }>(`/admin/audit-logs?page=${page}&page_size=${pageSize}`);
+  }
+
+  // ---- Database section (Super Admin, No. 89) ----
+
+  async databaseList(q: string, offset = 0, limit = 50) {
+    const params = new URLSearchParams({ q, offset: String(offset), limit: String(limit) });
+    return this.request<{ total: number; items: DatabaseRow[] }>(
+      `/admin/database?${params.toString()}`
+    );
+  }
+
+  async databaseRecord(cspId: string) {
+    return this.request<DatabaseRecord>(
+      `/admin/database/${encodeURIComponent(cspId)}`
+    );
+  }
+
+  /** A stored photo or PDF, fetched with the login so it can be shown. */
+  async databaseFile(cspId: string, part: string): Promise<Blob> {
+    const path = `/admin/database/${encodeURIComponent(cspId)}/${part}`;
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not open the file");
+    }
+    return response.blob();
   }
 
   // ---- Document templates (admin) ----

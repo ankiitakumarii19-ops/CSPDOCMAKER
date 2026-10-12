@@ -190,7 +190,7 @@ async def test_every_table_holding_customer_data_is_scoped():
     """
     expected = {
         "AgentFinding", "AgentRun", "AgentState", "AuditLog",
-        "AuthorizationRecord", "CSPRecord", "Dashboard", "DataRequest",
+        "AuthorizationRecord", "CSPPhoto", "CSPRecord", "Dashboard", "DataRequest",
         "DataSource", "DocumentTemplate", "EmailJob", "MessageCampaign",
         "MessageChannel", "MessageTemplate", "ProcessingJob", "RMAlert",
         "StoredDocument", "SyncRun", "User", "WorkspaceMember",
