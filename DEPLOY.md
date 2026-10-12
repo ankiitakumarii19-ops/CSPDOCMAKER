@@ -100,23 +100,24 @@ laptop**:
 
 ```powershell
 scp C:\CSPDOCMAKER\backend\credentials\google_service_account.json <user>@<server>:<your-folder>/backend/credentials/
+scp C:\CSPDOCMAKER\backend\.env <user>@<server>:<your-folder>/deploy/laptop.env
 ```
 
-Then on the server, create the settings file from the example and fill it in:
+(Add `-P <port>` after `scp` if the server's SSH port is not 22.)
+
+Then on the server, build the settings file:
 
 ```bash
 cd <your-folder>
-cp deploy/.env.production.example deploy/.env.production
-chmod 600 deploy/.env.production
 chmod 644 backend/credentials/google_service_account.json
-openssl rand -hex 32     # run three times: APP_SECRET_KEY, JWT_SECRET_KEY,
-                         # and (shorter is fine) DATABASE_PASSWORD
-nano deploy/.env.production
+sh deploy/make-env.sh <your-domain> deploy/laptop.env
 ```
 
-In the file: put your domain in `DOMAIN` and `PUBLIC_APP_URL`; paste the
-three fresh random values; fill every line marked **COPY** with the value
-from `backend/.env` on the laptop. Save with Ctrl+O, Enter, Ctrl+X.
+It copies the values marked **COPY** from the laptop's settings, makes the
+three fresh secrets marked **NEW**, sets the domain, and then deletes
+`deploy/laptop.env`. It prints only setting names, never values. If it lists
+anything as "still empty", add it with `nano deploy/.env.production`
+(save with Ctrl+O, Enter, Ctrl+X).
 
 **B6. Start everything.**
 

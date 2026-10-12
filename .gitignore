@@ -115,3 +115,6 @@ celerybeat-schedule*
 backend/app/assets/models/*.onnx
 # AI studio portraits are cached beside the photos, which are personal data
 backend/app/assets/models/rembg/
+
+# The laptop .env copied to the server for deploy/make-env.sh (deleted by it)
+deploy/laptop.env

@@ -19,3 +19,4 @@ sample_output
 reference/samples
 .runlogs
 LOGIN-FOR-TESTING.txt
+deploy/laptop.env
