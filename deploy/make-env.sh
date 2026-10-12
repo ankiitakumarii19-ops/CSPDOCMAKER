@@ -81,7 +81,9 @@ if [ -n "$BASE_PATH" ]; then
     # Another web server owns the domain: stay off its ports.
     set_value CADDYFILE "Caddyfile.behind-proxy"
     set_value HTTP_BIND "127.0.0.1:8088"
-    set_value HTTPS_BIND "127.0.0.1:8443"
+    # Unused behind a proxy (no HTTPS here) but must be a free port; 8443
+    # is often taken already (it was on indev.eko.in).
+    set_value HTTPS_BIND "127.0.0.1:18443"
 fi
 set_value APP_SECRET_KEY "$(openssl rand -hex 32)"
 set_value JWT_SECRET_KEY "$(openssl rand -hex 32)"
