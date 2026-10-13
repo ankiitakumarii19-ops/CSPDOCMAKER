@@ -44,6 +44,7 @@ MODEL_NAME = "u2net_human_seg"
 FACE_HEIGHT = 0.40        # the detected face box (brow to chin, roughly)
 FACE_CENTRE_Y = 0.43      # where the middle of that box sits
 MAX_FACE_HEIGHT = 0.62    # zoomed in no further than this
+HEADROOM = 0.08           # space above the head when zoomed to fill the width
 MAX_TILT_DEGREES = 15
 
 _TAG = ".white"
@@ -269,10 +270,29 @@ def _frame(centre, face_h, person, valid):
     if "top" in limits and "bottom" in limits:
         # Both edges are cut: the frame must fit between them.
         frame_h = min(frame_h, limits["bottom"] - limits["top"])
+
+    # Where the person runs off the photo's SIDES, a frame wider than the
+    # photo shows white strips beside the shirt (tracker No. 98: "there
+    # shouldn't be white space"). Then the frame is exactly as wide as the
+    # photo — zoomed only as much as that needs, never more ("whatever is
+    # available, just make it passport size").
+    cols = np.where(valid.any(axis=0))[0]
+    photo_left, photo_right = ((int(cols[0]), int(cols[-1]) + 1)
+                               if len(cols) else (0, width))
+    body = np.where(person.any(axis=0))[0]
+    off_sides = bool(len(body)) and (body[0] <= photo_left + band
+                                     or body[-1] >= photo_right - 1 - band)
+    if off_sides:
+        frame_h = min(frame_h, (photo_right - photo_left) * out_h / out_w)
     frame_w = frame_h * out_w / out_h
 
     left = cx - frame_w / 2
+    if off_sides:
+        left = min(max(left, photo_left), photo_right - frame_w)
     top = cy - FACE_CENTRE_Y * frame_h
+    if off_sides and len(rows) and "top" not in limits:
+        # The usual space above the head, never a cut-off head.
+        top = min(top, int(rows[0]) - HEADROOM * frame_h)
     # If zooming could not go far enough, slide rather than show a gap.
     if "bottom" in limits and top + frame_h > limits["bottom"]:
         top = limits["bottom"] - frame_h
