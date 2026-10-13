@@ -146,6 +146,7 @@ it — you said so.
 | 94 | 13 Oct | Make all the documents for KOData row 15 | **Done 13 Oct — all 4.** MANJU KUMARI (1A852458), KO. Photo from the sheet (U15). Appointment Letter + Training Certificate made first; after you added her mobile (7481837277) the **ID Card and BCP** were made too. All checked against the data (passed) and looked at; saved to Downloads\MANJU KUMARI 1A852458 - documents (not emailed/WhatsApped). **For you to check in the sheet:** the address still repeats district/state ("…DISTRICT-GARHWA,STATE,JHARKGAND,822114", Jharkhand misspelt) — it prints as written; the CSP Email Id cell is "vandana.kumar.intern@eko.co.in" (looks like a staff address, printed on the BCP); no onboarding date, so the BCP says "Operational since October 2026". Fix those cells and the documents can be remade |
 | 95 | 13 Oct | Make all the documents for the CSP in row 12 | **3 of 4 done 13 Oct.** KOData row 12 = Sriniwas Pandey (1A852472), KO. Photo from the sheet's Photo cell. **Made and checked:** ID Card, Appointment Letter, Training Certificate (Downloads\Sriniwas Pandey 1A852472 - documents; not emailed/WhatsApped). **BCP not made: ASM name, ASM email and ASM contact number are empty** (row 12 or the INFO tab for South-West Delhi). Noted: the app capitalises every word, so "NCT of Delhi" prints as "Nct Of Delhi" and "DC office" as "Dc Office" |
 | 96 | 13 Oct | Make all documents except the BCP for rows 2, 3, 4, 5, 6 | **Done 13 Oct — 15 documents.** ID Card, Appointment Letter and Training Certificate for: row 2 Mukesh Saini (1A850076), row 3 Anirudh Kumar Kushwaha (1A851620), row 4 Ramvilas (1A852340), row 5 Mukesh Kumar Singhi (1A851611), row 6 Jayprakash (1A850077). Photos from each row's Photo cell (saved in the app). All checked against the data (passed) and looked at. One folder per CSP in Downloads (not emailed/WhatsApped). Noted: capitals in abbreviations are lost ("UP" → "Up" on row 5's ID Card) |
+| 97 | 13 Oct | Make the ID Card for row 9 | **Done 13 Oct.** KOData row 9 = Rajiv Kumar (1A850395), Nangli Sakrawati (Delhi) 4848. Photo from the sheet's Photo cell (saved in the app). Checked against the data (passed) and looked at. Downloads\Rajiv Kumar 1A850395 - documents (not emailed/WhatsApped) |
 
 ---
 
@@ -291,3 +292,4 @@ it — you said so.
 | 13 Oct 2026 | No. 94: ID Card and BCP for row 15 made (all 4 done) |
 | 13 Oct 2026 | Added No. 95: row 12 documents (3 of 4; ASM details missing) |
 | 13 Oct 2026 | Added No. 96: 15 documents for rows 2–6 |
+| 13 Oct 2026 | Added No. 97: ID Card for row 9 |
