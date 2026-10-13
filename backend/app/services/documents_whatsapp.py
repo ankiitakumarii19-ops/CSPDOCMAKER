@@ -37,14 +37,20 @@ TOKEN_TYPE = "documents-link"
 
 # The wording. Kept stable on purpose: Meta approves a wording once, and the
 # platform reuses that approval as long as the text does not change.
+#
+# Changed 13 Oct 2026 (tracker No. 90): the earlier wording was approved by
+# Meta WITHOUT a document header, so a send with the PDF attached was refused
+# (#132018). This wording is registered in Eko's WhatsApp console WITH a
+# Document header (deploy/WHATSAPP-DOCUMENTS-TEMPLATE.md); it must match that
+# template exactly, character for character.
 BODY = (
-    "Namaste {name}, your CSP documents ({documents}) have been issued. They "
-    "are attached to this message and have also been emailed to {email}.\n\n"
-    "नमस्ते {name}, आपके CSP दस्तावेज़ ({documents}) जारी कर दिए गए हैं। ये इस "
-    "संदेश के साथ संलग्न हैं और {email} पर ईमेल भी किए गए हैं।\n\n"
+    "Namaste {name}, your CSP documents ({documents}) have been issued. The "
+    "PDF is attached to this message and has also been emailed to {email}.\n\n"
+    "नमस्ते {name}, आपके CSP दस्तावेज़ ({documents}) जारी कर दिए गए हैं। PDF इस "
+    "संदेश के साथ संलग्न है और {email} पर ईमेल भी किया गया है।\n\n"
     "Namaste {name}, aapke CSP documents ({documents}) jaari kar diye gaye "
-    "hain. Ye is message ke saath attached hain aur {email} par email bhi "
-    "kiye gaye hain.\n\n"
+    "hain. PDF is message ke saath attached hai aur {email} par email bhi "
+    "kiya gaya hai.\n\n"
     "— Team Eko"
 )
 
