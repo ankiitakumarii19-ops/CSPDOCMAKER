@@ -27,7 +27,9 @@ logger = logging.getLogger(__name__)
 # Fields the sheet owns. Everything else on the record (certificate_date,
 # origin, workflow bookkeeping) is set by the application and never overwritten
 # by a sync.
-_SYNC_EXCLUDED = {"csp_id"}
+# photo_url: the sheet's Photo column shows a picture the app itself puts
+# there (No. 91), so it is never read back as a path.
+_SYNC_EXCLUDED = {"csp_id", "photo_url"}
 
 # Fields an EMPTY sheet cell must not clear. The sheet is the source of truth
 # wherever it has a value, but a blank cell means "no opinion", not "delete".

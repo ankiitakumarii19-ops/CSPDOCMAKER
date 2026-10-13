@@ -94,8 +94,12 @@ def write_values(
     csp_code: str,
     values: Dict[str, str],
     tab: Optional[str] = None,
+    value_input: str = "RAW",
 ) -> Tuple[Dict[str, str], List[str]]:
     """Write these field values onto this CSP's row.
+
+    value_input is "RAW" (text exactly as given — a CSP's answers) or
+    "USER_ENTERED" (read as if typed — needed for an =IMAGE() formula).
 
     Returns (written, skipped): what reached the sheet, and the fields that
     have no column there. A caller that has just told someone their answer
@@ -149,7 +153,7 @@ def write_values(
         try:
             service.spreadsheets().values().batchUpdate(
                 spreadsheetId=settings.google_sheets_csp_sheet_id,
-                body={"valueInputOption": "RAW", "data": data},
+                body={"valueInputOption": value_input, "data": data},
             ).execute()
         except Exception as e:
             sheets.reset_sheets_service()

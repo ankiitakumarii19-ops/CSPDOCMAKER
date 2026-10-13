@@ -159,6 +159,11 @@ def _try_photo(csp) -> bool:
     existing = (csp.photo_url or "").strip()
     if existing and os.path.isfile(existing):
         return False
+    from app.services import csp_photo_store
+    stored = csp_photo_store.original_path(csp)
+    if stored:
+        csp.photo_url = stored
+        return False
 
     result = csp_photo_service.fetch_photo(csp)
     if result.ok:
@@ -242,13 +247,18 @@ def _process_one(session, csp, document_types, job=None) -> None:
             processing_job_id=job.id))
         session.flush()
     # The photo (original + passport version) joins the record (No. 89).
-    csp_photo_store.capture(session, csp)
+    photo_changed = csp_photo_store.capture(session, csp)
 
     job.current_state = JobState.EMAIL_SENDING
     if not finishing_request:
         csp.new_csp_processed_at = datetime.now(timezone.utc)
     alert_service.resolve_alerts(session, csp.csp_id)
     session.commit()
+    if photo_changed:
+        # ... and is shown in the CSP sheet (No. 91). Never raises.
+        from app.services import sheet_photo
+        from app.workspace_context import current_workspace_id
+        sheet_photo.push(csp.csp_id, current_workspace_id())
     # Only the PDF is kept (No. 87); the working DOCX is no longer needed.
     document_storage_service.discard_working_files(
         [path for _, path in generated])

@@ -285,5 +285,7 @@ app.include_router(sheet_router)     # already has /api/admin/sheets prefix
 app.include_router(database_router)  # /api/admin/database — Super Admin, read-only
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
 from app.routers.public_document_router import router as public_document_router
+from app.routers.public_document_router import photo_router as public_photo_router
 app.include_router(public_document_router)  # PUBLIC — signed 7-day link (No. 78)
+app.include_router(public_photo_router)     # PUBLIC — signed 1-day photo link for the sheet (No. 91)
 

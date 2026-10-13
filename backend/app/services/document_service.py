@@ -76,6 +76,11 @@ def resolve_photo(csp: CSPRecord) -> str:
     photo = (csp.photo_url or "").strip()
     if photo and os.path.isfile(photo):
         return photo
+    # The app's own copy (photos/<CSP code>.*), whatever the record says.
+    from app.services import csp_photo_store
+    stored = csp_photo_store.original_path(csp)
+    if stored:
+        return stored
 
     if not settings.photo_placeholder_allowed:
         raise TemplateError(
@@ -94,8 +99,9 @@ def resolve_photo(csp: CSPRecord) -> str:
 
 def used_placeholder_photo(csp: CSPRecord) -> bool:
     """True when this CSP's documents would carry the placeholder photo."""
+    from app.services import csp_photo_store
     photo = (csp.photo_url or "").strip()
-    return not (photo and os.path.isfile(photo))
+    return not (photo and os.path.isfile(photo)) and not csp_photo_store.original_path(csp)
 
 
 def _ensure_output_dir(csp_id: Optional[str] = None) -> str:

@@ -47,17 +47,21 @@ async def test_a_blank_sheet_cell_does_not_clear_the_crm_photo():
     assert record.photo_url == CRM_PHOTO
 
 
-async def test_a_photo_in_the_sheet_still_wins():
-    """The sheet remains the source of truth where it has a value."""
+async def test_the_sheet_photo_column_is_never_read_back():
+    """Changed 13 Oct 2026 (No. 91): the sheet's Photo column shows a picture
+    the app itself puts there, so whatever it holds never replaces the
+    app's own photo."""
     record = _Record(photo_url=CRM_PHOTO, name="Nitasha")
     _apply_sync(record, {"photo_url": SHEET_PHOTO, "name": "Nitasha"})
-    assert record.photo_url == SHEET_PHOTO
+    assert record.photo_url == CRM_PHOTO
 
 
-async def test_a_photo_can_still_be_set_on_a_record_that_has_none():
+async def test_a_path_in_the_sheet_is_not_taken_as_the_photo():
+    """Not even for a record without one: photos come from Zoho, an upload
+    or set_photo.py, never from text in the sheet (No. 91)."""
     record = _Record(photo_url=None, name="Nitasha")
     _apply_sync(record, {"photo_url": SHEET_PHOTO, "name": "Nitasha"})
-    assert record.photo_url == SHEET_PHOTO
+    assert record.photo_url is None
 
 
 async def test_other_fields_are_still_cleared_by_a_blank_cell():

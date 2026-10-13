@@ -180,8 +180,16 @@ async def upload_photo(
     session.add(csp)
     # Keep the photo itself with the CSP's record (No. 89).
     from app.services import csp_photo_store
-    await session.run_sync(lambda sync: csp_photo_store.capture(sync, csp))
+    photo_changed = await session.run_sync(
+        lambda sync: csp_photo_store.capture(sync, csp))
     await session.commit()
+    if photo_changed:
+        # Shown in the CSP sheet (No. 91). Never raises.
+        import asyncio
+        from app.services import sheet_photo
+        from app.workspace_context import current_workspace_id
+        await asyncio.to_thread(sheet_photo.push, csp.csp_id,
+                                current_workspace_id())
 
     logger.info(
         "document_router.upload_photo: saved photo for CSP %s → %s",

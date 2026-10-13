@@ -18,7 +18,7 @@ import uuid
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -133,6 +133,7 @@ async def _get_owned_job(session: AsyncSession, job_id: str, user: User) -> Proc
 )
 async def process_workflow(
     request: WorkflowProcessRequest,
+    background: BackgroundTasks,
     session: AsyncSession = Depends(get_session),
     token_user: dict = Depends(require_rm),
 ):
@@ -339,7 +340,13 @@ async def process_workflow(
         [path for _, path in generated])
     # The photo used on these documents joins the CSP's record (No. 89).
     from app.services import csp_photo_store
-    await session.run_sync(lambda sync: csp_photo_store.capture(sync, csp))
+    photo_changed = await session.run_sync(
+        lambda sync: csp_photo_store.capture(sync, csp))
+    if photo_changed:
+        # Shown in the CSP sheet once the response has gone (No. 91).
+        from app.services import sheet_photo
+        background.add_task(sheet_photo.push, csp.csp_id,
+                            current_workspace_id())
 
     # 6. Validate CSP email
     job.current_state = JobState.EMAIL_VALIDATING
