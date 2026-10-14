@@ -92,7 +92,11 @@ def main() -> int:
                   f"not be sent. Pick one from --list.")
             return 1
 
-        template = message_sender.choose_template(db)
+        try:
+            template = message_sender.choose_template(db)
+        except message_sender.NoTemplate as e:
+            print(f"Not sent: {e}")
+            return 1
         request, token = drs.create(db, record.csp_id, fo.request_fields(record))
         link = drs.link_for(token)
         if not message_sender.link_is_reachable(link):
@@ -105,14 +109,18 @@ def main() -> int:
             template.body, name=record.name or record.csp_id,
             link=link, fields=fields)
         subject = "[TEST] " + (template.subject or "Please confirm your details")
-        sent, why = message_sender.send_via(
-            message_sender.choose_channel(db, "email"), a.to, subject, body)
+        # Straight through the server's email account (the one that emails
+        # CSPs their documents): no Email messaging channel is needed, and
+        # none is switched on, because real CSPs are asked on WhatsApp only.
+        sent, why = message_sender._send_email(a.to, subject, body)
 
-        # Deliberately NOT recorded as "asked": sent_to stays empty, so the
-        # CSP's real ask still goes out (and closes this test link).
-        request.sent_via = "email-test"
-        request.delivery_error = None if sent else why
-        db.commit()
+        if not sent:
+            db.rollback()       # no test link left behind
+        else:
+            # Deliberately NOT recorded as "asked": sent_to stays empty, so
+            # the CSP's real ask still goes out (and closes this test link).
+            request.sent_via = "email-test"
+            db.commit()
 
     if not sent:
         print(f"NOT sent: {why}")
@@ -126,4 +134,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:      # a plain reason, not a traceback
+        print(f"NOT sent: {type(e).__name__}: {e}")
+        sys.exit(1)
