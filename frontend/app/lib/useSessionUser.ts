@@ -23,9 +23,12 @@ function read(): string | null {
   }
 }
 
-/** Nothing on the server: the value lives only in the browser. */
-function readOnServer(): string | null {
-  return null;
+/** Unknown on the server, and during the first (hydrating) render in the
+ *  browser, which React draws with this same value. It must not read as
+ *  "signed out": a page that redirects on that sent anyone who reloaded it
+ *  to the login screen (No. 100). */
+function readOnServer(): string | null | undefined {
+  return undefined;
 }
 
 /**
@@ -41,10 +44,12 @@ function readOnServer(): string | null {
  * "not loaded yet" from "not logged in" and avoid redirecting too early.
  */
 export function useSessionUser(): SessionUser | null | undefined {
-  const raw = useSyncExternalStore(subscribe, read, readOnServer);
+  const raw = useSyncExternalStore<string | null | undefined>(
+    subscribe, read, readOnServer);
 
   return useMemo(() => {
-    if (raw === null) return typeof window === "undefined" ? undefined : null;
+    if (raw === undefined) return undefined;
+    if (raw === null) return null;
     try {
       const parsed = JSON.parse(raw);
       if (!parsed?.email || !parsed?.role) return null;
