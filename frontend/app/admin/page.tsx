@@ -342,7 +342,6 @@ export default function AdminDashboard() {
         {/* Admin Top Nav */}
         <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4 w-1/3">
-            <i className="fas fa-bars text-gray-500 md:hidden text-xl"></i>
             <CspSearch />
           </div>
           <div className="flex items-center gap-4">
