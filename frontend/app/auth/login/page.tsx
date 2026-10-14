@@ -167,7 +167,7 @@ export default function AuthPage() {
     }
     setLoading(true);
     try {
-      await api.signup({
+      const res = await api.signup({
         email: regEmail,
         name: regName,
         password: regPassword,
@@ -179,7 +179,14 @@ export default function AuthPage() {
       setEmail(regEmail);
       setDigits(Array(6).fill(""));
       setRegisterStep(2);
-      setInfo("Email domain verified.");
+      if (res.otp_sent) {
+        setInfo("Email domain verified.");
+      } else {
+        // The account exists but the email did not go: say so, and point
+        // at the way forward rather than leave them waiting for nothing.
+        setInfo("");
+        setError("Your account was created, but the code could not be emailed. Press \"Resend code\".");
+      }
     } catch (err) {
       setError((err as ApiError).detail || "Could not create the account.");
     } finally {
@@ -290,9 +297,9 @@ export default function AuthPage() {
     api.setToken(res.access_token!);
     try {
       if (res.refresh_token) {
-        sessionStorage.setItem("refresh_token", res.refresh_token);
+        localStorage.setItem("refresh_token", res.refresh_token);
       }
-      sessionStorage.setItem(
+      localStorage.setItem(
         "user",
         JSON.stringify({
           email,
@@ -788,14 +795,33 @@ export default function AuthPage() {
 
               {registerStep === 2 && (
                 <div className="space-y-4">
-                  <div className="p-3 bg-eko-light dark:bg-eko/10 text-eko-dark dark:text-eko rounded-lg text-sm mb-4">
-                    <i className="fas fa-check-circle mr-2"></i> Email domain verified.
-                  </div>
+                  {info && (
+                    <div className="p-3 bg-eko-light dark:bg-eko/10 text-eko-dark dark:text-eko rounded-lg text-sm mb-4">
+                      <i className="fas fa-check-circle mr-2"></i> {info}
+                    </div>
+                  )}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                       Enter OTP sent to email
                     </label>
                     {otpBoxes}
+                    <div className="flex justify-between items-center mt-3">
+                      <span className="text-xs text-gray-500">
+                        Didn&apos;t get it, or has it expired?
+                      </span>
+                      <button
+                        type="button"
+                        onClick={resend}
+                        disabled={resending || resendIn > 0}
+                        className="text-xs font-medium text-eko hover:underline disabled:text-gray-400 disabled:no-underline"
+                      >
+                        {resending
+                          ? "Sending…"
+                          : resendIn > 0
+                          ? `Resend in ${resendIn}s`
+                          : "Resend code"}
+                      </button>
+                    </div>
                   </div>
                   <div className="flex gap-3 mt-6">
                     <button

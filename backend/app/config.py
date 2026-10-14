@@ -56,7 +56,11 @@ class Settings(BaseSettings):
     # ---- JWT ----
     jwt_secret_key: str = Field(default="changeme", alias="JWT_SECRET_KEY")
     jwt_algorithm: str = Field(default="HS256", alias="JWT_ALGORITHM")
-    jwt_access_token_expire_minutes: int = Field(default=30, alias="JWT_ACCESS_TOKEN_EXPIRE_MINUTES")
+    # How long a sign-in lasts: someone stays signed in until they log out
+    # or this many hours pass, whichever is first (No. 100). Replaces
+    # JWT_ACCESS_TOKEN_EXPIRE_MINUTES (30 minutes), which signed people out
+    # mid-work; a leftover value of that in an env file is ignored.
+    session_hours: int = Field(default=24, alias="SESSION_HOURS")
     jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
 
     # ---- OTP ----

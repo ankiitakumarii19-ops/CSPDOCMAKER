@@ -379,29 +379,41 @@ export interface CSPDetail {
 }
 
 class ApiClient {
+  // Only a fallback for browsers that refuse storage (some private modes).
   private accessToken: string | null = null;
 
+  // The sign-in is kept in localStorage, not sessionStorage (No. 100): it
+  // survives closing the tab or the browser, and lasts until the person logs
+  // out or the server's 24 hours run out. Read from storage on every call,
+  // so logging out in one tab logs out every tab.
   setToken(token: string) {
     this.accessToken = token;
-    if (typeof window !== "undefined") {
-      sessionStorage.setItem("access_token", token);
+    try {
+      localStorage.setItem("access_token", token);
+    } catch {
+      /* storage refused: the in-memory copy serves this tab */
     }
   }
 
   getToken(): string | null {
-    if (this.accessToken) return this.accessToken;
-    if (typeof window !== "undefined") {
-      return sessionStorage.getItem("access_token");
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem("access_token");
+    } catch {
+      return this.accessToken;
     }
-    return null;
   }
 
   clearToken() {
     this.accessToken = null;
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("access_token");
-      sessionStorage.removeItem("refresh_token");
-      sessionStorage.removeItem("user");
+    try {
+      for (const key of ["access_token", "refresh_token", "user"]) {
+        localStorage.removeItem(key);
+        // Left by the version that kept the sign-in per tab.
+        sessionStorage.removeItem(key);
+      }
+    } catch {
+      /* nothing stored */
     }
   }
 
@@ -504,7 +516,7 @@ class ApiClient {
     /** Only when signing up as a Super Admin of a new workspace. */
     workspace_name?: string;
   }) {
-    return this.request("/auth/signup", {
+    return this.request<{ message: string; otp_sent: boolean }>("/auth/signup", {
       method: "POST",
       body: JSON.stringify(data),
     });

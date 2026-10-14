@@ -26,7 +26,8 @@ def create_access_token(
 
     Args:
         data: Payload dict — must include 'sub' (user email).
-        expires_delta: Custom expiry. Defaults to config value.
+        expires_delta: Custom expiry. Defaults to SESSION_HOURS (24): a
+            sign-in lasts until logout or that long, whichever is first.
 
     Returns:
         Encoded JWT string.
@@ -34,7 +35,7 @@ def create_access_token(
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta
-        or timedelta(minutes=settings.jwt_access_token_expire_minutes)
+        or timedelta(hours=settings.session_hours)
     )
     to_encode.update({"exp": expire, "type": "access"})
     try:

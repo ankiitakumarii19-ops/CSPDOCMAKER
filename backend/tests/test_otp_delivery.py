@@ -109,3 +109,40 @@ async def test_there_is_no_sms_service_left():
 async def test_no_otp_method_enum_remains():
     from app.models import enums
     assert not hasattr(enums, "OTPMethod")
+
+
+async def test_a_new_account_can_ask_for_a_fresh_code(client, emails, monkeypatch):
+    """Tracker No. 100: the Create Account screen has "Resend code". The
+    account exists from the moment of sign-up, so a fresh code is sent and
+    it is the fresh one that signs them in — for 24 hours."""
+    from app.services import google_sheets_service
+    new = "brand.new.signup@eko.co.in"
+    monkeypatch.setattr(
+        google_sheets_service, "check_authorization",
+        lambda email, role: (True, {"Email_id": email, "Contact_no": MOBILE}))
+    r = await client.post("/api/auth/signup", json={
+        "email": new, "name": "Otp User", "password": PASSWORD,
+        "requested_role": "rm"})
+    assert r.status_code == 200, r.text
+    assert r.json()["otp_sent"] is True
+
+    r = await client.post("/api/auth/resend-otp", json={"email": new})
+    assert r.status_code == 200, r.text
+    assert len(emails) == 2 and emails[1][0] == new
+    first, fresh = emails[0][1], emails[1][1]
+
+    if first != fresh:
+        r = await client.post("/api/auth/verify-otp",
+                              json={"email": new, "otp": first})
+        assert r.json().get("verified") is False, "the replaced code still worked"
+    r = await client.post("/api/auth/verify-otp",
+                          json={"email": new, "otp": fresh})
+    assert r.status_code == 200, r.text
+    assert r.json()["verified"] is True, r.text
+
+    from datetime import datetime, timezone
+    from app.services import jwt_service
+    claims = jwt_service.decode_token(r.json()["access_token"])
+    hours = (datetime.fromtimestamp(claims["exp"], timezone.utc)
+             - datetime.now(timezone.utc)).total_seconds() / 3600
+    assert 23.9 < hours <= 24

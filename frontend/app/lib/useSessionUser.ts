@@ -8,15 +8,16 @@ export interface SessionUser {
   role: string;
 }
 
-/** Nothing writes to sessionStorage while a page is mounted except sign-in
- *  and sign-out, both of which navigate, so there is nothing to subscribe to. */
-function subscribe() {
-  return () => {};
+/** The sign-in is shared by every tab (localStorage, No. 100), so a
+ *  sign-out in another tab is heard here and this tab follows it. */
+function subscribe(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
 }
 
 function read(): string | null {
   try {
-    return sessionStorage.getItem("user");
+    return localStorage.getItem("user");
   } catch {
     return null;
   }
@@ -28,7 +29,7 @@ function readOnServer(): string | null {
 }
 
 /**
- * The signed-in user, read from sessionStorage.
+ * The signed-in user, read from localStorage.
  *
  * useSyncExternalStore rather than an effect: reading browser-only state in
  * an effect and calling setState causes a cascading render, and doing it in a
