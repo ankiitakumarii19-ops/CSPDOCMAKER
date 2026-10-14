@@ -1,5 +1,7 @@
-"""Send yourself the CSP's "please confirm your details" message, as a test —
-by email, by WhatsApp, or both.
+"""Send yourself the message a CSP with missing details gets, as a test — by
+email, by WhatsApp, or both. By default the "these details are still needed"
+message (--message missing); --message confirm sends "please confirm your
+details" instead.
 
     python scripts/test_details_email.py --list
     python scripts/test_details_email.py <CSP code> --to you@eko.co.in
@@ -54,6 +56,9 @@ def main() -> int:
     ap.add_argument("--to", help="email address for the test (never the CSP)")
     ap.add_argument("--whatsapp", help="mobile number for a WhatsApp test "
                     "(never the CSP)")
+    ap.add_argument("--message", choices=("missing", "confirm"), default="missing",
+                    help="missing = 'these details are still needed: …' "
+                         "(default); confirm = 'please confirm your details'")
     ap.add_argument("--list", action="store_true",
                     help="show CSPs with missing details, send nothing")
     ap.add_argument("--workspace", default=EKO, help="workspace slug (default: Eko)")
@@ -108,7 +113,11 @@ def main() -> int:
             return 1
 
         try:
-            template = message_sender.choose_template(db)
+            from app.models.messaging import (
+                PURPOSE_DATA_REQUEST, PURPOSE_MISSING_DATA)
+            template = message_sender.choose_template(
+                db, PURPOSE_MISSING_DATA if a.message == "missing"
+                else PURPOSE_DATA_REQUEST)
         except message_sender.NoTemplate as e:
             print(f"Not sent: {e}")
             return 1
@@ -126,7 +135,9 @@ def main() -> int:
         if a.to:
             body = message_sender.render(template.body, name=name, link=link,
                                          fields=fields)
-            subject = "[TEST] " + (template.subject or "Please confirm your details")
+            subject = "[TEST] " + (template.subject or (
+                "Details still needed for your CSP documents"
+                if a.message == "missing" else "Please confirm your details"))
             # Straight through the server's email account (the one that
             # emails CSPs their documents): no Email messaging channel is
             # needed, and none is on — real CSPs are asked on WhatsApp only.
@@ -154,7 +165,7 @@ def main() -> int:
             request.sent_via = "test"
             db.commit()
 
-    print(f"Test of the details request for {record.csp_id} ({record.name}) — "
+    print(f"Test of the '{a.message}' message for {record.csp_id} ({record.name}) — "
           f"missing: {', '.join(fo.label_of(f) for f in fields)}")
     for via, to, sent, why, job_id in results:
         if sent:
