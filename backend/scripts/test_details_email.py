@@ -1,7 +1,9 @@
-"""Send yourself the CSP's "please confirm your details" email, as a test.
+"""Send yourself the CSP's "please confirm your details" message, as a test —
+by email, by WhatsApp, or both.
 
     python scripts/test_details_email.py --list
     python scripts/test_details_email.py <CSP code> --to you@eko.co.in
+    python scripts/test_details_email.py <CSP code> --whatsapp 98XXXXXXXX
 
 On the server (the link in the email only works there):
 
@@ -9,10 +11,13 @@ On the server (the link in the email only works there):
         exec -T api python scripts/test_details_email.py --list
     docker compose -f docker-compose.prod.yml --env-file deploy/.env.production \\
         exec -T api python scripts/test_details_email.py 1A850534 --to you@eko.co.in
+    ... exec -T api python scripts/test_details_email.py 1A850534 --whatsapp 98XXXXXXXX
 
 Tracker No. 108. The exact email a CSP with missing details would get —
 the stored wording, the list of what is missing, and a working link to their
-form — sent to the address given with --to, NEVER to the CSP. Real CSPs are
+form — sent to the address given with --to and/or the number given with
+--whatsapp, NEVER to the CSP. The WhatsApp test goes through Eko's platform
+with the same Meta-approved wording a CSP gets (No. 107/108). Real CSPs are
 still asked on WhatsApp only (No. 53); nothing about that changes.
 
 The link opens the real form for that CSP. Looking is harmless; SUBMITTING
@@ -46,7 +51,9 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("csp_code", nargs="?")
-    ap.add_argument("--to", help="where to send the test (never the CSP)")
+    ap.add_argument("--to", help="email address for the test (never the CSP)")
+    ap.add_argument("--whatsapp", help="mobile number for a WhatsApp test "
+                    "(never the CSP)")
     ap.add_argument("--list", action="store_true",
                     help="show CSPs with missing details, send nothing")
     ap.add_argument("--workspace", default=EKO, help="workspace slug (default: Eko)")
@@ -75,9 +82,17 @@ def main() -> int:
                   else "No CSP has missing details.")
             return 0
 
-        if not a.to or not EMAIL.match(a.to):
-            print("Give the test address with --to you@eko.co.in "
-                  "(it is never sent to the CSP).")
+        from app.services import whatsapp_platform as wa
+        if not a.to and not a.whatsapp:
+            print("Say where to send the test: --to you@eko.co.in and/or "
+                  "--whatsapp 98XXXXXXXX (never the CSP).")
+            return 1
+        if a.to and not EMAIL.match(a.to):
+            print(f"{a.to!r} is not an email address.")
+            return 1
+        if a.whatsapp and not wa.phone_for_whatsapp(a.whatsapp):
+            print(f"{a.whatsapp!r} is not a usable mobile number "
+                  f"(10 digits, or 91 + 10 digits).")
             return 1
 
         record = db.execute(select(CSPRecord).where(
@@ -105,32 +120,53 @@ def main() -> int:
                   + " Run this on the server.")
             return 1
 
-        body = message_sender.render(
-            template.body, name=record.name or record.csp_id,
-            link=link, fields=fields)
-        subject = "[TEST] " + (template.subject or "Please confirm your details")
-        # Straight through the server's email account (the one that emails
-        # CSPs their documents): no Email messaging channel is needed, and
-        # none is switched on, because real CSPs are asked on WhatsApp only.
-        sent, why = message_sender._send_email(a.to, subject, body)
+        name = record.name or record.csp_id
+        results = []
 
-        if not sent:
-            db.rollback()       # no test link left behind
+        if a.to:
+            body = message_sender.render(template.body, name=name, link=link,
+                                         fields=fields)
+            subject = "[TEST] " + (template.subject or "Please confirm your details")
+            # Straight through the server's email account (the one that
+            # emails CSPs their documents): no Email messaging channel is
+            # needed, and none is on — real CSPs are asked on WhatsApp only.
+            sent, why = message_sender._send_email(a.to, subject, body)
+            results.append(("email", a.to, sent, why, None))
+
+        if a.whatsapp:
+            # Exactly what ask_for_details sends a CSP: the stored wording as
+            # a Meta template, the same values — to the test number only.
+            outcome = wa.send(
+                a.whatsapp, template.body,
+                {"name": name, "link": link,
+                 "fields": ", ".join(fo.label_of(f) for f in fields)},
+                source_name=f"CSPdocMaker TEST details request {record.csp_id}")
+            results.append(("WhatsApp", a.whatsapp, outcome["status"] == wa.SENT,
+                            (f"{outcome['status']}: {outcome['reason']}"
+                             if outcome["status"] != wa.SENT else ""),
+                            outcome.get("job_id")))
+
+        if not any(r[2] for r in results):
+            db.rollback()       # nothing went out: no test link left behind
         else:
             # Deliberately NOT recorded as "asked": sent_to stays empty, so
             # the CSP's real ask still goes out (and closes this test link).
-            request.sent_via = "email-test"
+            request.sent_via = "test"
             db.commit()
 
-    if not sent:
-        print(f"NOT sent: {why}")
-        return 1
-    print(f"Sent the details-request email for {record.csp_id} "
-          f"({record.name}) to {a.to}.")
-    print(f"Missing: {', '.join(fo.label_of(f) for f in fields)}")
-    print("The link opens the real form: look freely, but submitting it writes "
-          "to the real sheet.")
-    return 0
+    print(f"Test of the details request for {record.csp_id} ({record.name}) — "
+          f"missing: {', '.join(fo.label_of(f) for f in fields)}")
+    for via, to, sent, why, job_id in results:
+        if sent:
+            print(f"  {via}: SENT to {to}" + (f"  (job {job_id})" if job_id else ""))
+        else:
+            print(f"  {via}: NOT sent to {to} — {why}")
+    if any(r[0] == "WhatsApp" and r[2] for r in results):
+        print("  Delivered / read? python scripts/check_whatsapp.py --status <job>")
+    if any(r[2] for r in results):
+        print("The link opens the real form: look freely, but submitting it "
+              "writes to the real sheet.")
+    return 0 if all(r[2] for r in results) else 1
 
 
 if __name__ == "__main__":
