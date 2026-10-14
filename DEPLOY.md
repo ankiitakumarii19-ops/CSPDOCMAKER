@@ -210,8 +210,10 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec
 
 **Every document as a file** (No. 105). Besides the database, every PDF the
 app makes is saved in the `CSP_Documents` folder BESIDE the app folder (on
-the server: `/home/Ankita/CSP_Documents`), one folder per CSP code:
-`CSP_Documents/1A850395/CSP ID Card v2.pdf`. Beside, not inside, so
+the server: `/home/Ankita/CSP_Documents`), one folder per CSP, named by
+name and code: `CSP_Documents/Rajiv Kumar (1A850395)/CSP ID Card v2.pdf`.
+A folder named by the code alone, or under a name later corrected in the
+sheet, is renamed automatically. Beside, not inside, so
 re-cloning or cleaning the app folder never touches the documents.
 Documents made earlier are written within 15 minutes of the app starting.
 The app runs as user 1000 inside Docker, so the folder must be writable by
@@ -220,7 +222,7 @@ it — once, from the app folder:
 ```bash
 mkdir -p ../CSP_Documents
 sudo chown 1000:1000 ../CSP_Documents   # or, without sudo: chmod 777 ../CSP_Documents
-ls ../CSP_Documents                      # one folder per CSP code
+ls ../CSP_Documents                      # one folder per CSP: Name (code)
 ```
 
 If a document cannot be written there the reason is in the log

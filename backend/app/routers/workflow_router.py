@@ -355,7 +355,7 @@ async def process_workflow(
     # gone, i.e. after the commit. Never raises.
     from app.services import document_archive
     background.add_task(document_archive.save_all, [
-        (r.csp_id, r.document_type, r.version, r.file_data)
+        (r.csp_id, r.document_type, r.version, r.file_data, csp.name)
         for r in stored_rows])
     # The photo used on these documents joins the CSP's record (No. 89).
     from app.services import csp_photo_store

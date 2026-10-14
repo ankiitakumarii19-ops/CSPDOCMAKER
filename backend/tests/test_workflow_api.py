@@ -458,7 +458,8 @@ async def test_a_generation_failure_tells_the_rm_why(client, db, csp, monkeypatc
 
 async def test_the_documents_made_are_filed_in_the_csps_folder(
         client, db, csp, tmp_path, monkeypatch):
-    """Tracker No. 105: every document made is a file in documents/<code>/."""
+    """Tracker No. 105/106: every document made is a file in the CSP's
+    folder, named by name and code."""
     from app.config import get_settings
     folder = tmp_path / "documents"
     monkeypatch.setattr(get_settings(), "documents_archive_dir", str(folder))
@@ -469,6 +470,7 @@ async def test_the_documents_made_are_filed_in_the_csps_folder(
         json={"csp_id": "TESTCSP001", "document_types": ["csp_certificate"]},
     )
     assert r.status_code == 200, r.text
-    files = os.listdir(folder / "TESTCSP001")
+    named = folder / "Test Csp Name (TESTCSP001)"
+    files = os.listdir(named)
     assert len(files) == 1 and files[0].endswith(" v1.pdf"), files
-    assert (folder / "TESTCSP001" / files[0]).read_bytes().startswith(b"%PDF-")
+    assert (named / files[0]).read_bytes().startswith(b"%PDF-")

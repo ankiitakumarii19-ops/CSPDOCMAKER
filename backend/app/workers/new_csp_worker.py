@@ -269,7 +269,7 @@ def _process_one(session, csp, document_types, job=None) -> None:
     # Each PDF as a file in the CSP's folder too (No. 105). Never raises.
     from app.services import document_archive
     document_archive.save_all(
-        (r.csp_id, r.document_type, r.version, r.file_data)
+        (r.csp_id, r.document_type, r.version, r.file_data, csp.name)
         for r in stored_rows)
     if photo_changed:
         # ... and is shown in the CSP sheet (No. 91). Never raises.
