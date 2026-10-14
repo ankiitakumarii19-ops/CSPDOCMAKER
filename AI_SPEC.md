@@ -133,3 +133,4 @@ this (or does it, with the user's OK).
 | 13 Oct 2026 | D5: photos shown in the CSP sheet automatically (No. 91) |
 | 14 Oct 2026 | D5: photos read from the CSP sheet's Photo column when the app has none (No. 99) |
 | 14 Oct 2026 | D5: one photo intake, sheet photos every 15 min, passport version on every screen (No. 102) |
+| 14 Oct 2026 | Roles (No. 104): Database = RM+Admin+Super Admin (all CSPs, read-only); Sheets = RM+Admin edit CSP tabs only, Super Admin everything; Agents and Access = Super Admin only; Messaging and Templates = Admin+Super Admin |

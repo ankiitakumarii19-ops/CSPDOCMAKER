@@ -108,21 +108,30 @@ async def test_signing_in_is_required(client, method, path):
 
 @pytest.mark.parametrize("method,path", SHEET_PATHS)
 @pytest.mark.parametrize("role", ["rm", "admin"])
-async def test_only_the_owner_may_touch_the_sheets(client, method, path, role):
-    """An Admin configures how the system behaves. This changes the data it
-    behaves on, which is a different job and a different door."""
+async def test_rms_and_admins_get_past_the_door(client, method, path, role):
+    """Changed 14 Oct 2026 (No. 104): RMs and Admins may open the Sheets
+    screen. Which sheet and tab they may touch is pinned in
+    test_sheet_access.py."""
     response = await client.request(method, path, headers=_auth(role))
-    assert response.status_code == 403, (
-        f"a {role} reached {path} — it is Super Admin only")
+    assert response.status_code != 403, f"a {role} was refused {path}"
 
 
-async def test_deleting_a_row_is_owner_only(client):
-    response = await client.delete(
-        "/api/admin/sheets/00000000-0000-0000-0000-000000000000"
-        "/tabs/CSPData/rows/2",
-        headers=_auth("admin"))
-    assert response.status_code == 403, (
-        "an Admin could delete a row from the live sheet")
+# Which sheets are read, and new tabs, stay the Super Admin's.
+MANAGING = [
+    ("POST", "/api/admin/sheets"),
+    ("PATCH", "/api/admin/sheets/00000000-0000-0000-0000-000000000000"),
+    ("DELETE", "/api/admin/sheets/00000000-0000-0000-0000-000000000000"),
+    ("POST", "/api/admin/sheets/00000000-0000-0000-0000-000000000000/tabs"),
+]
+
+
+@pytest.mark.parametrize("method,path", MANAGING)
+@pytest.mark.parametrize("role", ["rm", "admin"])
+async def test_only_the_owner_decides_which_sheets_are_read(client, method, path, role):
+    response = await client.request(method, path, headers=_auth(role),
+                                    json={"name": "x", "spreadsheet_id": "x" * 20,
+                                          "tab": "x", "title": "x"})
+    assert response.status_code == 403, f"a {role} reached {method} {path}"
 
 
 async def test_the_owner_gets_past_the_door(client):
@@ -236,7 +245,9 @@ async def test_a_photograph_is_not_public(client):
 
 
 @pytest.mark.parametrize("role", ["rm", "admin"])
-async def test_only_the_owner_may_fetch_a_photograph(client, role):
+async def test_rms_and_admins_may_fetch_a_photograph(client, role):
+    """No. 104: whoever sees the CSP tabs sees their photos. The path checks
+    below still apply to everyone."""
     response = await client.get(PHOTO_URL, params={"path": "x.png"},
                                 headers=_auth(role))
-    assert response.status_code == 403
+    assert response.status_code != 403

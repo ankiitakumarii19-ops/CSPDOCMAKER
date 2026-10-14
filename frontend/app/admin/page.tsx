@@ -256,6 +256,8 @@ export default function AdminDashboard() {
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-6 px-3">
                 Setup
               </div>
+              {/* The agents are the Super Admin's alone (No. 104). */}
+              {isOwner && (
               <button
                 onClick={() => setAdminRoute("agents")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -266,6 +268,7 @@ export default function AdminDashboard() {
               >
                 <i className="fas fa-robot w-5 text-center"></i> Agents
               </button>
+              )}
               <button
                 onClick={() => setAdminRoute("messaging")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -300,9 +303,10 @@ export default function AdminDashboard() {
                   <i className="fas fa-users-gear w-5 text-center"></i> Access
                 </button>
               )}
-              {/* The sheets every other screen is derived from. Owner
-                  only: this edits the source data, not the configuration. */}
-              {isOwner && (
+              {/* The sheets every other screen is derived from. Admins
+                  edit the CSP tabs only; the access sheet and which sheets
+                  are read stay the Owner's (No. 104, enforced server-side). */}
+              {canConfigure && (
                 <button
                   onClick={() => setAdminRoute("sheets")}
                   className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -314,8 +318,9 @@ export default function AdminDashboard() {
                   <i className="fas fa-table w-5 text-center"></i> Sheets
                 </button>
               )}
-              {/* Every CSP's complete record (No. 89). Owner only. */}
-              {isOwner && (
+              {/* Every CSP's complete record (No. 89), read-only. Admins
+                  and RMs too since No. 104. */}
+              {canConfigure && (
                 <button
                   onClick={() => setAdminRoute("database")}
                   className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -401,14 +406,14 @@ export default function AdminDashboard() {
               />
             )}
 
-            {canConfigure && adminRoute === "agents" && (
+            {isOwner && adminRoute === "agents" && (
               <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
             {isOwner && adminRoute === "access" && <AccessControl />}
-            {isOwner && adminRoute === "sheets" && <Sheets />}
-            {isOwner && adminRoute === "database" && <Database />}
+            {canConfigure && adminRoute === "sheets" && <Sheets canManage={isOwner} />}
+            {canConfigure && adminRoute === "database" && <Database />}
 
             {adminRoute === "overview" && (
             <>

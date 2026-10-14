@@ -175,7 +175,7 @@ def _auth(email, role):
     return {"Authorization": f"Bearer {token}"}
 
 
-async def test_screens_get_the_passport_version_only_where_allowed(
+async def test_screens_get_the_passport_version(
         client, sync_db, monkeypatch):
     from app.services import csp_access
 
@@ -196,10 +196,13 @@ async def test_screens_get_the_passport_version_only_where_allowed(
     r = await client.get("/api/csps/1A910006/photo", headers=admin)
     assert r.status_code == 404
 
-    # An RM sees only their own CSPs — a photo included.
+    # No. 104: an RM sees every CSP's record, so every CSP's photo too —
+    # even one outside their own search scope.
     monkeypatch.setattr(csp_access, "accessible_filter",
                         lambda user: CSPRecord.csp_id == "nobody")
     r = await client.get("/api/csps/1A910005/photo", headers=_auth(RM, "rm"))
+    assert r.status_code == 200 and r.headers["x-photo-kind"] == PASSPORT
+    r = await client.get("/api/csps/NO-SUCH/photo", headers=_auth(RM, "rm"))
     assert r.status_code == 404
 
 

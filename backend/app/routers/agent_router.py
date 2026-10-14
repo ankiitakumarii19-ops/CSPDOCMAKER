@@ -1,12 +1,9 @@
 """
 CSP DocMaker — the agents, from outside
 
-Admins and Workspace Owners both work here: reading what the agents found,
-running one now, switching one on or off, and deciding what one proposes.
-Running the agents is part of running the operation.
-
-What is still the Owner's alone is Access — who may sign in. Everything
-else about how the work runs is an Admin's to shape.
+The Super Admin's alone (changed 14 Oct 2026, No. 104): reading what the
+agents found, running one now, switching one on or off, and deciding what
+one proposes. Admins used to share this; they no longer see the agents.
 """
 
 import logging
@@ -65,7 +62,7 @@ def _sync_session():
 @router.get("")
 async def list_agents(
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("admin", "super_admin")),
+    user=Depends(require_role("super_admin")),
 ):
     """Every agent, what it is for, and how its last run went."""
     states = {
@@ -99,7 +96,7 @@ async def list_agents(
 async def list_findings(
     only_open: bool = True,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("admin", "super_admin")),
+    user=Depends(require_role("super_admin")),
 ):
     """What the agents have noticed, newest first."""
     statement = select(AgentFinding).order_by(AgentFinding.created_at.desc())

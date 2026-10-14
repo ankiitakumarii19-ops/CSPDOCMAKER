@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
 import CspPhoto from "../components/CspPhoto";
+import Database from "../admin/Database";
+import Sheets from "../admin/Sheets";
 import { api, DOCUMENT_TYPES } from "../lib/api";
 import type { ApiError, CSPDetail, DocumentTypeKey } from "../lib/api";
 import { useSessionUser } from "../lib/useSessionUser";
@@ -73,6 +75,9 @@ export default function RMDashboard() {
   const user = useSessionUser();
 
   const [rmStep, setRmStep] = useState<Step>("dashboard");
+  // Sheets and Database for RMs too (No. 104): the CSP tabs, editable; every
+  // CSP's record, read-only. The documents flow keeps its place meanwhile.
+  const [rmView, setRmView] = useState<"documents" | "sheets" | "database">("documents");
   const [theme, toggleTheme] = useTheme();
   const [alertsMenu, setAlertsMenu] = useState(false);
   const [logoutMenu, setLogoutMenu] = useState(false);
@@ -320,6 +325,28 @@ export default function RMDashboard() {
               RM Portal
             </span>
           </span>
+          <nav className="flex items-center gap-1 ml-2">
+            {(
+              [
+                ["documents", "fa-file-signature", "Documents"],
+                ["sheets", "fa-table", "Sheets"],
+                ["database", "fa-database", "Database"],
+              ] as const
+            ).map(([view, icon, label]) => (
+              <button
+                key={view}
+                onClick={() => setRmView(view)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                  rmView === view
+                    ? "bg-eko/10 text-eko"
+                    : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                <i className={`fas ${icon} mr-1.5 text-xs`}></i>
+                <span className="hidden md:inline">{label}</span>
+              </button>
+            ))}
+          </nav>
         </div>
         <div className="flex items-center gap-4">
           {/* Notifications Dropdown */}
@@ -414,7 +441,17 @@ export default function RMDashboard() {
 
       {/* RM Main Scrollable Area */}
       <main className="flex-grow overflow-y-auto p-4 sm:p-8">
-        <div className="max-w-5xl mx-auto space-y-6">
+        {rmView === "sheets" && (
+          <div className="max-w-6xl mx-auto">
+            <Sheets canManage={false} />
+          </div>
+        )}
+        {rmView === "database" && (
+          <div className="max-w-6xl mx-auto">
+            <Database />
+          </div>
+        )}
+        <div className={`max-w-5xl mx-auto space-y-6 ${rmView === "documents" ? "" : "hidden"}`}>
           {/* State 1: Dashboard & Search */}
           {(rmStep === "dashboard" || rmStep === "search_result") && (
             <div>

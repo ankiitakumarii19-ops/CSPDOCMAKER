@@ -1,7 +1,9 @@
 "use client";
 
 /**
- * Super Admin — the sheets behind the system.
+ * The sheets behind the system. A Super Admin sees every sheet and decides
+ * which are read; an Admin or RM sees and edits the CSP tabs only — never
+ * the access sheet (No. 104, enforced by the server, not only here).
  *
  * Every other screen in this product shows records that came from a sheet.
  * This one shows the sheet: the tabs it has, the rows in them, and lets a
@@ -30,7 +32,7 @@ import { api } from "../lib/api";
 import type { ApiError, SheetSource, SheetTabData } from "../lib/api";
 import { withBase } from "../lib/basePath";
 
-export default function Sheets() {
+export default function Sheets({ canManage = false }: { canManage?: boolean }) {
   const [sources, setSources] = useState<SheetSource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -238,7 +240,7 @@ export default function Sheets() {
                 </p>
               </div>
               <div className="flex items-center gap-3 shrink-0">
-                {group.sources.map((s) => (
+                {canManage && group.sources.map((s) => (
                   <button
                     key={s.id}
                     onClick={async () => {
@@ -319,6 +321,7 @@ export default function Sheets() {
         ))}
       </div>
 
+      {canManage && (
       <AddSheet
         open={registering}
         onOpen={() => setRegistering(true)}
@@ -330,6 +333,7 @@ export default function Sheets() {
         }}
         onError={setError}
       />
+      )}
 
       {/* The rows of whichever tab is open */}
       {open && (
@@ -556,7 +560,16 @@ function groupBySpreadsheet(sources: SheetSource[]) {
     const existing = byId.get(s.spreadsheet_id);
     if (existing) {
       existing.sources.push(s);
-      existing.tabs = existing.tabs ?? s.tabs_live;
+      // Every tab any of its sources shows, once each. For an Admin or RM
+      // each source lists only the tabs it is read from (No. 104), so
+      // taking the first source's list alone would hide the others'.
+      if (s.tabs_live) {
+        const seen = new Set((existing.tabs ?? []).map((t) => t.title));
+        existing.tabs = [
+          ...(existing.tabs ?? []),
+          ...s.tabs_live.filter((t) => !seen.has(t.title)),
+        ];
+      }
       existing.error = existing.error ?? s.error ?? null;
       existing.title = existing.title || s.title || "";
       continue;

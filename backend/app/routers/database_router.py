@@ -1,5 +1,5 @@
 """
-CSP DocMaker — the Database section (Super Admin)
+CSP DocMaker — the Database section (RM, Admin and Super Admin; No. 104)
 
 Tracker No. 47 (plan S7) / No. 89: one place to see a CSP's complete record —
 every sheet column, everything the app records about them, their photo and
@@ -28,7 +28,9 @@ from app.services.missing_data_service import document_label
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin/database", tags=["database"])
-require_owner = require_role("super_admin")
+# RM, Admin and Super Admin all see every CSP's record (No. 104 — chosen
+# 14 Oct 2026: all CSPs, not only an RM's own). Read-only for everyone.
+require_owner = require_role("rm", "admin", "super_admin")
 
 # The CSP data sheet's columns, in the sheet's order and with its names.
 SHEET_COLUMNS = [

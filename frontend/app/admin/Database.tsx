@@ -3,7 +3,7 @@
 /**
  * Database — every CSP's complete record in one place (tracker No. 47 / 89).
  *
- * Super Admin only, read-only. One row per CSP; open a row to see every
+ * RM, Admin and Super Admin (No. 104), read-only. One row per CSP; open a row to see every
  * column of the CSP sheet, what the app records about them, their photo
  * (as obtained, and the passport version on the documents) and every
  * stored PDF with its versions. Nothing here changes data.

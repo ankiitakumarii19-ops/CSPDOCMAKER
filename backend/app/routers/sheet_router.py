@@ -5,11 +5,15 @@ Every screen in this product is a view of records that came from a sheet.
 This is the sheet itself: the tabs it has, the rows in them, and the
 ability to correct, add or remove one without leaving the application.
 
-Super Admin only, and deliberately. An Admin configures how the system
-behaves; this changes the data every other screen is derived from, and the
-two are different jobs. It is also the one place in the product where a
-single click destroys something no amount of code can bring back, which is
-a second reason to keep the door narrow.
+Who may do what (changed 14 Oct 2026, No. 104):
+
+  * Super Admin — everything: every sheet, every tab, and which sheets the
+    system reads at all.
+  * Admin and RM — the CSP tabs only (the tabs the records and directory
+    sheets are read from: KOData, SUBKOData, INFO): read, change, add and
+    delete rows. Never the access sheet (RMs / Admins / SuperAdmins) —
+    editing it would let anyone make themselves a Super Admin — and never
+    which sheets are read. Enforced here, not only on screen.
 
 Everything written here goes to the spreadsheet itself. There is no copy
 and no queue: a correction made on this screen is visible to anyone with
@@ -102,6 +106,51 @@ async def _source(session: AsyncSession, source_id: str) -> DataSource:
     return found
 
 
+EDITORS = ("rm", "admin", "super_admin")
+CSP_PURPOSES = ("records", "directory")
+
+
+def _is_owner(user) -> bool:
+    return ((user or {}).get("role") or "").lower() == "super_admin"
+
+
+async def _access_spreadsheets(session: AsyncSession) -> set:
+    """Spreadsheets that hold the access lists. Refused whole to anyone but
+    the Super Admin — the SuperAdmins tab is read without being listed in
+    the source's tabs, so refusing tab by tab would miss it."""
+    rows = (await session.execute(
+        select(DataSource).where(DataSource.purpose == "authorization")
+    )).scalars().all()
+    return {(r.connection or {}).get("spreadsheet_id") for r in rows} - {None}
+
+
+def _configured_tabs(source: DataSource) -> List[str]:
+    connection = source.connection or {}
+    return connection.get("tabs") or (
+        [connection.get("tab")] if connection.get("tab") else [])
+
+
+async def _check_csp_tab(session: AsyncSession, user, source: DataSource,
+                         tab: str) -> None:
+    """An Admin or RM may touch only a CSP tab. Says why when refused."""
+    if _is_owner(user):
+        return
+    if (source.purpose not in CSP_PURPOSES
+            or (source.connection or {}).get("spreadsheet_id")
+            in await _access_spreadsheets(session)):
+        logger.warning("sheet_router: %s (%s) refused the %r sheet",
+                       _who(user), (user or {}).get("role"), source.name)
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Only the Super Admin can open this sheet.")
+    if tab not in _configured_tabs(source):
+        logger.warning("sheet_router: %s (%s) refused tab %r of %r",
+                       _who(user), (user or {}).get("role"), tab, source.name)
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Only the CSP tabs can be opened here "
+            f"({', '.join(_configured_tabs(source))}).")
+
+
 def _spreadsheet(source: DataSource) -> str:
     spreadsheet_id = (source.connection or {}).get("spreadsheet_id")
     if not spreadsheet_id:
@@ -116,7 +165,7 @@ def _spreadsheet(source: DataSource) -> str:
 @router.get("/_photo")
 async def sheet_photo(
     path: str,
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     """The photograph a Photo cell names, as an image.
 
@@ -160,7 +209,7 @@ async def sheet_photo(
 @router.get("")
 async def list_sheets(
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     """Every registered sheet, with the tabs it actually has right now.
 
@@ -172,6 +221,13 @@ async def list_sheets(
     sources = (await session.execute(
         select(DataSource).order_by(DataSource.purpose, DataSource.name)
     )).scalars().all()
+    owner = _is_owner(user)
+    if not owner:
+        # An Admin or RM sees the CSP sheets only (No. 104).
+        protected = await _access_spreadsheets(session)
+        sources = [s for s in sources if s.purpose in CSP_PURPOSES
+                   and (s.connection or {}).get("spreadsheet_id")
+                   not in protected]
 
     # Two sources share one spreadsheet, so asking per source meant asking
     # Google the same question twice — and asking for the title separately
@@ -195,8 +251,15 @@ async def list_sheets(
     for source in sources:
         spreadsheet_id = (source.connection or {}).get("spreadsheet_id")
         meta, error = described.get(spreadsheet_id, (None, None))
-        payload = _out(source, meta["tabs"] if meta else None)
+        tabs = meta["tabs"] if meta else None
+        if tabs is not None and not owner:
+            # Only the tabs this source is read from — not every tab the
+            # spreadsheet happens to have.
+            allowed = set(_configured_tabs(source))
+            tabs = [t for t in tabs if t["title"] in allowed]
+        payload = _out(source, tabs)
         payload["title"] = meta["title"] if meta else ""
+        payload["can_manage"] = owner
         payload["error"] = error
         out.append(payload)
     return {"sheets": out}
@@ -294,10 +357,11 @@ async def read_rows(
     source_id: str,
     tab: str,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     """One tab's header and rows, each with its number in the spreadsheet."""
     source = await _source(session, source_id)
+    await _check_csp_tab(session, user, source, tab)
     try:
         return sheets.read_tab(_spreadsheet(source), tab)
     except SheetAdminError as e:
@@ -311,10 +375,11 @@ async def update_row(
     row_number: int,
     body: RowIn,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     """Change cells on one row. Written straight to the spreadsheet."""
     source = await _source(session, source_id)
+    await _check_csp_tab(session, user, source, tab)
     try:
         written, unknown = sheets.update_row(
             _spreadsheet(source), tab, row_number, body.cells)
@@ -334,9 +399,10 @@ async def add_row(
     tab: str,
     body: RowIn,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     source = await _source(session, source_id)
+    await _check_csp_tab(session, user, source, tab)
     try:
         row_number, unknown = sheets.append_row(
             _spreadsheet(source), tab, body.cells)
@@ -354,7 +420,7 @@ async def remove_row(
     tab: str,
     row_number: int,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(require_role(*EDITORS)),
 ):
     """Delete a row, and return what was on it.
 
@@ -363,6 +429,7 @@ async def remove_row(
     Google Sheets' own version history is the real recovery path.
     """
     source = await _source(session, source_id)
+    await _check_csp_tab(session, user, source, tab)
     try:
         removed = sheets.delete_row(_spreadsheet(source), tab, row_number)
     except SheetAdminError as e:

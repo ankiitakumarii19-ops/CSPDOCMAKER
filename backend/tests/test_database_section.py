@@ -129,8 +129,10 @@ def full_record(sync_db, photo_csp):
     return str(doc.id)
 
 
-@pytest.mark.parametrize("role,expected", [("admin", 403), ("rm", 403)])
-async def test_only_the_super_admin_sees_the_database(client, full_record, role, expected):
+# Changed 14 Oct 2026 (No. 104): RMs and Admins see the Database too —
+# every CSP, read-only.
+@pytest.mark.parametrize("role,expected", [("admin", 200), ("rm", 200)])
+async def test_rms_and_admins_see_the_database(client, full_record, role, expected):
     for path in ("/api/admin/database", f"/api/admin/database/{CSP_ID}",
                  f"/api/admin/database/{CSP_ID}/photo/original",
                  f"/api/admin/database/{CSP_ID}/documents/{full_record}"):

@@ -82,15 +82,17 @@ async def get_csp_photo(
 ):
     """The CSP's photo as every screen shows it (No. 102): the edited
     passport version, or the photo as obtained while that is not made yet.
-    Whoever may see the CSP may see its photo; 404 when there is none."""
+    404 when there is none.
+
+    Every signed-in RM, Admin and Super Admin may see any CSP's photo: the
+    Database and Sheets screens show every CSP to all three (decided 14 Oct
+    2026, No. 104), so limiting the photo to an RM's own CSPs only left
+    empty boxes beside records they can already read."""
     from fastapi import Response
 
     from app.models.csp_photo import ORIGINAL, PASSPORT, CSPPhoto
 
     query = select(CSPRecord.csp_id).where(CSPRecord.csp_id == csp_id)
-    scope = csp_access.accessible_filter(current_user)
-    if scope is not None:
-        query = query.where(scope)
     if (await db.execute(query)).scalar_one_or_none() is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
                             detail=f"CSP with ID '{csp_id}' not found.")

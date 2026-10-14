@@ -210,9 +210,10 @@ async def test_the_owner_can_read_the_agents_run_history(client):
     assert "runs" in response.json()
 
 
-async def test_an_admin_can_still_use_the_agents(client):
-    """Restricting the history must not take the screen away from Admins."""
+async def test_the_agents_are_the_super_admins_alone(client):
+    """Changed 14 Oct 2026 (No. 104): Admins no longer see the agents."""
     for path in ("/api/admin/agents", "/api/admin/agents/findings"):
         response = await client.get(path, headers=_auth("admin"))
-        assert response.status_code == 200, (
-            f"an Admin lost access to {path}")
+        assert response.status_code == 403, f"an Admin reached {path}"
+        response = await client.get(path, headers=_auth("super_admin"))
+        assert response.status_code == 200, f"the Super Admin lost {path}"

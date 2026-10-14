@@ -61,6 +61,10 @@ OWNER_ONLY = [
     ("POST", "/api/admin/agents/setup/run"),
     ("POST", "/api/admin/agents/findings/not-a-uuid/accept"),
     ("POST", "/api/admin/agents/findings/not-a-uuid/reject"),
+    # Since 14 Oct 2026 (No. 104) the agents are the Super Admin's alone —
+    # Admins no longer even see them.
+    ("GET", "/api/admin/agents"),
+    ("GET", "/api/admin/agents/findings"),
 ]
 
 # Looking at what already happened.
@@ -69,8 +73,6 @@ MONITORING = [
     "/api/admin/csp-filters",
     "/api/admin/csp-list",
     "/api/admin/dashboards",
-    "/api/admin/agents",
-    "/api/admin/agents/findings",
 ]
 
 # Reading records. An Owner must see at least what an Admin sees.
