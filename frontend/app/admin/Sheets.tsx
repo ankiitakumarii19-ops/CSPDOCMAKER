@@ -25,6 +25,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
 import type { ApiError, SheetSource, SheetTabData } from "../lib/api";
 import { withBase } from "../lib/basePath";
@@ -447,7 +448,11 @@ export default function Sheets() {
                                   className="w-40 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
                                 />
                               ) : (
-                                <Cell column={c} value={row.cells[c]} />
+                                <Cell
+                                  column={c}
+                                  value={row.cells[c]}
+                                  cspCode={row.cells["CSP Code"]}
+                                />
                               )}
                             </td>
                           ))}
@@ -689,8 +694,24 @@ function Field({
 
 /** A Photo cell names a file. Showing the path tells a person nothing, so
  *  the picture itself is fetched and shown. Anything that is not an image
- *  path falls through to plain text. */
-function Cell({ column, value }: { column: string; value: string }) {
+ *  path falls through to plain text.
+ *
+ *  In a CSP tab the Photo column shows the app's photo of that row's CSP —
+ *  the passport version (No. 102). Google returns a cell holding a picture
+ *  as empty, so the cell alone could never show it. */
+function Cell({
+  column,
+  value,
+  cspCode,
+}: {
+  column: string;
+  value: string;
+  cspCode?: string;
+}) {
+  const code = (cspCode || "").trim();
+  if (column.trim().toLowerCase() === "photo" && code) {
+    return <CspPhoto cspId={code} className="h-16 w-[50px]" />;
+  }
   const text = (value || "").trim();
   if (!text) return <span className="text-gray-300 dark:text-gray-600"></span>;
 

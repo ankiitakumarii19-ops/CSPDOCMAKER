@@ -21,8 +21,14 @@ because Google cannot reach a laptop.
 
 The app also **reads** the Photo column. When it has no photo for a CSP, it
 takes the picture in that CSP's own row, in the Photo column of KOData or
-SUBKOData — as soon as an RM asks for an ID Card, and on the regular run
-that finishes waiting requests. Nothing to switch on.
+SUBKOData — every 15 minutes on its own (No. 102; `SHEET_PHOTO_MINUTES`),
+and at once when an RM asks for an ID Card. Nothing to switch on.
+
+Every photo — from the sheet, an RM's upload on the CSP's card, or the CSP's
+own form — is edited to the passport version (white background, 35 × 45 mm)
+and that is what every screen shows: the RM's CSP card, the admin search,
+the Database page and the Sheets page. The Photo cell in the sheet is then
+updated to the passport version too (below); the original is kept in the app.
 
 * Put **one** picture in the CSP's Photo cell, in that CSP's row. A cell
   with two pictures is not used (the app cannot tell whose it is).

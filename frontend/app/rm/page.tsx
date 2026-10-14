@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
+import CspPhoto from "../components/CspPhoto";
 import { api, DOCUMENT_TYPES } from "../lib/api";
 import type { ApiError, CSPDetail, DocumentTypeKey } from "../lib/api";
 import { useSessionUser } from "../lib/useSessionUser";
@@ -80,6 +81,10 @@ export default function RMDashboard() {
   const [results, setResults] = useState<CSPDetail[]>([]);
   const [csp, setCsp] = useState<CSPDetail | null>(null);
   const [searchError, setSearchError] = useState("");
+  // The CSP's photo on their card, and an RM's upload of one (No. 102).
+  const [photoVersion, setPhotoVersion] = useState(0);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoMessage, setPhotoMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [searching, setSearching] = useState(false);
 
   const [selectedDocs, setSelectedDocs] = useState<DocumentTypeKey[]>([]);
@@ -171,6 +176,26 @@ export default function RMDashboard() {
       setSearchError((err as ApiError).detail || "Search failed.");
     } finally {
       setSearching(false);
+    }
+  };
+
+  /** An RM's photo for this CSP: edited to passport size by the server and
+   *  then shown here, in the sheet and on every screen (No. 102). */
+  const uploadCspPhoto = async (file?: File) => {
+    if (!csp || !file) return;
+    setUploadingPhoto(true);
+    setPhotoMessage(null);
+    try {
+      await api.uploadPhoto(csp.csp_id, file);
+      setPhotoVersion((n) => n + 1);
+      setPhotoMessage({ ok: true, text: "Photo saved and edited to passport size." });
+    } catch (err) {
+      setPhotoMessage({
+        ok: false,
+        text: (err as ApiError).detail || "The photo could not be uploaded.",
+      });
+    } finally {
+      setUploadingPhoto(false);
     }
   };
 
@@ -455,9 +480,41 @@ export default function RMDashboard() {
                       </span>
                     </div>
                     <div className="p-4 flex flex-col items-center border-b border-gray-200 dark:border-gray-700">
-                      <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-full mb-3 flex items-center justify-center overflow-hidden">
-                        <i className="fas fa-user text-3xl text-gray-400"></i>
-                      </div>
+                      <CspPhoto
+                        key={`${csp.csp_id}-${photoVersion}`}
+                        cspId={csp.csp_id}
+                        className="w-[84px] h-[108px]"
+                      />
+                      <label
+                        className={`mt-2 mb-3 text-xs font-medium text-eko hover:underline cursor-pointer ${
+                          uploadingPhoto ? "opacity-50 pointer-events-none" : ""
+                        }`}
+                      >
+                        <i className="fas fa-camera mr-1"></i>
+                        {uploadingPhoto ? "Uploading… (editing the photo)" : "Upload photo"}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            // Cleared so choosing the same file again still uploads.
+                            e.target.value = "";
+                            uploadCspPhoto(file);
+                          }}
+                        />
+                      </label>
+                      {photoMessage && (
+                        <p
+                          className={`-mt-2 mb-3 text-xs text-center ${
+                            photoMessage.ok
+                              ? "text-green-600 dark:text-green-400"
+                              : "text-red-600 dark:text-red-400"
+                          }`}
+                        >
+                          {photoMessage.text}
+                        </p>
+                      )}
                       <h4 className="font-bold text-lg text-gray-900 dark:text-white">
                         {csp.name}
                       </h4>

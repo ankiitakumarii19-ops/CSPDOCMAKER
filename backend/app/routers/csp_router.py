@@ -74,6 +74,38 @@ async def search_csps(
         )
 
 
+@router.get("/{csp_id}/photo")
+async def get_csp_photo(
+    csp_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: dict = Depends(require_any_role),
+):
+    """The CSP's photo as every screen shows it (No. 102): the edited
+    passport version, or the photo as obtained while that is not made yet.
+    Whoever may see the CSP may see its photo; 404 when there is none."""
+    from fastapi import Response
+
+    from app.models.csp_photo import ORIGINAL, PASSPORT, CSPPhoto
+
+    query = select(CSPRecord.csp_id).where(CSPRecord.csp_id == csp_id)
+    scope = csp_access.accessible_filter(current_user)
+    if scope is not None:
+        query = query.where(scope)
+    if (await db.execute(query)).scalar_one_or_none() is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"CSP with ID '{csp_id}' not found.")
+
+    rows = {p.kind: p for p in (await db.execute(
+        select(CSPPhoto).where(CSPPhoto.csp_id == csp_id))).scalars().all()}
+    photo = rows.get(PASSPORT) or rows.get(ORIGINAL)
+    if photo is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"No photo for CSP {csp_id} yet.")
+    return Response(photo.file_data, media_type=photo.content_type,
+                    headers={"Cache-Control": "private, no-store",
+                             "X-Photo-Kind": photo.kind})
+
+
 @router.get("/{csp_id}", response_model=CSPDetailResponse)
 async def get_csp(
     csp_id: str,

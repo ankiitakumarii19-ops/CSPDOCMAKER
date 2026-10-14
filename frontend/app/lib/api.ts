@@ -844,6 +844,21 @@ class ApiClient {
   }
 
   /** A stored photo or PDF, fetched with the login so it can be shown. */
+  /** The CSP's photo as every screen shows it — the passport version — or
+   *  null when the app has none yet (No. 102). */
+  async cspPhoto(cspId: string): Promise<Blob | null> {
+    const path = `/csps/${encodeURIComponent(cspId)}/photo`;
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not load the photo");
+    }
+    return response.blob();
+  }
+
   async databaseFile(cspId: string, part: string): Promise<Blob> {
     const path = `/admin/database/${encodeURIComponent(cspId)}/${part}`;
     const token = this.getToken();

@@ -27,7 +27,8 @@ import logging
 import time
 from typing import Dict, List
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Request, UploadFile, status)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -98,6 +99,9 @@ class Submission(BaseModel):
     values: Dict[str, str] = Field(default_factory=dict)
 
 
+PHOTO_ON_FILE = "on file"
+
+
 def _gone() -> HTTPException:
     return HTTPException(status.HTTP_404_NOT_FOUND,
                          {"message": GONE, "message_hi": GONE_HI})
@@ -137,6 +141,11 @@ async def _csp(session: AsyncSession, csp_id: str):
 
 def _field_payload(record, field: str) -> dict:
     value = getattr(record, field, None)
+    if field == "photo_url":
+        # Whether a usable photo is on file — never the server's file path,
+        # which is nobody's business on a public page (No. 102).
+        from app.services import csp_photo_store
+        value = PHOTO_ON_FILE if csp_photo_store.original_path(record) else ""
     return {
         "name": field,
         "label": fo.LABELS.get(field, field),
@@ -221,7 +230,10 @@ async def submit_form(
         record = await _csp(session, request_row.csp_id)
 
         allowed = set(request_row.fields or [])
-        offered = {k: (v or "").strip() for k, v in (body.values or {}).items()}
+        # The photo arrives through its own upload (/photo), never as text:
+        # what the page holds for it is only "on file" or blank.
+        offered = {k: (v or "").strip() for k, v in (body.values or {}).items()
+                   if k != "photo_url"}
         unexpected = sorted(set(offered) - allowed)
         if unexpected:
             raise HTTPException(
@@ -271,4 +283,70 @@ async def submit_form(
         ),
         # Never surfaced to the CSP as a failure — it is not their problem.
         "sheet_pending": bool(sheet_error),
+    }
+
+
+@router.post("/{token}/photo")
+async def upload_own_photo(
+    token: str,
+    request: Request,
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+):
+    """The CSP sends their own photograph (No. 102).
+
+    Taken in exactly as the sheet's and an RM's are (photo_intake.accept):
+    it becomes their photo, the passport version is made, both are kept,
+    and the sheet shows it. Only on a link that asks for the photo, and
+    only while the link is open — so it comes before the form is submitted.
+    """
+    import asyncio
+    import os
+    import uuid
+
+    from app.services import (
+        csp_photo_service, photo_intake, sheet_photo, studio_photo)
+    from app.services.document_service import _safe_folder_name
+    from app.workspace_context import all_workspaces, workspace
+
+    _guard(request, token)
+    with all_workspaces():
+        request_row = await _resolve(session, token)
+    if "photo_url" not in (request_row.fields or []):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "This form does not ask for a photo.")
+
+    data = await file.read()
+    try:
+        extension = photo_intake.check_image(data)
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from e
+
+    with workspace(request_row.workspace_id):
+        record = await _csp(session, request_row.csp_id)
+        path = os.path.join(
+            csp_photo_service.photo_directory(),
+            f"{_safe_folder_name(record.csp_id)}_csp_{uuid.uuid4().hex[:8]}"
+            f"{extension}")
+        with open(path, "wb") as fh:
+            fh.write(data)
+        # The edit takes a few seconds: made off the request loop first,
+        # so accept() finds it ready.
+        passport = await asyncio.to_thread(studio_photo.make, path)
+        changed = await session.run_sync(
+            lambda sync: photo_intake.accept(sync, record, path))
+        await session.commit()
+        csp_id = record.csp_id
+
+    if changed:
+        # Shown in the sheet (No. 91). Never raises.
+        await asyncio.to_thread(sheet_photo.push, csp_id,
+                                request_row.workspace_id)
+    logger.info("csp_form_router.upload_own_photo: CSP %s sent a photo "
+                "(passport version %s)", csp_id,
+                "made" if passport else "NOT made")
+    return {
+        "received": True,
+        "message": "Thank you. Your photo has been received.",
+        "message_hi": "धन्यवाद। आपकी फ़ोटो प्राप्त हो गई है।",
     }

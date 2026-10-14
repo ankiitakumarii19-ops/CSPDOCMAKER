@@ -11,6 +11,7 @@
 
 import { useEffect, useState } from "react";
 
+import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
 import type { ApiError, DatabaseRecord, DatabaseRow } from "../lib/api";
 
@@ -194,7 +195,7 @@ export default function Database() {
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{show(r.rm_name)}</td>
                 <td className="px-4 py-3">
                   {r.photo.length ? (
-                    <i className="fas fa-circle-check text-green-500" title="Photo stored" />
+                    <CspPhoto cspId={r.csp_id} className="w-[35px] h-[45px]" />
                   ) : (
                     <span className="text-gray-400">—</span>
                   )}

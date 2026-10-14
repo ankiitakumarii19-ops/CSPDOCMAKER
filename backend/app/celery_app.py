@@ -75,6 +75,12 @@ celery_app.conf.update(
                 "expires": (settings.csp_sync_interval_minutes + 2) * 60 - 5
             },
         },
+        # The pictures in the CSP sheet's Photo column (No. 102).
+        "import-sheet-photos": {
+            "task": "workers.import_sheet_photos",
+            "schedule": settings.sheet_photo_minutes * 60,
+            "options": {"expires": settings.sheet_photo_minutes * 60 - 5},
+        },
         # The agents are added below, from the registry.
     },
 )
@@ -116,6 +122,7 @@ celery_app.conf.include = [
     "app.workers.csp_sync_worker",
     "app.workers.new_csp_worker",
     "app.workers.pending_request_worker",
+    "app.workers.sheet_photo_worker",
     "app.workers.agent_worker",
 ]
 

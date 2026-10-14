@@ -66,6 +66,11 @@ export default function CSPDetailsForm({
   const [gone, setGone] = useState<{ en: string; hi: string } | null>(null);
   const [error, setError] = useState("");
   const [done, setDone] = useState<{ en: string; hi: string } | null>(null);
+  // The CSP's own photo, sent the moment it is chosen (No. 102) — the link
+  // stops working once the form is submitted, so it cannot wait for that.
+  const [photo, setPhoto] = useState<
+    { status: "idle" } | { status: "sending" } | { status: "sent"; en: string; hi: string } | { status: "failed"; text: string }
+  >({ status: "idle" });
 
   const load = useCallback(async () => {
     try {
@@ -127,6 +132,35 @@ export default function CSPDetailsForm({
 
   const set = (name: string, value: string) =>
     setValues((v) => ({ ...v, [name]: value }));
+
+  async function sendPhoto(fieldName: string, file?: File) {
+    if (!file) return;
+    setPhoto({ status: "sending" });
+    try {
+      // globalThis: this page's own FormData type hides the browser's.
+      const body = new globalThis.FormData();
+      body.append("file", file);
+      const response = await fetch(
+        withBase(`/api/csp-form/${encodeURIComponent(token)}/photo`),
+        { method: "POST", body }
+      );
+      const answer = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setPhoto({
+          status: "failed",
+          text:
+            typeof answer?.detail === "string"
+              ? answer.detail
+              : answer?.detail?.message ?? "The photo could not be sent. Please try again.",
+        });
+        return;
+      }
+      set(fieldName, "on file");
+      setPhoto({ status: "sent", en: answer.message, hi: answer.message_hi });
+    } catch {
+      setPhoto({ status: "failed", text: "Could not reach the server. Please try again." });
+    }
+  }
 
   // ---- states before the form ------------------------------------------
 
@@ -240,11 +274,41 @@ export default function CSPDetailsForm({
                   className="mt-1 w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-eko"
                 />
               ) : field.type === "photo" ? (
-                <p className="mt-1 text-sm text-gray-500">
-                  {values[field.name]
-                    ? "A photograph is already on file / फ़ोटो पहले से उपलब्ध है"
-                    : "No photograph on file — your RM will arrange this / फ़ोटो उपलब्ध नहीं है"}
-                </p>
+                <div className="mt-1 space-y-2">
+                  <p className="text-sm text-gray-500">
+                    {values[field.name]
+                      ? "A photograph is on file. You can send a newer one. / फ़ोटो उपलब्ध है। आप नई फ़ोटो भेज सकते हैं।"
+                      : "Please send a clear photo of your face, facing the camera. / कृपया अपने चेहरे की साफ़ फ़ोटो भेजें, कैमरे की ओर देखते हुए।"}
+                  </p>
+                  <label
+                    className={`inline-block px-4 py-2 text-sm font-medium rounded-lg border border-eko text-eko cursor-pointer hover:bg-eko/10 ${
+                      photo.status === "sending" ? "opacity-50 pointer-events-none" : ""
+                    }`}
+                  >
+                    <i className="fas fa-camera mr-2"></i>
+                    {photo.status === "sending"
+                      ? "Sending… / भेजा जा रहा है…"
+                      : "Choose or take a photo / फ़ोटो चुनें या लें"}
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        sendPhoto(field.name, file);
+                      }}
+                    />
+                  </label>
+                  {photo.status === "sent" && (
+                    <p className="text-sm text-green-700 dark:text-green-400">
+                      {photo.en} / {photo.hi}
+                    </p>
+                  )}
+                  {photo.status === "failed" && (
+                    <p className="text-sm text-red-600 dark:text-red-400">{photo.text}</p>
+                  )}
+                </div>
               ) : (
                 <input
                   type={field.type === "email" ? "email" : "text"}

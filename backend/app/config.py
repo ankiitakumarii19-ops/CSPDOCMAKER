@@ -61,6 +61,10 @@ class Settings(BaseSettings):
     # JWT_ACCESS_TOKEN_EXPIRE_MINUTES (30 minutes), which signed people out
     # mid-work; a leftover value of that in an env file is ignored.
     session_hours: int = Field(default=24, alias="SESSION_HOURS")
+
+    # How often the app takes the pictures in the CSP sheet's Photo column
+    # for CSPs it has no photo for (No. 102).
+    sheet_photo_minutes: int = Field(default=15, alias="SHEET_PHOTO_MINUTES")
     jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
 
     # ---- OTP ----

@@ -172,20 +172,27 @@ async def upload_photo(
     photo_path = os.path.join(photos_dir, photo_filename)
 
     contents = await file.read()
+    from app.services import photo_intake
+    try:
+        photo_intake.check_image(contents)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     with open(photo_path, "wb") as f:
         f.write(contents)
 
-    # Update CSP record
-    csp.photo_url = photo_path
+    # The CSP's photo now, with its passport version made and both kept
+    # with the record — the same path every photo takes (No. 102). The
+    # edit takes a few seconds, so it is made off the request loop first;
+    # accept() then finds it ready.
+    import asyncio
+    from app.services import photo_intake, studio_photo
+    await asyncio.to_thread(studio_photo.make, photo_path)
     session.add(csp)
-    # Keep the photo itself with the CSP's record (No. 89).
-    from app.services import csp_photo_store
     photo_changed = await session.run_sync(
-        lambda sync: csp_photo_store.capture(sync, csp))
+        lambda sync: photo_intake.accept(sync, csp, photo_path))
     await session.commit()
     if photo_changed:
         # Shown in the CSP sheet (No. 91). Never raises.
-        import asyncio
         from app.services import sheet_photo
         from app.workspace_context import current_workspace_id
         await asyncio.to_thread(sheet_photo.push, csp.csp_id,

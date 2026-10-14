@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
 import type { ApiError, CSPDetail } from "../lib/api";
 
@@ -208,6 +209,12 @@ export default function CspSearch() {
 
             {csp && summary && (
               <>
+                <div className="px-5 pt-4 flex items-center gap-4">
+                  <CspPhoto cspId={csp.csp_id} />
+                  <p className="text-xs text-gray-500">
+                    Passport-size photo, as printed on the documents.
+                  </p>
+                </div>
                 <dl className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   {[
                     ["Branch", [csp.branch_name, csp.branch_code].filter(Boolean).join(", ")],
