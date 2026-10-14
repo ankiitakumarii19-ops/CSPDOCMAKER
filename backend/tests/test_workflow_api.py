@@ -6,6 +6,8 @@ persistence of DocumentJob / ValidationResult / EmailJob, job ownership and
 the admin monitor-only rule.
 """
 
+import os
+
 import pytest
 from sqlalchemy import select, func
 
@@ -452,3 +454,21 @@ async def test_a_generation_failure_tells_the_rm_why(client, db, csp, monkeypatc
     job = (await db.execute(select(ProcessingJob))).scalar_one()
     assert job.current_state == JobState.FAILED_DOCUMENT_GENERATION
     assert "the template is damaged" in job.error_message
+
+
+async def test_the_documents_made_are_filed_in_the_csps_folder(
+        client, db, csp, tmp_path, monkeypatch):
+    """Tracker No. 105: every document made is a file in documents/<code>/."""
+    from app.config import get_settings
+    folder = tmp_path / "documents"
+    monkeypatch.setattr(get_settings(), "documents_archive_dir", str(folder))
+
+    rm = await _user(db, "rm1@eko.co.in")
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "TESTCSP001", "document_types": ["csp_certificate"]},
+    )
+    assert r.status_code == 200, r.text
+    files = os.listdir(folder / "TESTCSP001")
+    assert len(files) == 1 and files[0].endswith(" v1.pdf"), files
+    assert (folder / "TESTCSP001" / files[0]).read_bytes().startswith(b"%PDF-")

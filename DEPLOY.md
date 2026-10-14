@@ -208,6 +208,34 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec
 docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec api python scripts/check_whatsapp.py
 ```
 
+**Every document as a file** (No. 105). Besides the database, every PDF the
+app makes is saved in the `documents` folder inside the app folder, one
+folder per CSP code: `documents/1A850395/CSP ID Card v2.pdf`. Documents made
+earlier are written within 15 minutes of the app starting. The app runs as
+user 1000 inside Docker, so the folder must be writable by it — once:
+
+```bash
+mkdir -p documents
+sudo chown 1000:1000 documents      # or, without sudo: chmod 777 documents
+ls documents                         # one folder per CSP code
+```
+
+If a document cannot be written there the reason is in the log
+(`document_archive: could not save ...`); the document is still safe in the
+database and is written on a later run once the folder is fixed.
+
+**Looking at the database itself:**
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec postgres psql -U cspdocmaker cspdocmaker
+```
+
+then, for example, `\dt` (the tables), `select csp_id, name, district from
+csp_records;` or `select csp_id, document_type, version, created_at from
+stored_documents order by created_at desc limit 20;` — and `\q` to leave.
+In the app, the **Database** page shows the same: every CSP's record, photo
+and documents.
+
 **Backups** of the database (documents are stored in it):
 
 ```bash

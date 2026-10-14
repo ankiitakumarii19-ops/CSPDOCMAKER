@@ -65,6 +65,10 @@ class Settings(BaseSettings):
     # How often the app takes the pictures in the CSP sheet's Photo column
     # for CSPs it has no photo for (No. 102).
     sheet_photo_minutes: int = Field(default=15, alias="SHEET_PHOTO_MINUTES")
+
+    # Every document as a file too, one folder per CSP code (No. 105). On the
+    # server: the `documents` folder in the app's folder. Blank = off.
+    documents_archive_dir: str = Field(default="", alias="DOCUMENTS_ARCHIVE_DIR")
     jwt_refresh_token_expire_days: int = Field(default=7, alias="JWT_REFRESH_TOKEN_EXPIRE_DAYS")
 
     # ---- OTP ----

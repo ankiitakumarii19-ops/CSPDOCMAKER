@@ -34,8 +34,12 @@ x-backend: &backend
     LIBREOFFICE_PATH: ""
     GOOGLE_SHEETS_CREDENTIALS_FILE: /app/backend/credentials/google_service_account.json
     GMAIL_CREDENTIALS_FILE: /app/backend/credentials/gmail_service_account.json
+    # Every document as a file, one folder per CSP code (No. 105): the
+    # `documents` folder next to this file, on the server itself.
+    DOCUMENTS_ARCHIVE_DIR: /app/documents
   volumes:
     - ./backend/credentials:/app/backend/credentials:ro
+    - ./documents:/app/documents
     - documents:/app/backend/generated_documents
     - logs:/app/backend/logs
     - models:/app/backend/app/assets/models

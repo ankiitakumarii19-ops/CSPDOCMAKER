@@ -329,7 +329,7 @@ async def process_workflow(
 
     pdf_by_docx = dict(converted)
     try:
-        await document_storage_service.store_generated_documents_async(
+        stored_rows = await document_storage_service.store_generated_documents_async(
             session=session,
             csp_id=csp.csp_id,
             pairs=[(doc_type, path, pdf_by_docx[path]) for doc_type, path in generated],
@@ -351,6 +351,12 @@ async def process_workflow(
     # Only the PDF is kept (No. 87); the working DOCX is no longer needed.
     document_storage_service.discard_working_files(
         [path for _, path in generated])
+    # And as a file in the CSP's folder (No. 105) — once the response has
+    # gone, i.e. after the commit. Never raises.
+    from app.services import document_archive
+    background.add_task(document_archive.save_all, [
+        (r.csp_id, r.document_type, r.version, r.file_data)
+        for r in stored_rows])
     # The photo used on these documents joins the CSP's record (No. 89).
     from app.services import csp_photo_store
     photo_changed = await session.run_sync(

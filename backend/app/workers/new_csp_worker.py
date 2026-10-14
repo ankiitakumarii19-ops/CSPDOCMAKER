@@ -248,12 +248,15 @@ def _process_one(session, csp, document_types, job=None) -> None:
     # and the processed stamp must land in ONE transaction, or a crash between
     # them would leave a CSP that looks unprocessed but already has documents,
     # and the next run would email them a second time.
+    stored_rows = []
     for doc_type, docx_path in generated:
         version = document_storage_service.next_version(
             session, csp.csp_id, doc_type)
-        session.add(document_storage_service.build_pdf_row(
+        row = document_storage_service.build_pdf_row(
             csp.csp_id, doc_type, converted[docx_path], version,
-            processing_job_id=job.id))
+            processing_job_id=job.id)
+        session.add(row)
+        stored_rows.append(row)
         session.flush()
     # The photo (original + passport version) joins the record (No. 89).
     photo_changed = csp_photo_store.capture(session, csp)
@@ -263,6 +266,11 @@ def _process_one(session, csp, document_types, job=None) -> None:
         csp.new_csp_processed_at = datetime.now(timezone.utc)
     alert_service.resolve_alerts(session, csp.csp_id)
     session.commit()
+    # Each PDF as a file in the CSP's folder too (No. 105). Never raises.
+    from app.services import document_archive
+    document_archive.save_all(
+        (r.csp_id, r.document_type, r.version, r.file_data)
+        for r in stored_rows)
     if photo_changed:
         # ... and is shown in the CSP sheet (No. 91). Never raises.
         from app.services import sheet_photo

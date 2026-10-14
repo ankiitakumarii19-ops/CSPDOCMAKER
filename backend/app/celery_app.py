@@ -81,6 +81,12 @@ celery_app.conf.update(
             "schedule": settings.sheet_photo_minutes * 60,
             "options": {"expires": settings.sheet_photo_minutes * 60 - 5},
         },
+        # Every stored PDF as a file in its CSP's folder (No. 105).
+        "archive-documents": {
+            "task": "workers.archive_documents",
+            "schedule": settings.sheet_photo_minutes * 60,
+            "options": {"expires": settings.sheet_photo_minutes * 60 - 5},
+        },
         # The agents are added below, from the registry.
     },
 )

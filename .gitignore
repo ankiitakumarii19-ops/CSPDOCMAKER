@@ -118,3 +118,7 @@ backend/app/assets/models/rembg/
 
 # The laptop .env copied to the server for deploy/make-env.sh (deleted by it)
 deploy/laptop.env
+
+# Every document as a file, one folder per CSP code (No. 105) — customer
+# documents, kept on the server only, never in git
+/documents/

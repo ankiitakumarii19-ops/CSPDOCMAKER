@@ -120,3 +120,30 @@ def run(session) -> dict:
                 len(taken), len(edited), len(still_missing), len(failed))
     return {"taken": len(taken), "edited": len(edited),
             "without_photo": len(still_missing), "failed": len(failed)}
+
+
+@celery_app.task(
+    name="workers.archive_documents",
+    bind=True,
+    max_retries=1,
+    default_retry_delay=300,
+)
+@for_each_workspace
+def archive_documents(self):
+    """Write every stored PDF the documents folder lacks (No. 105)."""
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from app.config import get_settings
+    from app.services import document_archive
+
+    settings = get_settings()
+    engine = create_engine(
+        settings.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://")
+    )
+    try:
+        with Session(engine) as session:
+            return document_archive.export_missing(session)
+    finally:
+        engine.dispose()
