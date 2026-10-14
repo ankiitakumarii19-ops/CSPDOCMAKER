@@ -17,6 +17,23 @@ is the passport version once documents have been made, otherwise the photo as
 obtained. This works on the server (indev.eko.in); a laptop copy cannot do it
 because Google cannot reach a laptop.
 
+## Photos you put in the sheet (tracker No. 99)
+
+The app also **reads** the Photo column. When it has no photo for a CSP, it
+takes the picture in that CSP's own row, in the Photo column of KOData or
+SUBKOData — as soon as an RM asks for an ID Card, and on the regular run
+that finishes waiting requests. Nothing to switch on.
+
+* Put **one** picture in the CSP's Photo cell, in that CSP's row. A cell
+  with two pictures is not used (the app cannot tell whose it is).
+* A picture in another column, or in a row with no CSP Code, is not used.
+* No picture anywhere: the request waits and the CSP is asked for the
+  details that are missing, the photo among them. Add the picture and the
+  documents are made and sent on the next run.
+
+Once the app has a photo it keeps it; changing the picture in the sheet
+later does not replace it (use `set_photo.py` below for that).
+
 ## One-time set-up of the sheet script
 
 1. Open the CSP sheet → **Extensions → Apps Script**.

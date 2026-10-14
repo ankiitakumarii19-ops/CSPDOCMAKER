@@ -364,3 +364,91 @@ async def test_a_sub_kos_bcp_alone_is_refused_plainly(client, db):
     )
     assert r.status_code == 400
     assert "KO only" in r.json()["detail"]
+
+
+async def _complete_csp(db, csp_id):
+    """A CSP with every detail an ID Card and a CSP Certificate need, except
+    the photo."""
+    from app.models.enums import DocumentType
+    from app.services import csp_mapping
+    record = CSPRecord(csp_id=csp_id, csp_code=csp_id, name="Sheet Photo Csp",
+                       email="sheet.photo@example.com")
+    fields = set(csp_mapping.required_fields_for(DocumentType.CSP_ID_CARD)) | set(
+        csp_mapping.required_fields_for(DocumentType.CSP_CERTIFICATE))
+    for field in sorted(fields):
+        attr = csp_mapping.FIELD_TO_CSP_ATTR.get(field)
+        if attr and field != "photo" and not getattr(record, attr, None):
+            setattr(record, attr, "9876543210" if "mobile" in field else "Test")
+    db.add(record)
+    await db.commit()
+    return record
+
+
+async def test_an_id_card_uses_the_photo_in_the_sheet(client, db, monkeypatch, tmp_path):
+    """Tracker No. 99: the photo was in the sheet's Photo cell but the app
+    never read it, so the ID Card failed with 'no usable photo'."""
+    import io
+    from PIL import Image
+    from app.config import get_settings
+    from app.services import csp_photo_service, sheet_photo_reader
+
+    monkeypatch.setattr(get_settings(), "photo_placeholder_allowed", False)
+    monkeypatch.setattr(csp_photo_service, "photo_directory", lambda: str(tmp_path))
+    buf = io.BytesIO()
+    Image.new("RGB", (350, 450), "white").save(buf, "JPEG")
+    found = sheet_photo_reader.SheetPhotos(
+        pictures={"1A000099": sheet_photo_reader.SheetPicture(
+            data=buf.getvalue(), extension=".jpg", tab="KOData", row=2)},
+        ambiguous={}, codes={"1A000099"})
+    monkeypatch.setattr(sheet_photo_reader, "sheet_photos", lambda refresh=False: found)
+    await _complete_csp(db, "1A000099")
+
+    rm = await _user(db, "rm1@eko.co.in")
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "1A000099",
+              "document_types": ["csp_id_card", "csp_certificate"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "awaiting_confirmation", r.json()
+    saved = (await db.execute(select(CSPRecord.photo_url).where(
+        CSPRecord.csp_id == "1A000099"))).scalar_one()
+    assert saved and open(saved, "rb").read() == buf.getvalue()
+
+
+async def test_no_photo_anywhere_waits_for_one_instead_of_failing(client, db, monkeypatch):
+    """Tracker No. 99: a missing photo is missing data — the request is
+    kept and the CSP asked — not a 'Document generation failed'."""
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "photo_placeholder_allowed", False)
+    await _complete_csp(db, "1A000098")
+    rm = await _user(db, "rm1@eko.co.in")
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "1A000098",
+              "document_types": ["csp_id_card", "csp_certificate"]},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "pending_data"
+    assert r.json()["missing_fields"] == ["Photo"]
+
+
+async def test_a_generation_failure_tells_the_rm_why(client, db, csp, monkeypatch):
+    """Tracker No. 99: the screen said only 'Document generation failed.'"""
+    from app.services import document_service
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("Document generation failed for CSP_CERTIFICATE "
+                           "(CSP TESTCSP001): the template is damaged")
+    monkeypatch.setattr(document_service, "generate_documents", boom)
+
+    rm = await _user(db, "rm1@eko.co.in")
+    r = await client.post(
+        "/api/workflows/process", headers=_auth(rm),
+        json={"csp_id": "TESTCSP001", "document_types": ["csp_certificate"]},
+    )
+    assert r.status_code == 500
+    assert "the template is damaged" in r.json()["detail"]["message"]
+    job = (await db.execute(select(ProcessingJob))).scalar_one()
+    assert job.current_state == JobState.FAILED_DOCUMENT_GENERATION
+    assert "the template is damaged" in job.error_message

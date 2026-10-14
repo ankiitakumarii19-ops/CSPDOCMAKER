@@ -84,6 +84,17 @@ def _in_default_workspace(migrated_db):
         yield
 
 
+@pytest.fixture(autouse=True)
+def _no_photos_from_the_real_sheet(monkeypatch):
+    """Getting a photo tries the live CSP sheet first (No. 99). Tests never
+    download it: the sheet holds no photos unless a test says otherwise."""
+    from app.services import sheet_photo_reader
+    empty = sheet_photo_reader.SheetPhotos(pictures={}, ambiguous={},
+                                           codes=set())
+    monkeypatch.setattr(sheet_photo_reader, "sheet_photos",
+                        lambda refresh=False: empty)
+
+
 @pytest.fixture
 async def db(migrated_db):
     from sqlalchemy import text

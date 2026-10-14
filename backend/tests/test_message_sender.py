@@ -171,12 +171,16 @@ async def test_nobody_is_asked_twice_while_being_waited_on(db, sent):
     assert len(sent) == 1, "they were messaged twice"
 
 
-async def test_a_csp_missing_nothing_is_not_asked(db, sent):
+async def test_a_csp_missing_nothing_is_not_asked(db, sent, tmp_path):
     # Every field the CSP owns, including the branch name and code — and,
     # since 11 Oct 2026 (tracker No. 53), the bank/organisation details too,
     # because the CSP is now asked for those when INFO cannot fill them.
+    # The photo is a real file: a path with nothing behind it is no photo
+    # (No. 99).
+    photo = tmp_path / "p.png"
+    photo.write_bytes(b"photo")
     record = _csp(db, gender="Female", address="A", district="D", state="S",
-                  branch_name="B", branch_code="BR01", photo_url="p.png",
+                  branch_name="B", branch_code="BR01", photo_url=str(photo),
                   ao="AO", dc="DC", dc_email="dc@eko.co.in",
                   dc_contact="9000000000", lho="Patna", rm_name="RM",
                   asm_name="ASM", asm_email="asm@eko.co.in",

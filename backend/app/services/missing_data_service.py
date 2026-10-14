@@ -67,6 +67,12 @@ def _current_value(csp: CSPRecord, field: str) -> str:
         # there is never nothing to print and this is never missing data.
         made_on = csp_mapping.effective_certificate_date(csp)
         return made_on.isoformat() if made_on else ""
+    if field == "photo":
+        # A photo counts only if there is a file to print. A path on the
+        # record whose file is gone is no photo: it passed this check and
+        # then failed the ID Card at generation (No. 99).
+        from app.services import csp_photo_store
+        return csp_photo_store.original_path(csp) or ""
     attr = csp_mapping.FIELD_TO_CSP_ATTR.get(field)
     if attr is None:
         return ""

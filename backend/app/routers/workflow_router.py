@@ -187,6 +187,16 @@ async def process_workflow(
     session.add(job)
     await session.flush()
 
+    # The CSP's photo from the sheet's Photo column, if the app has none yet
+    # and a document needs one (No. 99). Without this a photo that is only
+    # in the sheet was never seen and the ID Card failed. The CRM is left to
+    # the pending-request run: it is too slow to wait for here. Off the
+    # request loop: it downloads.
+    from app.services import template_service
+    from app.workers.new_csp_worker import _try_photo
+    if any(dt in template_service.PHOTO_MARKERS for dt in allowed):
+        await asyncio.to_thread(_try_photo, csp, False)
+
     # The agent's AI studio portrait, if it can be made now (No. 70). Run
     # off the request loop: it can take a few seconds.
     from app.services import photo_portrait
@@ -248,13 +258,16 @@ async def process_workflow(
         generated = document_service.generate_documents(
             csp, request.document_types, certificate_date_value=made_on)
     except RuntimeError as e:
+        # The reason goes to the RM, not only into the job: "Document
+        # generation failed." alone told them nothing they could act on.
+        reason = str(e)
         job.current_state = JobState.FAILED_DOCUMENT_GENERATION
-        job.error_message = "Document generation failed."
-        job.error_details = str(e)[:5000]
+        job.error_message = reason[:500]
+        job.error_details = reason[:5000]
         await session.commit()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"message": "Document generation failed.", "job_id": job_id},
+            detail={"message": reason, "job_id": job_id},
         )
 
     # 4. Validate documents

@@ -145,8 +145,11 @@ def process_new_csps(self):
     return summary
 
 
-def _try_photo(csp) -> bool:
-    """Fetch the CSP's photo from the CRM if we do not have one yet.
+def _try_photo(csp, from_crm: bool = True) -> bool:
+    """Get the CSP's photo if we do not have one yet: from the CSP sheet's
+    Photo column first (No. 99 — the picture staff put there), then from
+    the CRM. `from_crm=False` skips the CRM, which downloads whole KYC packs
+    and is too slow to wait for inside an RM's request.
 
     Returns True when the record was changed. A failure here is not an error:
     it simply leaves the photo missing, which the missing-data check then
@@ -154,7 +157,7 @@ def _try_photo(csp) -> bool:
     """
     import os
 
-    from app.services import csp_photo_service
+    from app.services import csp_photo_service, sheet_photo_reader
 
     existing = (csp.photo_url or "").strip()
     if existing and os.path.isfile(existing):
@@ -165,14 +168,20 @@ def _try_photo(csp) -> bool:
         csp.photo_url = stored
         return False
 
-    result = csp_photo_service.fetch_photo(csp)
-    if result.ok:
-        csp.photo_url = result.path
-        logger.info("new_csp_worker: CSP %s — %s", csp.csp_id, result.message)
-        return True
+    reasons = []
+    sources = (sheet_photo_reader, csp_photo_service) if from_crm else (
+        sheet_photo_reader,)
+    for source in sources:
+        result = source.fetch_photo(csp)
+        if result.ok:
+            csp.photo_url = result.path
+            logger.info("new_csp_worker: CSP %s — %s", csp.csp_id,
+                        result.message)
+            return True
+        reasons.append(result.message)
 
     logger.info("new_csp_worker: CSP %s — no photo: %s",
-                csp.csp_id, result.message)
+                csp.csp_id, " / ".join(reasons))
     return False
 
 

@@ -27,6 +27,7 @@ from the templates. This decides only who is asked.
 """
 
 import logging
+import os
 from typing import Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
@@ -262,6 +263,13 @@ def input_type_of(field: str) -> str:
 
 
 def _is_blank(record, field: str) -> bool:
+    if field == "photo_url":
+        # A path whose file is gone is no photo (No. 99): ask for one.
+        from app.services import csp_photo_store
+        if not getattr(record, "csp_id", None):
+            photo = (getattr(record, "photo_url", None) or "").strip()
+            return not (photo and os.path.isfile(photo))
+        return csp_photo_store.original_path(record) is None
     value = getattr(record, field, None)
     return not (str(value).strip() if value is not None else "")
 
