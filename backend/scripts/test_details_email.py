@@ -130,6 +130,9 @@ def main() -> int:
             return 1
 
         name = record.name or record.csp_id
+        # Kept as plain values: after the commit below the record can no
+        # longer be read once the session closes (DetachedInstanceError).
+        csp_id, csp_name = record.csp_id, record.name or ""
         results = []
 
         if a.to:
@@ -165,7 +168,7 @@ def main() -> int:
             request.sent_via = "test"
             db.commit()
 
-    print(f"Test of the '{a.message}' message for {record.csp_id} ({record.name}) — "
+    print(f"Test of the '{a.message}' message for {csp_id} ({csp_name}) — "
           f"missing: {', '.join(fo.label_of(f) for f in fields)}")
     for via, to, sent, why, job_id in results:
         if sent:
