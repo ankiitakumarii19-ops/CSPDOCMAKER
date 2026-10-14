@@ -8,6 +8,7 @@ import DocumentTemplates from "./DocumentTemplates";
 import AccessControl from "./AccessControl";
 import Sheets from "./Sheets";
 import Database from "./Database";
+import CspSearch from "./CspSearch";
 import Agents from "./Agents";
 import Messaging from "./Messaging";
 import DashboardView from "./DashboardView";
@@ -116,7 +117,6 @@ export default function AdminDashboard() {
   // like the click did nothing. Bring it into view instead.
   const drillRef = useRef<HTMLDivElement | null>(null);
   const [drilling, setDrilling] = useState(false);
-  const [globalSearch, setGlobalSearch] = useState("");
 
   useEffect(() => {
     if (user === undefined) return;
@@ -343,16 +343,7 @@ export default function AdminDashboard() {
         <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
           <div className="flex items-center gap-4 w-1/3">
             <i className="fas fa-bars text-gray-500 md:hidden text-xl"></i>
-            <div className="relative w-full hidden sm:block">
-              <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 text-sm"></i>
-              <input
-                type="text"
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                className="w-full pl-9 pr-4 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-1 focus:ring-eko dark:text-white outline-none text-sm"
-                placeholder="Global search CSP ID..."
-              />
-            </div>
+            <CspSearch />
           </div>
           <div className="flex items-center gap-4">
             <button

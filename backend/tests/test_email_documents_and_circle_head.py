@@ -188,3 +188,53 @@ async def test_deleting_the_email_deletes_its_document_rows(db):
         .where(EmailDocument.email_job_id == email_id)
     )).scalar()
     assert left == 0
+
+
+# ---- the admin search's CSP panel (No. 101) -----------------------------
+
+async def test_the_csp_panel_says_where_each_document_stands(client, db, admin_headers):
+    """The top-bar search opens one CSP: details, and per document whether
+    it was made and mailed — decided as the dashboard decides it."""
+    import hashlib
+    from app.models.enums import DocumentFormat
+    from app.models.stored_document import StoredDocument
+
+    await _job_with_email(db, "1A900001", EmailStatus.SENT,
+                          [DocumentType.CSP_ID_CARD])
+    job = ProcessingJob(job_id=f"JOB-{uuid.uuid4().hex[:8]}", csp_id="1A900001",
+                        workflow_type=WorkflowType.NEW_CSP,
+                        current_state=JobState.EMAIL_SENT)
+    db.add(job)
+    await db.flush()
+    failed = EmailJob(processing_job_id=job.id, recipient="csp@example.com",
+                      subject="Your CSP Documents", status=EmailStatus.FAILED)
+    failed.documents = [EmailDocument(document_type=DocumentType.CSP_CERTIFICATE)]
+    db.add(failed)
+    pdf = b"%PDF-1.4 test"
+    db.add(StoredDocument(
+        csp_id="1A900001", document_type=DocumentType.CSP_ID_CARD,
+        file_format=DocumentFormat.PDF, version=2, filename="ID.pdf",
+        content_type="application/pdf", file_data=pdf, file_size=len(pdf),
+        checksum=hashlib.sha256(pdf).hexdigest()))
+    await db.commit()
+
+    r = await client.get("/api/admin/csp/1A900001/summary", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["csp"]["csp_id"] == "1A900001"
+    docs = {d["document_type"]: d for d in body["documents"]}
+    card = docs[DocumentType.CSP_ID_CARD.value]
+    assert (card["generated"], card["version"], card["delivery"]) == (True, 2, "mailed")
+    assert docs[DocumentType.CSP_CERTIFICATE.value]["delivery"] == "failed"
+    assert docs[DocumentType.CSP_CERTIFICATE.value]["generated"] is False
+    assert docs[DocumentType.TRAINING_CERTIFICATE.value]["delivery"] == "pending"
+
+
+async def test_the_csp_panel_is_for_admins_and_reports_a_missing_csp(client, db, admin_headers):
+    r = await client.get("/api/admin/csp/NO-SUCH/summary", headers=admin_headers)
+    assert r.status_code == 404
+    rm = jwt_service.create_access_token(
+        {"sub": "rm.panel@eko.co.in", "role": "rm", "name": "Rm"})
+    r = await client.get("/api/admin/csp/NO-SUCH/summary",
+                         headers={"Authorization": f"Bearer {rm}"})
+    assert r.status_code == 403

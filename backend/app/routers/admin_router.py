@@ -791,3 +791,72 @@ async def csp_list_csv(
         headers={"Content-Disposition":
                  f'attachment; filename="csps-{stamp}.csv"'},
     )
+
+
+# ---- one CSP, found from the top-bar search (No. 101) ------------------
+
+@router.get("/csp/{csp_id}/summary",
+            summary="One CSP's details and where each document stands")
+async def csp_summary(
+    csp_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """What the admin search opens: the CSP's details and, per document,
+    whether it was made and whether it was mailed. Read-only.
+
+    Delivery is decided by the same queries the dashboard counts with, so
+    this panel and the numbers can never disagree.
+    """
+    from app.models.enums import DocumentFormat, DocumentType
+    from app.models.stored_document import StoredDocument
+    from app.schemas.csp import CSPDetailResponse
+    from app.services import ko_level
+
+    csp = (await session.execute(
+        select(CSPRecord).where(CSPRecord.csp_id == csp_id)
+    )).scalar_one_or_none()
+    if csp is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND,
+                            detail=f"CSP '{csp_id}' not found.")
+
+    stored = (await session.execute(
+        select(StoredDocument.document_type,
+               func.max(StoredDocument.version),
+               func.max(StoredDocument.created_at))
+        .where(StoredDocument.csp_id == csp_id,
+               StoredDocument.file_format == DocumentFormat.PDF)
+        .group_by(StoredDocument.document_type)
+    )).all()
+    made = {t: (version, created) for t, version, created in stored}
+
+    documents = []
+    for doc_type in DocumentType:
+        applies = bool(ko_level.allowed_documents(
+            csp.csp_code or csp.csp_id, [doc_type]))
+        mailed = (await session.execute(
+            _delivery_subquery(doc_type, EmailStatus.SENT)
+            .where(ProcessingJob.csp_id == csp_id).limit(1))).first()
+        failed = (await session.execute(
+            _delivery_subquery(doc_type, EmailStatus.FAILED)
+            .where(ProcessingJob.csp_id == csp_id).limit(1))).first()
+        version, created = made.get(doc_type, (None, None))
+        documents.append({
+            "document_type": doc_type.value,
+            "label": document_label(doc_type),
+            "applies": applies,
+            "generated": doc_type in made,
+            "version": version,
+            "generated_at": created.isoformat() if created else None,
+            # A CSP that failed and was later mailed counts as mailed, as on
+            # the dashboard.
+            "delivery": ("not_for_this_csp" if not applies
+                         else "mailed" if mailed
+                         else "failed" if failed
+                         else "pending"),
+        })
+
+    return {
+        "csp": CSPDetailResponse.model_validate(csp).model_dump(mode="json"),
+        "documents": documents,
+    }

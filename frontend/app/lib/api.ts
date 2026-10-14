@@ -747,6 +747,23 @@ class ApiClient {
     );
   }
 
+  /** One CSP for the admin top-bar search: details, and where each
+   *  document stands (No. 101). */
+  async cspSummary(cspId: string) {
+    return this.request<{
+      csp: CSPDetail;
+      documents: Array<{
+        document_type: string;
+        label: string;
+        applies: boolean;
+        generated: boolean;
+        version: number | null;
+        generated_at: string | null;
+        delivery: "mailed" | "failed" | "pending" | "not_for_this_csp";
+      }>;
+    }>(`/admin/csp/${encodeURIComponent(cspId)}/summary`);
+  }
+
   async cspList(params: Record<string, string> = {}) {
     const query = new URLSearchParams(
       Object.entries(params).filter(([, v]) => v)
