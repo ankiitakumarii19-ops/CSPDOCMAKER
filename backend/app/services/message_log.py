@@ -484,3 +484,105 @@ def as_row(m: WhatsAppMessage, now: Optional[datetime] = None) -> dict:
         "check_error": m.check_error,
         "source": m.source,
     }
+
+
+# ---- one message, opened (No. 111) ------------------------------------------
+
+# What happened to each field the CSP was asked about.
+CHANGED = "changed"        # they replaced what was there
+ADDED = "added"            # there was nothing, they filled it in
+CONFIRMED = "confirmed"    # they kept what was there
+BLANK = "blank"            # they left it empty — nothing was changed
+GIVEN = "given"            # answered before earlier values were kept
+
+
+def _same(a, b) -> bool:
+    return " ".join(str(a or "").split()).lower() == \
+        " ".join(str(b or "").split()).lower()
+
+
+def changes(request) -> dict:
+    """Each asked field before and after the CSP's answer.
+
+    `previous_values` is only kept since No. 111: for an older answer the
+    earlier value is unknown, and is said to be, rather than guessed from
+    the record as it is now (which the answer itself overwrote).
+    """
+    from app.services import field_ownership as fo
+
+    previous = request.previous_values
+    answered = request.answered_values or {}
+    fields = []
+    for name in request.fields or []:
+        if name == "photo_url":
+            continue
+        after = (answered.get(name) or "").strip()
+        before = None if previous is None else (previous.get(name) or "")
+        if not after:
+            outcome = BLANK
+        elif previous is None:
+            outcome = GIVEN
+        elif not str(before).strip():
+            outcome = ADDED
+        elif _same(before, after):
+            outcome = CONFIRMED
+        else:
+            outcome = CHANGED
+        fields.append({"field": name, "label": fo.label_of(name),
+                       "before": before, "after": after or None,
+                       "outcome": outcome})
+    counts = {k: sum(1 for f in fields if f["outcome"] == k)
+              for k in (CHANGED, ADDED, CONFIRMED, BLANK, GIVEN)}
+    return {
+        "status": request.status,
+        "answered": request.status == "answered",
+        "answered_at": (request.answered_at.isoformat()
+                        if request.answered_at else None),
+        "expires_at": (request.expires_at.isoformat()
+                       if request.expires_at else None),
+        "fields": fields,
+        "counts": counts,
+        "before_known": previous is not None,
+        "photo_asked": "photo_url" in (request.fields or []),
+        "photo_sent_at": (request.photo_sent_at.isoformat()
+                          if request.photo_sent_at else None),
+        "sheet_saved": request.sheet_saved,
+        "sheet_error": request.sheet_error,
+    }
+
+
+def details(session: Session, message: WhatsAppMessage,
+            now: Optional[datetime] = None) -> dict:
+    """Everything about one message: its journey, and what came back."""
+    from app.models.data_request import DataRequest
+
+    row = as_row(message, now)
+    timeline = [{"at": row["sent_at"], "what":
+                 "Sent" if message.send_status == SEND_SENT
+                 else why(message, now)}]
+    if message.delivery_status in (DELIVERY_DELIVERED, DELIVERY_READ,
+                                   DELIVERY_FAILED) \
+            and message.delivery_updated_at:
+        timeline.append({
+            "at": message.delivery_updated_at.isoformat(),
+            "what": {DELIVERY_DELIVERED: "Delivered to the phone",
+                     DELIVERY_READ: "Read (delivered and opened)",
+                     DELIVERY_FAILED: why(message, now)}[
+                         message.delivery_status]})
+    if message.responded_at:
+        timeline.append({
+            "at": message.responded_at.isoformat(),
+            "what": ("Filled in the details form"
+                     if message.response_kind == RESPONSE_FORM
+                     else "Replied on WhatsApp")})
+
+    request = None
+    if message.data_request_id:
+        found = session.get(DataRequest, message.data_request_id)
+        if found is not None:
+            request = changes(found)
+            if found.photo_sent_at:
+                timeline.append({"at": found.photo_sent_at.isoformat(),
+                                 "what": "Sent a photo"})
+    timeline.sort(key=lambda t: t["at"] or "")
+    return {"message": row, "timeline": timeline, "request": request}

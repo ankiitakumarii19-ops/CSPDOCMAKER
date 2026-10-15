@@ -116,6 +116,32 @@ export interface WhatsAppReport {
   status_days: number;
 }
 
+export interface WhatsAppFieldChange {
+  field: string;
+  label: string;
+  before: string | null;
+  after: string | null;
+  outcome: "changed" | "added" | "confirmed" | "blank" | "given";
+}
+
+export interface WhatsAppMessageDetail {
+  message: WhatsAppMessageRow;
+  timeline: Array<{ at: string | null; what: string }>;
+  request: {
+    status: string;
+    answered: boolean;
+    answered_at: string | null;
+    expires_at: string | null;
+    fields: WhatsAppFieldChange[];
+    counts: Record<WhatsAppFieldChange["outcome"], number>;
+    before_known: boolean;
+    photo_asked: boolean;
+    photo_sent_at: string | null;
+    sheet_saved: string[] | null;
+    sheet_error: string | null;
+  } | null;
+}
+
 export interface WhatsAppRefreshResult {
   imported: number;
   checked: number;
@@ -1089,6 +1115,11 @@ class ApiClient {
       if (v !== undefined && v !== "") qs.set(k, String(v));
     }
     return this.request<WhatsAppReport>(`/admin/whatsapp-messages?${qs}`);
+  }
+
+  async whatsappMessage(id: string) {
+    return this.request<WhatsAppMessageDetail>(
+      `/admin/whatsapp-messages/${encodeURIComponent(id)}`);
   }
 
   async refreshWhatsappMessages() {

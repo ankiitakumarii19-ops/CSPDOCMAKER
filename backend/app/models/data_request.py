@@ -94,6 +94,20 @@ class DataRequest(Base):
     # What came back, before it was applied. Keeping it makes a wrong value
     # traceable to the submission that introduced it.
     answered_values: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # What the record held for each asked field just before the answer was
+    # applied, so an Admin can see what the CSP actually changed (No. 111).
+    # NULL on answers given before this was kept.
+    previous_values: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="The asked fields' values just before the answer was applied")
+    # Whether the answer reached the sheet (the source of truth).
+    sheet_saved: Mapped[list | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="Fields written to the sheet when the answer came in")
+    sheet_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="When the CSP sent their own photo through this link")
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

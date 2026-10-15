@@ -10,6 +10,7 @@ of waiting for the next scheduled check.
 
 import asyncio
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -90,6 +91,22 @@ async def report(
         "last_checked_at": last_checked.isoformat() if last_checked else None,
         "status_days": _settings().whatsapp_status_days,
     }
+
+
+@router.get("/{message_id}")
+async def one_message(
+    message_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """One message opened: its journey, and what the CSP changed (No. 111)."""
+    message = (await session.execute(
+        select(WhatsAppMessage).where(WhatsAppMessage.id == message_id)
+    )).scalars().first()
+    if message is None:
+        raise HTTPException(404, "No such message.")
+    return await session.run_sync(
+        lambda sync: message_log.details(sync, message))
 
 
 @router.post("/refresh")

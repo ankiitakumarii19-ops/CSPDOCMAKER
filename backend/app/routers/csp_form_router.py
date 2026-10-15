@@ -244,6 +244,12 @@ async def submit_form(
         # A blank box means "nothing to add", never "delete what you have".
         accepted = {k: v for k, v in offered.items() if v}
 
+        # Kept before anything is overwritten, so an Admin can see what the
+        # CSP changed and what they only confirmed (No. 111).
+        request_row.previous_values = {
+            f: _field_payload(record, f)["value"]
+            for f in (request_row.fields or []) if f != "photo_url"}
+
         for field, value in accepted.items():
             setattr(record, field, value)
 
@@ -268,6 +274,20 @@ async def submit_form(
                 "csp_form_router.submit_form: CSP %s submitted but the sheet "
                 "could not be updated: %s", record.csp_id, e,
             )
+
+        # Whether the answer reached the sheet, for the Admin's view. A
+        # failure here must not turn the CSP's successful submission into
+        # an error, so it is logged with its traceback and left at that.
+        try:
+            request_row.sheet_saved = sorted(written)
+            request_row.sheet_error = sheet_error
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
+            logger.error(
+                "csp_form_router.submit_form: CSP %s — could not note whether "
+                "the sheet was updated: %s: %s", request_row.csp_id,
+                type(e).__name__, e, exc_info=True)
 
     logger.info(
         "csp_form_router.submit_form: CSP %s returned %d field(s)%s",
@@ -335,6 +355,8 @@ async def upload_own_photo(
         passport = await asyncio.to_thread(studio_photo.make, path)
         changed = await session.run_sync(
             lambda sync: photo_intake.accept(sync, record, path))
+        from datetime import datetime, timezone
+        request_row.photo_sent_at = datetime.now(timezone.utc)
         await session.commit()
         csp_id = record.csp_id
 

@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../lib/api";
+import WhatsAppMessageDetails from "./WhatsAppMessageDetails";
 import type {
   ApiError, WhatsAppCounts, WhatsAppMessageRow, WhatsAppRefreshResult,
   WhatsAppReport,
@@ -119,6 +120,8 @@ export default function WhatsAppMessages() {
 
   // Bumped to load again with the same filters (after Refresh).
   const [reloads, setReloads] = useState(0);
+  // The message whose details are open (No. 111).
+  const [opened, setOpened] = useState<string | null>(null);
 
   useEffect(() => {
     let current = true;
@@ -306,6 +309,9 @@ export default function WhatsAppMessages() {
             <h3 className="text-sm font-bold text-gray-900 dark:text-white">
               {focusLabel}
               <span className="ml-2 font-normal text-gray-500">{rows.length}</span>
+              <span className="ml-3 text-xs font-normal text-gray-400">
+                Click a message to see what the CSP changed
+              </span>
             </h3>
             {focus && (
               <button
@@ -345,7 +351,9 @@ export default function WhatsAppMessages() {
                     return (
                       <tr
                         key={r.id}
-                        className="border-b border-gray-100 dark:border-gray-700/60 align-top"
+                        onClick={() => setOpened(r.id)}
+                        title="Open this message"
+                        className="border-b border-gray-100 dark:border-gray-700/60 align-top cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40"
                       >
                         <td className="px-4 py-2">
                           <div className="font-semibold text-gray-900 dark:text-white">
@@ -412,6 +420,9 @@ export default function WhatsAppMessages() {
             </div>
           )}
         </section>
+      )}
+      {opened && (
+        <WhatsAppMessageDetails key={opened} id={opened} onClose={() => setOpened(null)} />
       )}
     </div>
   );

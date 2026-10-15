@@ -389,3 +389,108 @@ async def test_the_screen_gets_counts_and_rows(client, db):
     r = await client.get("/api/admin/whatsapp-messages?kind=nonsense",
                          headers=_auth("admin"))
     assert r.status_code == 400
+
+
+# ---- one message opened: what the CSP changed (No. 111) ----------------------
+
+def test_each_field_says_what_the_csp_did_with_it():
+    from types import SimpleNamespace
+    request = SimpleNamespace(
+        status=ANSWERED, answered_at=NOW, expires_at=NOW,
+        fields=["gender", "ao", "email", "mobile", "photo_url"],
+        previous_values={"gender": "Male", "ao": "", "email": "a@b.in",
+                         "mobile": "9812345670"},
+        answered_values={"gender": "Female", "ao": "Panchkula",
+                         "email": " A@B.in "},
+        photo_sent_at=None, sheet_saved=["ao", "gender"], sheet_error=None)
+    out = log.changes(request)
+    outcomes = {f["field"]: f["outcome"] for f in out["fields"]}
+    assert outcomes == {"gender": "changed", "ao": "added",
+                        "email": "confirmed", "mobile": "blank"}
+    gender = next(f for f in out["fields"] if f["field"] == "gender")
+    assert (gender["before"], gender["after"]) == ("Male", "Female")
+    assert out["photo_asked"] is True and out["before_known"] is True
+    assert out["counts"]["changed"] == 1
+
+
+def test_an_older_answer_does_not_guess_what_was_there_before():
+    from types import SimpleNamespace
+    request = SimpleNamespace(
+        status=ANSWERED, answered_at=NOW, expires_at=NOW, fields=["gender"],
+        previous_values=None, answered_values={"gender": "Female"},
+        photo_sent_at=None, sheet_saved=None, sheet_error=None)
+    out = log.changes(request)
+    assert out["before_known"] is False
+    assert out["fields"][0]["before"] is None
+    assert out["fields"][0]["outcome"] == "given"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_the_form_keeps_what_was_there_and_the_message_shows_it(
+        client, db, monkeypatch):
+    from app.services import data_request_service as drs
+    from app.services import sheet_writeback_service as wb
+    from tests.test_role_separation import _auth
+
+    db.add(CSPRecord(csp_id="1A910008", csp_code="1A910008", name="Form Csp",
+                     gender="Male", ao="", mobile="9812345670"))
+    db.flush()
+    request, token = drs.create(db, "1A910008", ["gender", "ao", "mobile"])
+    db.commit()
+    message = _message(db, csp_id="1A910008", data_request_id=request.id,
+                       delivery_status="read",
+                       sent_at=datetime.now(timezone.utc) - timedelta(hours=1))
+    monkeypatch.setattr(wb, "write_values",
+                        lambda code, values, **k: (dict(values), []))
+
+    r = await client.post(f"/api/csp-form/{token}",
+                          json={"values": {"gender": "Female", "ao": "Panchkula",
+                                           "mobile": "9812345670"}})
+    assert r.status_code == 200, r.text
+    db.expire_all()
+    saved = db.get(DataRequest, request.id)
+    assert saved.previous_values == {"gender": "Male", "ao": "",
+                                     "mobile": "9812345670"}
+    assert saved.sheet_saved == ["ao", "gender", "mobile"]
+
+    r = await client.get(f"/api/admin/whatsapp-messages/{message.id}",
+                         headers=_auth("admin"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    outcomes = {f["field"]: f["outcome"] for f in body["request"]["fields"]}
+    assert outcomes == {"gender": "changed", "ao": "added",
+                        "mobile": "confirmed"}
+
+    # An RM may not open it; an unknown message is a plain 404.
+    r = await client.get(f"/api/admin/whatsapp-messages/{message.id}",
+                         headers=_auth("rm"))
+    assert r.status_code == 403
+    r = await client.get("/api/admin/whatsapp-messages/"
+                         "00000000-0000-4000-8000-0000000000ff",
+                         headers=_auth("admin"))
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_a_sheet_failure_is_kept_and_the_csp_still_succeeds(
+        client, db, monkeypatch):
+    from app.services import data_request_service as drs
+    from app.services import sheet_writeback_service as wb
+
+    db.add(CSPRecord(csp_id="1A910009", csp_code="1A910009", name="Sheet Down",
+                     gender="Male"))
+    db.flush()
+    request, token = drs.create(db, "1A910009", ["gender"])
+    db.commit()
+
+    def down(code, values, **k):
+        raise wb.SheetWriteError("Google Sheets unreachable")
+    monkeypatch.setattr(wb, "write_values", down)
+
+    r = await client.post(f"/api/csp-form/{token}",
+                          json={"values": {"gender": "Female"}})
+    assert r.status_code == 200 and r.json()["sheet_pending"] is True
+    db.expire_all()
+    saved = db.get(DataRequest, request.id)
+    assert "unreachable" in saved.sheet_error
+    assert log.changes(saved)["fields"][0]["outcome"] == "changed"
