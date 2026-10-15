@@ -31,7 +31,8 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.data_request import VIA_EMAIL, VIA_WHATSAPP
 from app.models.messaging import (
-    EMAIL, PURPOSE_DATA_REQUEST, WHATSAPP, MessageChannel, MessageTemplate,
+    EMAIL, PURPOSE_DATA_REQUEST, PURPOSE_MISSING_DATA, WHATSAPP,
+    MessageChannel, MessageTemplate,
 )
 from app.services import data_request_service as drs
 from app.services import field_ownership as fo
@@ -259,13 +260,23 @@ def ask_for_details(session: Session, record, *,
         # Through Eko's WhatsApp platform (No. 78): the stored wording is
         # sent as a Meta-approved template with the values filled in.
         from app.services import whatsapp_platform as wa
+        from app.services import message_log
         readable = ", ".join(fo.label_of(f) for f in fields)
+        kind = (message_log.KIND_MISSING_DATA
+                if template.purpose == PURPOSE_MISSING_DATA
+                else message_log.KIND_DATA_REQUEST)
         outcome = wa.send(
             to, template.body,
             {"name": getattr(record, "name", "") or record.csp_id,
              "link": link, "fields": readable},
-            source_name=f"CSPdocMaker details request {record.csp_id}")
+            source_name=message_log.source_name(kind, record.csp_id))
         sent, why = outcome["status"] == wa.SENT, outcome["reason"]
+        # Every attempt, sent or not, for the WhatsApp messages screen
+        # (No. 110).
+        message_log.record(
+            session, kind=kind, mobile=to, outcome=outcome,
+            csp_id=record.csp_id, csp_name=getattr(record, "name", "") or "",
+            data_request_id=request.id)
     else:
         sent, why = send_via(channel, to, subject, body)
 

@@ -11,6 +11,7 @@ import Database from "./Database";
 import CspSearch from "./CspSearch";
 import Agents from "./Agents";
 import Messaging from "./Messaging";
+import WhatsAppMessages from "./WhatsAppMessages";
 import DashboardView from "./DashboardView";
 import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
@@ -238,6 +239,18 @@ export default function AdminDashboard() {
               <i className="fas fa-chart-line w-5 text-center"></i> Dashboard Overview
             </button>
           )}
+          {/* Who got which WhatsApp, and what became of it (No. 110).
+              Admins and Super Admins alike. */}
+          <button
+            onClick={() => setAdminRoute("whatsapp")}
+            className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+              adminRoute === "whatsapp"
+                ? "bg-navy-800 text-white border-l-4 border-eko"
+                : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+            }`}
+          >
+            <i className="fab fa-whatsapp w-5 text-center"></i> WhatsApp messages
+          </button>
           {canConfigure && (
             <button
               onClick={() => setAdminRoute("build")}
@@ -409,6 +422,7 @@ export default function AdminDashboard() {
             {isOwner && adminRoute === "agents" && (
               <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
+            {adminRoute === "whatsapp" && <WhatsAppMessages />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
             {isOwner && adminRoute === "access" && <AccessControl />}

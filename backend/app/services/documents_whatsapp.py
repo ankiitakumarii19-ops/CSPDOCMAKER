@@ -100,7 +100,8 @@ def whatsapp_channel(session):
 @telemetry.traced("whatsapp_documents_ready", "documents_whatsapp")
 def notify(session, csp, job, document_names: List[str]) -> dict:
     """Send the WhatsApp notice for a delivery that was just emailed."""
-    from app.services import message_sender, whatsapp_platform as wa
+    from app.services import message_log, message_sender
+    from app.services import whatsapp_platform as wa
 
     try:
         channel = whatsapp_channel(session)
@@ -119,8 +120,14 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
             {"name": csp.name or csp.csp_id,
              "documents": ", ".join(document_names),
              "email": csp.email or "your email"},
-            source_name=f"CSPdocMaker documents {csp.csp_id}",
+            source_name=message_log.source_name(
+                message_log.KIND_DOCUMENTS_READY, csp.csp_id),
             document_url=link)
+        # For the WhatsApp messages screen (No. 110).
+        message_log.record(
+            session, kind=message_log.KIND_DOCUMENTS_READY,
+            mobile=csp.mobile, outcome=outcome, csp_id=csp.csp_id,
+            csp_name=csp.name, processing_job_id=job.id)
         channel.last_used_at = datetime.now(timezone.utc)
         channel.last_error = (None if outcome["status"] == wa.SENT
                               else outcome["reason"][:2000])

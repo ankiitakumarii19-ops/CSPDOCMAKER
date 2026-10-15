@@ -148,13 +148,22 @@ def main() -> int:
             results.append(("email", a.to, sent, why, None))
 
         if a.whatsapp:
+            from app.services import message_log
+            kind = (message_log.KIND_MISSING_DATA if a.message == "missing"
+                    else message_log.KIND_DATA_REQUEST)
             # Exactly what ask_for_details sends a CSP: the stored wording as
             # a Meta template, the same values — to the test number only.
             outcome = wa.send(
                 a.whatsapp, template.body,
                 {"name": name, "link": link,
                  "fields": ", ".join(fo.label_of(f) for f in fields)},
-                source_name=f"CSPdocMaker TEST details request {record.csp_id}")
+                source_name=message_log.source_name(kind, record.csp_id,
+                                                    test=True))
+            # On the WhatsApp messages screen too, marked as a test (No. 110).
+            message_log.record(
+                db, kind=kind, mobile=a.whatsapp, outcome=outcome,
+                csp_id=record.csp_id, csp_name=record.name or "",
+                data_request_id=request.id, is_test=True)
             results.append(("WhatsApp", a.whatsapp, outcome["status"] == wa.SENT,
                             (f"{outcome['status']}: {outcome['reason']}"
                              if outcome["status"] != wa.SENT else ""),

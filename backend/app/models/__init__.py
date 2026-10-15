@@ -28,8 +28,10 @@ from app.models.rm_alert import RMAlert
 from app.models.email_document import EmailDocument
 from app.models.data_request import DataRequest
 from app.models.document_template import DocumentTemplate
+from app.models.whatsapp_message import WhatsAppMessage
 
 __all__ = [
+    "WhatsAppMessage",
     "WorkspaceMember",
     "Workspace",
     "DataSource",

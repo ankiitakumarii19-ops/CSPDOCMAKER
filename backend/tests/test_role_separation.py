@@ -73,6 +73,8 @@ MONITORING = [
     "/api/admin/csp-filters",
     "/api/admin/csp-list",
     "/api/admin/dashboards",
+    # Who got which WhatsApp (No. 110).
+    "/api/admin/whatsapp-messages",
 ]
 
 # Reading records. An Owner must see at least what an Admin sees.

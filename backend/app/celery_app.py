@@ -87,6 +87,13 @@ celery_app.conf.update(
             "schedule": settings.sheet_photo_minutes * 60,
             "options": {"expires": settings.sheet_photo_minutes * 60 - 5},
         },
+        # Delivered / read / replied for the WhatsApp messages screen
+        # (No. 110).
+        "refresh-whatsapp-messages": {
+            "task": "workers.refresh_whatsapp_messages",
+            "schedule": settings.whatsapp_status_minutes * 60,
+            "options": {"expires": settings.whatsapp_status_minutes * 60 - 5},
+        },
         # The agents are added below, from the registry.
     },
 )
@@ -130,6 +137,7 @@ celery_app.conf.include = [
     "app.workers.pending_request_worker",
     "app.workers.sheet_photo_worker",
     "app.workers.agent_worker",
+    "app.workers.whatsapp_status_worker",
 ]
 
 

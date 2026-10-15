@@ -267,6 +267,7 @@ from app.routers.agent_router import router as agent_router
 from app.routers.messaging_router import router as messaging_router
 from app.routers.sheet_router import router as sheet_router
 from app.routers.database_router import router as database_router
+from app.routers.whatsapp_message_router import router as whatsapp_message_router
 from app.routers.workflow_router import router as workflow_router
 from app.routers.admin_router import router as admin_router
 
@@ -283,6 +284,7 @@ app.include_router(agent_router)     # already has /api/admin/agents prefix
 app.include_router(messaging_router) # already has /api/admin/messaging prefix
 app.include_router(sheet_router)     # already has /api/admin/sheets prefix
 app.include_router(database_router)  # /api/admin/database — Super Admin, read-only
+app.include_router(whatsapp_message_router)  # /api/admin/whatsapp-messages — Admin + Super Admin (No. 110)
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
 from app.routers.public_document_router import router as public_document_router
 from app.routers.public_document_router import photo_router as public_photo_router

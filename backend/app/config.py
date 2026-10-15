@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     whatsapp_platform_timeout_seconds: int = Field(
         default=60, alias="WHATSAPP_PLATFORM_TIMEOUT_SECONDS")
     whatsapp_language: str = Field(default="en_US", alias="WHATSAPP_LANGUAGE")
+    # The WhatsApp messages screen (tracker No. 110): how often delivered /
+    # read / replied is fetched, and for how many days after a send.
+    whatsapp_status_minutes: int = Field(
+        default=10, alias="WHATSAPP_STATUS_MINUTES")
+    whatsapp_status_days: int = Field(default=7, alias="WHATSAPP_STATUS_DAYS")
 
     # Decided 11 Oct 2026 (tracker No. 53): a CSP is asked for missing
     # details on WhatsApp only, and waits until WhatsApp works rather than

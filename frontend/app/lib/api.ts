@@ -76,6 +76,54 @@ export interface MessageTemplateInfo {
   is_builtin: boolean;
 }
 
+export interface WhatsAppCounts {
+  total: number;
+  not_sent: number;
+  not_received: number;
+  sent: number;
+  delivered: number;
+  read: number;
+  responded: number;
+  not_responded: number;
+}
+
+export interface WhatsAppMessageRow {
+  id: string;
+  kind: "data_request" | "missing_data" | "documents_ready" | "other";
+  csp_id: string | null;
+  csp_name: string | null;
+  phone: string;
+  is_test: boolean;
+  sent_at: string | null;
+  stage: "not_sent" | "not_received" | "sent" | "delivered" | "read";
+  reason: string;
+  delivery_updated_at: string | null;
+  responded: boolean | null;
+  responded_at: string | null;
+  response_kind: "form" | "whatsapp" | null;
+  response_text: string | null;
+  job_id: string | null;
+  check_error: string | null;
+  source: string;
+}
+
+export interface WhatsAppReport {
+  summary: Record<"data_request" | "missing_data" | "documents_ready", WhatsAppCounts>;
+  rows: WhatsAppMessageRow[];
+  total_rows: number;
+  truncated: boolean;
+  last_checked_at: string | null;
+  status_days: number;
+}
+
+export interface WhatsAppRefreshResult {
+  imported: number;
+  checked: number;
+  status_changed: number;
+  responded: number;
+  errors: string[];
+}
+
 export interface MessagingOverview {
   channels: MessageChannelInfo[];
   templates: MessageTemplateInfo[];
@@ -1024,6 +1072,28 @@ class ApiClient {
       `/admin/agents/findings/${encodeURIComponent(id)}/reject`,
       { method: "POST", body: JSON.stringify({}) }
     );
+  }
+
+  // ---- WhatsApp messages (No. 110) ----
+
+  async whatsappMessages(params: {
+    kind?: string;
+    stage?: string;
+    responded?: boolean;
+    days?: number;
+    include_tests?: boolean;
+    q?: string;
+  }) {
+    const qs = new URLSearchParams();
+    for (const [k, v] of Object.entries(params)) {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    }
+    return this.request<WhatsAppReport>(`/admin/whatsapp-messages?${qs}`);
+  }
+
+  async refreshWhatsappMessages() {
+    return this.request<WhatsAppRefreshResult>(
+      "/admin/whatsapp-messages/refresh", { method: "POST" });
   }
 
   // ---- Messaging ----
