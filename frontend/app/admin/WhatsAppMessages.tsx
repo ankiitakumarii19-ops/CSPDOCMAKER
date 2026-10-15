@@ -396,7 +396,14 @@ export default function WhatsAppMessages() {
                         <td className="px-4 py-2">
                           {r.responded === null && <span className="text-gray-400">—</span>}
                           {r.responded === false && (
-                            <span className="text-amber-600 dark:text-amber-400 font-semibold">No</span>
+                            <div>
+                              <span className="text-amber-600 dark:text-amber-400 font-semibold">No</span>
+                              {r.auto_reply_at && (
+                                <div className="text-xs text-gray-500">
+                                  only an automatic greeting came back
+                                </div>
+                              )}
+                            </div>
                           )}
                           {r.responded === true && (
                             <div>

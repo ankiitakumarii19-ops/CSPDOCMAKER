@@ -102,6 +102,8 @@ export interface WhatsAppMessageRow {
   responded_at: string | null;
   response_kind: "form" | "whatsapp" | null;
   response_text: string | null;
+  auto_reply_at: string | null;
+  auto_reply_text: string | null;
   job_id: string | null;
   check_error: string | null;
   source: string;
@@ -140,6 +142,18 @@ export interface WhatsAppMessageDetail {
     sheet_saved: string[] | null;
     sheet_error: string | null;
   } | null;
+}
+
+export interface WhatsAppChat {
+  phone: string;
+  items: Array<{
+    at: string;
+    from: "us" | "csp";
+    text: string;
+    type: string;
+    automatic: boolean;
+  }>;
+  error: string | null;
 }
 
 export interface WhatsAppRefreshResult {
@@ -1120,6 +1134,11 @@ class ApiClient {
   async whatsappMessage(id: string) {
     return this.request<WhatsAppMessageDetail>(
       `/admin/whatsapp-messages/${encodeURIComponent(id)}`);
+  }
+
+  async whatsappChat(id: string) {
+    return this.request<WhatsAppChat>(
+      `/admin/whatsapp-messages/${encodeURIComponent(id)}/conversation`);
   }
 
   async refreshWhatsappMessages() {

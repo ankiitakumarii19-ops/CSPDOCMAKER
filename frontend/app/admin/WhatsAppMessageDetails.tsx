@@ -15,7 +15,9 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../lib/api";
-import type { ApiError, WhatsAppFieldChange, WhatsAppMessageDetail } from "../lib/api";
+import type {
+  ApiError, WhatsAppChat, WhatsAppFieldChange, WhatsAppMessageDetail,
+} from "../lib/api";
 
 const KIND_TITLE: Record<string, string> = {
   data_request: "Data verification",
@@ -59,6 +61,21 @@ export default function WhatsAppMessageDetails({
       .then((d) => { if (current) setData(d); })
       .catch((e) => {
         if (current) setError((e as ApiError).detail || "Could not open this message.");
+      });
+    return () => { current = false; };
+  }, [id]);
+
+  // The chat is read live from the WhatsApp platform, so it loads on its
+  // own and a failure there does not hide the rest of the panel.
+  const [chat, setChat] = useState<WhatsAppChat | null>(null);
+  const [chatError, setChatError] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    api.whatsappChat(id)
+      .then((c) => { if (current) setChat(c); })
+      .catch((e) => {
+        if (current) setChatError((e as ApiError).detail || "Could not load the chat.");
       });
     return () => { current = false; };
   }, [id]);
@@ -118,10 +135,47 @@ export default function WhatsAppMessageDetails({
                   </li>
                 ))}
               </ol>
-              {m?.response_kind === "whatsapp" && m.response_text && (
-                <p className="mt-3 text-sm italic text-gray-700 dark:text-gray-300">
-                  Their reply: “{m.response_text}”
-                </p>
+            </section>
+          )}
+
+          {data && (
+            <section>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">
+                WhatsApp chat
+              </h4>
+              {!chat && !chatError && <p className="text-sm text-gray-500">Loading the chat…</p>}
+              {(chatError || chat?.error) && (
+                <p className="text-sm text-red-600 dark:text-red-400">{chatError || chat?.error}</p>
+              )}
+              {chat && !chat.error && chat.items.length === 0 && (
+                <p className="text-sm text-gray-500">Nothing in the chat yet.</p>
+              )}
+              {chat && chat.items.length > 0 && (
+                <div className="space-y-2 rounded-lg bg-gray-50 dark:bg-gray-900/40 p-3">
+                  {chat.items.map((c, i) => (
+                    <div key={i} className={`flex ${c.from === "us" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                        c.from === "us"
+                          ? "bg-green-100 text-gray-900 dark:bg-green-900/40 dark:text-gray-100"
+                          : c.automatic
+                            ? "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400 border border-dashed border-gray-300 dark:border-gray-600"
+                            : "bg-white text-gray-900 dark:bg-gray-700 dark:text-gray-100 border border-gray-200 dark:border-gray-600"
+                      }`}>
+                        {c.automatic && (
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                            Automatic reply — not counted as a response
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap break-words">
+                          {c.text || <span className="italic">({c.type})</span>}
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-1 text-right">
+                          {c.from === "us" ? "Sent by us · " : ""}{when(c.at)}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </section>
           )}

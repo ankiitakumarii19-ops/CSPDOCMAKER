@@ -494,3 +494,118 @@ async def test_a_sheet_failure_is_kept_and_the_csp_still_succeeds(
     saved = db.get(DataRequest, request.id)
     assert "unreachable" in saved.sheet_error
     assert log.changes(saved)["fields"][0]["outcome"] == "changed"
+
+
+# ---- automatic greetings are not answers (No. 112) ---------------------------
+
+GREETING = ("🌟🙏 कृष्णा CSC सैंटर में आपका हार्दिक स्वागत है। Online Services "
+            "के लिए हमसे संपर्क करें।")
+
+
+def _inbox(*replies):
+    return "".join(
+        '{"body": %s, "from_phone": "919812345670", "msg_type": "text", '
+        '"sent_at": "%s"}' % (__import__("json").dumps(body), at)
+        for at, body in replies)
+
+
+def test_a_greeting_seconds_after_the_message_is_not_an_answer(db):
+    """What 1A852418's shop sent back on 15 Oct, 5 seconds after."""
+    m = _message(db, sent_at=datetime(2026, 10, 15, 7, 11, 48,
+                                      tzinfo=timezone.utc))
+    out = log.refresh(db, platform=FakePlatform(
+        inbox=_inbox(("2026-10-15T07:11:53+00:00", GREETING))), now=NOW)
+    db.refresh(m)
+    assert out["responded"] == 0
+    assert m.responded_at is None and m.response_kind is None
+    assert m.auto_reply_text.startswith("🌟")
+    assert log.as_row(m, NOW)["responded"] is False
+
+
+def test_a_greeting_noted_before_our_send_was_recorded_is_still_automatic(db):
+    """sent_at is noted when the platform answers — a few seconds late."""
+    m = _message(db, sent_at=datetime(2026, 10, 15, 7, 11, 56,
+                                      tzinfo=timezone.utc))
+    log.refresh(db, platform=FakePlatform(
+        inbox=_inbox(("2026-10-15T07:11:53+00:00", GREETING))), now=NOW)
+    db.refresh(m)
+    assert m.responded_at is None and m.auto_reply_at is not None
+
+
+def test_a_real_reply_after_the_greeting_is_the_answer(db):
+    m = _message(db, sent_at=datetime(2026, 10, 15, 7, 11, 48,
+                                      tzinfo=timezone.utc))
+    log.refresh(db, platform=FakePlatform(inbox=_inbox(
+        ("2026-10-15T07:11:53+00:00", GREETING),
+        ("2026-10-15T08:30:00+00:00", "Ji, form bhar diya"))), now=NOW)
+    db.refresh(m)
+    assert m.response_kind == "whatsapp"
+    assert m.response_text == "Ji, form bhar diya"
+    assert m.auto_reply_text.startswith("🌟")
+
+
+def test_a_greeting_counted_before_this_fix_is_put_right(db):
+    m = _message(db, sent_at=datetime(2026, 10, 15, 7, 11, 48,
+                                      tzinfo=timezone.utc),
+                 responded_at=datetime(2026, 10, 15, 7, 11, 53,
+                                       tzinfo=timezone.utc),
+                 response_kind="whatsapp", response_text=GREETING)
+    log.refresh(db, platform=FakePlatform(), now=NOW)
+    db.refresh(m)
+    assert m.responded_at is None and m.response_kind is None
+    assert m.auto_reply_text == GREETING
+
+
+def test_the_chat_is_in_order_with_the_greeting_marked(db):
+    ours = [_message(db, sent_at=datetime(2026, 10, 15, 7, 11, 48,
+                                          tzinfo=timezone.utc))]
+    replies = [
+        {"sent_at": "2026-10-15T08:30:00+00:00", "body": "Ji",
+         "msg_type": "text"},
+        {"sent_at": "2026-10-15T07:11:53+00:00", "body": GREETING,
+         "msg_type": "text"},
+        {"sent_at": "2026-10-10T08:00:00+00:00", "body": "days before",
+         "msg_type": "text"},
+    ]
+    chat = log.build_conversation(ours, replies, ours[0].sent_at)
+    assert [(c["from"], c["automatic"]) for c in chat] == [
+        ("us", False), ("csp", True), ("csp", False)]
+    assert chat[0]["text"] == "Data verification message"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_the_chat_comes_from_the_platform_or_says_why_not(
+        client, db, monkeypatch):
+    from tests.test_role_separation import _auth
+    m = _message(db, sent_at=datetime.now(timezone.utc) - timedelta(hours=1))
+    reply_at = (datetime.now(timezone.utc) - timedelta(minutes=30)).isoformat()
+    asked = {}
+
+    def tool(name, arguments):
+        asked.update(name=name, arguments=arguments)
+        return {"text": '{"body": "ok ji", "from_phone": "919812345670", '
+                        '"msg_type": "text", "sent_at": "%s"}'
+                        '{"body": "not them", "from_phone": "919999999999", '
+                        '"msg_type": "text", "sent_at": "%s"}'
+                        % (reply_at, reply_at)}
+    monkeypatch.setattr(wa, "call_tool", tool)
+    r = await client.get(f"/api/admin/whatsapp-messages/{m.id}/conversation",
+                         headers=_auth("admin"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert asked == {"name": "get_incoming_messages",
+                     "arguments": {"phone": "919812345670"}}
+    assert [c["text"] for c in body["items"] if c["from"] == "csp"] == ["ok ji"]
+    assert body["error"] is None
+
+    def down(name, arguments):
+        raise wa.WhatsAppPlatformError("platform unreachable")
+    monkeypatch.setattr(wa, "call_tool", down)
+    r = await client.get(f"/api/admin/whatsapp-messages/{m.id}/conversation",
+                         headers=_auth("admin"))
+    assert r.status_code == 200
+    assert "platform unreachable" in r.json()["error"]
+
+    r = await client.get(f"/api/admin/whatsapp-messages/{m.id}/conversation",
+                         headers=_auth("rm"))
+    assert r.status_code == 403

@@ -604,7 +604,7 @@ async def confirm_and_send(
         document_storage_service.write_to_disk(p, attachment_dir)
         for p in stored_pdfs
     ]
-    subject = f"Your CSP Documents — {csp.csp_id} | EKO India Financial Services"
+    subject = email_service.documents_subject(csp.csp_id)
 
     email_job = EmailJob(
         processing_job_id=job.id,

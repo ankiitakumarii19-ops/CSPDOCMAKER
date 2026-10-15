@@ -358,9 +358,26 @@ def _match_forms(session: Session) -> int:
     return len(pairs)
 
 
+# A reply this soon after our message is a WhatsApp Business greeting or
+# away message, not a person: the first CSP to reply (15 Oct 2026) was
+# "Welcome to Krishna CSC Centre…", 5 seconds after the message (No. 112).
+AUTO_REPLY_WITHIN = timedelta(seconds=60)
+
+
+def is_automatic(message_sent_at: datetime, reply_at: datetime) -> bool:
+    # Either side of the send: our sent_at is noted when the platform
+    # answers, which can be a few seconds after the message really left.
+    return abs(reply_at - message_sent_at) < AUTO_REPLY_WITHIN
+
+
 def _match_replies(session: Session, wa, now: datetime,
                    window: timedelta) -> int:
-    """A reply on WhatsApp answers the latest message sent to that number."""
+    """A reply on WhatsApp answers the latest message sent to that number.
+
+    An automatic greeting is kept on the message (auto_reply_*) but is not
+    an answer. Replies matched as answers before No. 112 that were really
+    automatic are put right here, each refresh.
+    """
     messages = session.execute(
         select(WhatsAppMessage).where(
             WhatsAppMessage.send_status == SEND_SENT,
@@ -373,6 +390,10 @@ def _match_replies(session: Session, wa, now: datetime,
     by_phone: Dict[str, List[WhatsAppMessage]] = {}
     for m in messages:
         by_phone.setdefault(m.phone, []).append(m)
+        if (m.response_kind == RESPONSE_WHATSAPP and m.responded_at
+                and is_automatic(m.sent_at, m.responded_at)):
+            m.auto_reply_at, m.auto_reply_text = m.responded_at, m.response_text
+            m.responded_at = m.response_kind = m.response_text = None
 
     replies = _listed(wa.call_tool("get_incoming_messages", {}),
                       "messages", "rows")
@@ -382,16 +403,22 @@ def _match_replies(session: Session, wa, now: datetime,
         at = _parse_time(reply.get("sent_at"))
         if phone not in by_phone or at is None:
             continue
-        answered = [m for m in by_phone[phone] if m.sent_at <= at]
+        answered = [m for m in by_phone[phone]
+                    if m.sent_at <= at + AUTO_REPLY_WITHIN]
         if not answered:
             continue
         message = answered[-1]
+        text_of = (str(reply.get("body") or "")
+                   or f"({reply.get('msg_type') or 'reply'})")[:500]
+        if is_automatic(message.sent_at, at):
+            if message.auto_reply_at is None:
+                message.auto_reply_at, message.auto_reply_text = at, text_of
+            continue
         if message.responded_at is not None:
             continue
         message.responded_at = at
         message.response_kind = RESPONSE_WHATSAPP
-        message.response_text = (str(reply.get("body") or "")
-                                 or f"({reply.get('msg_type') or 'reply'})")[:500]
+        message.response_text = text_of
         matched += 1
     session.flush()
     return matched
@@ -480,6 +507,8 @@ def as_row(m: WhatsAppMessage, now: Optional[datetime] = None) -> dict:
         "responded_at": m.responded_at.isoformat() if m.responded_at else None,
         "response_kind": m.response_kind,
         "response_text": m.response_text,
+        "auto_reply_at": m.auto_reply_at.isoformat() if m.auto_reply_at else None,
+        "auto_reply_text": m.auto_reply_text,
         "job_id": m.job_id,
         "check_error": m.check_error,
         "source": m.source,
@@ -569,6 +598,11 @@ def details(session: Session, message: WhatsAppMessage,
                      DELIVERY_READ: "Read (delivered and opened)",
                      DELIVERY_FAILED: why(message, now)}[
                          message.delivery_status]})
+    if message.auto_reply_at:
+        timeline.append({
+            "at": message.auto_reply_at.isoformat(),
+            "what": "Automatic WhatsApp greeting came back (not counted as "
+                    "a response)"})
     if message.responded_at:
         timeline.append({
             "at": message.responded_at.isoformat(),
@@ -586,3 +620,53 @@ def details(session: Session, message: WhatsAppMessage,
                                  "what": "Sent a photo"})
     timeline.sort(key=lambda t: t["at"] or "")
     return {"message": row, "timeline": timeline, "request": request}
+
+
+# ---- the WhatsApp chat with one CSP (No. 112) --------------------------------
+
+KIND_LABEL = {
+    KIND_DATA_REQUEST: "Data verification message",
+    KIND_MISSING_DATA: "Data missing message",
+    KIND_DOCUMENTS_READY: "Documents sent message",
+    KIND_OTHER: "Message",
+}
+
+
+def build_conversation(ours: List[WhatsAppMessage], replies: List[dict],
+                       since: datetime) -> List[dict]:
+    """Our messages and their replies to one number, oldest first.
+
+    `ours` are this app's messages to the number; `replies` what the
+    platform's inbox holds from it. Starts at `since` (the opened message),
+    and marks each reply that came within seconds of one of ours as
+    automatic.
+    """
+    items = []
+    sent_times = [m.sent_at for m in ours if m.send_status == SEND_SENT]
+    for m in ours:
+        if m.sent_at < since:
+            continue
+        items.append({
+            "at": m.sent_at.isoformat(), "from": "us",
+            "text": KIND_LABEL.get(m.kind, "Message")
+            + ("" if m.send_status == SEND_SENT else " — not sent"),
+            "automatic": False, "type": "template"})
+    for r in replies:
+        at = _parse_time(r.get("sent_at"))
+        if at is None or at < since - AUTO_REPLY_WITHIN:
+            continue
+        items.append({
+            "at": at.isoformat(), "from": "csp",
+            "text": str(r.get("body") or ""),
+            "type": r.get("msg_type") or "text",
+            "automatic": any(is_automatic(t, at) for t in sent_times)})
+    items.sort(key=lambda i: i["at"])
+    return items
+
+
+def replies_from(wa, phone: str) -> List[dict]:
+    """What the platform's inbox holds from this number. Raises on failure."""
+    rows = _listed(wa.call_tool("get_incoming_messages", {"phone": phone}),
+                   "messages", "rows")
+    return [r for r in rows
+            if re.sub(r"\D", "", str(r.get("from_phone") or "")) == phone]

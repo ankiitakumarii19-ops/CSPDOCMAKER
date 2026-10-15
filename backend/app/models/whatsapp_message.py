@@ -134,6 +134,14 @@ class WhatsAppMessage(Base):
         String(500), nullable=True,
         comment="The start of a WhatsApp reply, as the CSP wrote it")
 
+    # A reply that came within seconds — a WhatsApp Business greeting such
+    # as "Welcome to Krishna CSC Centre", not a person answering (No. 112).
+    # Shown, never counted as a response.
+    auto_reply_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    auto_reply_text: Mapped[Optional[str]] = mapped_column(
+        String(500), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

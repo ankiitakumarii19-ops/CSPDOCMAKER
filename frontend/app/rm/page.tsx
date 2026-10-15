@@ -950,7 +950,7 @@ export default function RMDashboard() {
                     </div>
                     <div className="text-xs text-gray-500 mb-1">Subject</div>
                     <div className="font-medium text-gray-900 dark:text-white text-sm">
-                      Your CSP Documents — {csp.csp_id} | EKO India Financial Services
+                      Your CSP Documents — {csp.csp_id} | Eko Bharat Ventures Pvt Ltd
                     </div>
                   </div>
 

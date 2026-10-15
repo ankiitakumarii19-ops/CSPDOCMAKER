@@ -24,6 +24,22 @@ logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
+# Who the documents come from (changed 15 Oct 2026, tracker No. 113 — was
+# "EKO India Financial Services"). One place, so the subject, the email and
+# the RM's preview always agree.
+ORGANISATION_NAME = "Eko Bharat Ventures Pvt Ltd"
+
+# The Eko mark at the top of the documents email, sent inside the email
+# itself (cid:) rather than linked: many mail apps block linked images until
+# the reader allows them, and the logo would then be a broken box.
+LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                         "assets", "eko-logo.png")
+LOGO_CID = "eko-logo"
+
+
+def documents_subject(csp_id: str) -> str:
+    return f"Your CSP Documents — {csp_id} | {ORGANISATION_NAME}"
+
 
 def _build_otp_html(otp_code: str, user_name: Optional[str] = None) -> str:
     """Build a professional HTML email body for OTP delivery."""
@@ -298,9 +314,13 @@ def send_otp_email(
         return False
 
 
-def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str]) -> str:
+def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
+                          with_logo: bool = True) -> str:
     """Build a professional HTML email for document delivery."""
     doc_list = "".join(f"<li style='margin:4px 0;'>{name}</li>" for name in doc_names)
+    logo = (f'<img src="cid:{LOGO_CID}" alt="eko" width="94" height="46" '
+            f'style="display:block;margin:0 auto 12px;border:0;">'
+            if with_logo else "")
     return f"""\
 <!DOCTYPE html>
 <html>
@@ -314,16 +334,17 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str]) -> s
       <td align="center">
         <table width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#ffffff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.06);overflow:hidden;">
           <tr>
-            <td style="background:linear-gradient(135deg,#6366f1,#06b6d4);padding:32px 32px 24px;text-align:center;">
-              <h1 style="margin:0;color:#ffffff;font-size:22px;font-weight:700;">CSP DocMaker</h1>
-              <p style="margin:6px 0 0;color:rgba(255,255,255,0.85);font-size:13px;">Document Delivery</p>
+            <td style="background:#ffffff;padding:28px 32px 20px;text-align:center;border-bottom:4px solid #fbb11b;">
+              {logo}
+              <p style="margin:0;color:#1f2937;font-size:17px;font-weight:700;">{ORGANISATION_NAME}</p>
+              <p style="margin:4px 0 0;color:#6b7280;font-size:13px;">CSP Document Delivery</p>
             </td>
           </tr>
           <tr>
             <td style="padding:32px;">
               <p style="margin:0 0 16px;color:#374151;font-size:15px;">Dear {csp_name},</p>
               <p style="margin:0 0 16px;color:#374151;font-size:15px;">
-                Please find attached your documents from EKO India Financial Services:
+                Please find attached your documents from {ORGANISATION_NAME}:
               </p>
               <div style="background:#f0f1ff;border:1px solid #e0e1ef;border-radius:8px;padding:16px;margin:0 0 20px;">
                 <p style="margin:0 0 8px;font-weight:600;color:#4338ca;font-size:13px;">CSP ID: {csp_id}</p>
@@ -339,7 +360,7 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str]) -> s
           <tr>
             <td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
               <p style="margin:0;color:#9ca3af;font-size:11px;">
-                This is an automated message from CSP DocMaker — EKO India Financial Services.
+                This is an automated message from {ORGANISATION_NAME}.
               </p>
             </td>
           </tr>
@@ -356,12 +377,32 @@ def _build_documents_plain(csp_name: str, csp_id: str, doc_names: List[str]) -> 
     doc_list = "\n".join(f"  - {name}" for name in doc_names)
     return (
         f"Dear {csp_name},\n\n"
-        f"Please find attached your documents from EKO India Financial Services.\n\n"
+        f"Please find attached your documents from {ORGANISATION_NAME}.\n\n"
         f"CSP ID: {csp_id}\n\n"
         f"Documents:\n{doc_list}\n\n"
         f"If you have any questions, please contact your Relationship Manager.\n\n"
-        f"— CSP DocMaker (EKO India Financial Services)"
+        f"— {ORGANISATION_NAME}"
     )
+
+
+def _logo_part():
+    """The Eko logo as an inline image, or None if it cannot be read.
+
+    Without it the email still goes — the name is in the header as text —
+    but the reason is logged, so a missing file does not go unnoticed.
+    """
+    from email.mime.image import MIMEImage
+    try:
+        with open(LOGO_PATH, "rb") as fh:
+            part = MIMEImage(fh.read(), _subtype="png")
+    except OSError as e:
+        logger.error("email_service: the Eko logo for the documents email "
+                     "could not be read from %s: %s: %s — sending without it",
+                     LOGO_PATH, type(e).__name__, e)
+        return None
+    part.add_header("Content-ID", f"<{LOGO_CID}>")
+    part.add_header("Content-Disposition", "inline", filename="eko-logo.png")
+    return part
 
 
 def send_documents_email(
@@ -385,8 +426,10 @@ def send_documents_email(
     Returns:
         True if email was sent successfully, False otherwise.
     """
-    subject = f"Your CSP Documents — {csp_id} | EKO India Financial Services"
-    html_body = _build_documents_html(csp_name, csp_id, doc_names)
+    subject = documents_subject(csp_id)
+    logo = _logo_part()
+    html_body = _build_documents_html(csp_name, csp_id, doc_names,
+                                      with_logo=logo is not None)
     plain_body = _build_documents_plain(csp_name, csp_id, doc_names)
 
     method = settings.email_method.lower().strip()
@@ -413,11 +456,18 @@ def send_documents_email(
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    # Add body as alternative (HTML + plain text)
+    # Add body as alternative (HTML + plain text), with the logo the HTML
+    # shows held beside it (multipart/related) so it is part of the email.
     body_part = MIMEMultipart("alternative")
     body_part.attach(MIMEText(plain_body, "plain", "utf-8"))
     body_part.attach(MIMEText(html_body, "html", "utf-8"))
-    msg.attach(body_part)
+    if logo is not None:
+        related = MIMEMultipart("related")
+        related.attach(body_part)
+        related.attach(logo)
+        msg.attach(related)
+    else:
+        msg.attach(body_part)
 
     # Attach document files
     for filepath in doc_filepaths:

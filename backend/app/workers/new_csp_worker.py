@@ -289,7 +289,7 @@ def _process_one(session, csp, document_types, job=None) -> None:
     email_job = EmailJob(
         processing_job_id=job.id,
         recipient=csp.email,
-        subject=f"Your CSP Documents — {csp.csp_id} | EKO India Financial Services",
+        subject=email_service.documents_subject(csp.csp_id),
         status=EmailStatus.SENDING,
     )
     email_job.documents = [

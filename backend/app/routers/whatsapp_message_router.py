@@ -109,6 +109,48 @@ async def one_message(
         lambda sync: message_log.details(sync, message))
 
 
+@router.get("/{message_id}/conversation")
+async def conversation(
+    message_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """The WhatsApp chat with this CSP from this message on (No. 112).
+
+    Read live from Eko's WhatsApp platform. If it cannot be reached the
+    answer says so (with the reason) instead of showing an empty chat,
+    which would look like the CSP had not replied.
+    """
+    from app.services import whatsapp_platform as wa
+
+    message = (await session.execute(
+        select(WhatsAppMessage).where(WhatsAppMessage.id == message_id)
+    )).scalars().first()
+    if message is None:
+        raise HTTPException(404, "No such message.")
+    if not message.phone:
+        return {"phone": "", "items": [], "error": "No mobile number is "
+                "known for this message, so there is no chat to show."}
+    ours = (await session.execute(
+        select(WhatsAppMessage).where(WhatsAppMessage.phone == message.phone)
+        .order_by(WhatsAppMessage.sent_at)
+    )).scalars().all()
+    try:
+        replies = await asyncio.to_thread(
+            message_log.replies_from, wa, message.phone)
+    except Exception as e:
+        logger.error("whatsapp_messages.conversation: inbox for message %s "
+                     "could not be read: %s: %s", message_id,
+                     type(e).__name__, e, exc_info=True)
+        return {"phone": message.phone, "items": [],
+                "error": f"The WhatsApp platform could not be read: "
+                         f"{type(e).__name__}: {e}"}
+    return {"phone": message.phone,
+            "items": message_log.build_conversation(
+                list(ours), replies, message.sent_at),
+            "error": None}
+
+
 @router.post("/refresh")
 async def refresh(
     user=Depends(require_role("admin", "super_admin")),
