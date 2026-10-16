@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
+import AssistantChat from "../components/AssistantChat";
 import CspPhoto from "../components/CspPhoto";
 import Database from "../admin/Database";
 import Sheets from "../admin/Sheets";
@@ -1019,6 +1020,7 @@ export default function RMDashboard() {
           )}
         </div>
       </main>
+      <AssistantChat />
     </div>
   );
 }

@@ -38,7 +38,8 @@ REJECTED = "rejected"
 FAILED = "failed"
 
 # The app's own placeholders in its stored wording.
-_TOKEN = re.compile(r"\{(name|fields|link|documents|email)\}")
+# {message} is the ask-anything chat's own text (No. 114).
+_TOKEN = re.compile(r"\{(name|fields|link|documents|email|message)\}")
 
 
 class WhatsAppPlatformError(RuntimeError):

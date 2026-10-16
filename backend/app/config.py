@@ -226,6 +226,24 @@ class Settings(BaseSettings):
         alias="GEMINI_API_BASE")
     gemini_timeout_seconds: int = Field(default=120,
                                         alias="GEMINI_TIMEOUT_SECONDS")
+
+    # The ask-anything chat (tracker No. 114, chosen 16 Oct 2026). An AI model
+    # reads the question and looks things up through the app's own read-only
+    # tools; it never sends anything — a message it drafts goes out only when
+    # the person presses Send. cloudflare (free daily allowance, the account
+    # the photo studio already uses) | gemini | off.
+    assistant_provider: str = Field(default="cloudflare",
+                                    alias="ASSISTANT_PROVIDER")
+    # gpt-oss-120b: measured 16 Oct 2026, it looks a CSP up once and answers;
+    # Llama 3.3 70B repeated the same lookup up to three times.
+    assistant_model: str = Field(
+        default="@cf/openai/gpt-oss-120b",
+        alias="ASSISTANT_MODEL")
+    assistant_timeout_seconds: int = Field(default=45,
+                                           alias="ASSISTANT_TIMEOUT_SECONDS")
+    # How long a drafted message waits for its Send press.
+    assistant_draft_minutes: int = Field(default=30,
+                                         alias="ASSISTANT_DRAFT_MINUTES")
     # Measured 11 Oct 2026 on the user's samples and the agents' photos:
     # same person 0.84-0.92, different people at most 0.43. OpenCV's own
     # 0.363 would have accepted two different people. Raised from 0.60 to

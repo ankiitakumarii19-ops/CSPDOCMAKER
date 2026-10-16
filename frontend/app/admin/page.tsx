@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
+import AssistantChat from "../components/AssistantChat";
 import DocumentTemplates from "./DocumentTemplates";
 import AccessControl from "./AccessControl";
 import Sheets from "./Sheets";
@@ -727,6 +728,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </main>
+      <AssistantChat />
     </div>
   );
 }

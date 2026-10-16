@@ -466,6 +466,83 @@ export interface CSPDetail {
   rm_resolution?: string | null;
 }
 
+// ---- Ask-anything chat (No. 114) ----
+
+export interface AssistantField {
+  key: string;
+  label: string;
+  value: string | number | boolean | null;
+}
+
+export interface AssistantDocument {
+  id: string;
+  document_type: string;
+  label: string;
+  version: number;
+  versions: number;
+  filename: string;
+  size: number;
+  created_at: string | null;
+}
+
+export interface AssistantCspSummary {
+  csp_code: string;
+  name: string;
+  district: string | null;
+  state: string | null;
+  branch_name: string | null;
+  rm_name: string | null;
+}
+
+export type AssistantCard =
+  | {
+      type: "csp";
+      csp_id: string;
+      csp_code: string;
+      name: string;
+      fields: AssistantField[];
+      documents: AssistantDocument[];
+      has_photo: boolean;
+    }
+  | {
+      type: "documents";
+      csp_id: string;
+      csp_code: string;
+      name: string;
+      documents: AssistantDocument[];
+    }
+  | {
+      type: "csp_list";
+      query: string;
+      total: number;
+      items: AssistantCspSummary[];
+    }
+  | {
+      type: "draft";
+      id: string;
+      csp_id: string;
+      csp_code: string;
+      csp_name: string;
+      channel: "whatsapp" | "email";
+      to: string;
+      preview: string;
+      subject: string | null;
+      expires_at: string;
+    };
+
+export interface AssistantTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface AssistantSendResult {
+  draft_id: string;
+  channel: string;
+  to: string;
+  state: "sent" | "pending" | "rejected" | "failed";
+  reason: string;
+}
+
 class ApiClient {
   // Only a fallback for browsers that refuse storage (some private modes).
   private accessToken: string | null = null;
@@ -955,6 +1032,47 @@ class ApiClient {
     });
     if (!response.ok) {
       throw await this.failure(response, path, "Could not open the file");
+    }
+    return response.blob();
+  }
+
+  // ---- Ask-anything chat (No. 114) ----
+  async assistantStatus() {
+    return this.request<{ available: boolean; provider: string }>(
+      "/assistant/status"
+    );
+  }
+
+  async assistantChat(messages: AssistantTurn[]) {
+    return this.request<{ reply: string; cards: AssistantCard[] }>(
+      "/assistant/chat",
+      { method: "POST", body: JSON.stringify({ messages }) }
+    );
+  }
+
+  async assistantSend(draftId: string) {
+    return this.request<AssistantSendResult>(
+      `/assistant/drafts/${encodeURIComponent(draftId)}/send`,
+      { method: "POST" }
+    );
+  }
+
+  async assistantCancel(draftId: string) {
+    return this.request<{ cancelled: boolean }>(
+      `/assistant/drafts/${encodeURIComponent(draftId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  /** A PDF the chat offered, fetched with the login so it can be saved. */
+  async assistantDocument(documentId: string): Promise<Blob> {
+    const path = `/assistant/documents/${encodeURIComponent(documentId)}`;
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not download the document");
     }
     return response.blob();
   }
