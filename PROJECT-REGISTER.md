@@ -346,3 +346,4 @@ it — you said so.
 | 18 Oct 2026 | Added No. 115: chat switched from Cloudflare to the Claude API (built and tested here; needs an API key) |
 | 19 Oct 2026 | No. 115 replaced (never deployed). Added No. 116: chat without AI — rules + in-app Knowledge Base; all AI code removed |
 | 19 Oct 2026 | Added No. 117: Knowledge Base moved to Setup; the chat guides a new Workspace Owner through setup and does confirmed steps for them |
+| 19 Oct 2026 | No. 116 + 117 pushed to GitHub at your request (500b8de); server update is yours to run |
