@@ -13,6 +13,7 @@ import CspSearch from "./CspSearch";
 import Agents from "./Agents";
 import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
+import KnowledgeBase from "./KnowledgeBase";
 import DashboardView from "./DashboardView";
 import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
@@ -346,6 +347,17 @@ export default function AdminDashboard() {
                   <i className="fas fa-database w-5 text-center"></i> Database
                 </button>
               )}
+              {/* What the chat answers process questions from (No. 116). */}
+              <button
+                onClick={() => setAdminRoute("knowledge")}
+                className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                  adminRoute === "knowledge"
+                    ? "bg-navy-800 text-white border-l-4 border-eko"
+                    : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                }`}
+              >
+                <i className="fas fa-book w-5 text-center"></i> Knowledge Base
+              </button>
             </>
           )}
         </nav>
@@ -424,6 +436,7 @@ export default function AdminDashboard() {
               <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
             {adminRoute === "whatsapp" && <WhatsAppMessages />}
+            {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
             {isOwner && adminRoute === "access" && <AccessControl />}

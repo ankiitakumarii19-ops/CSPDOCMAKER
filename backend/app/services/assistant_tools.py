@@ -1,20 +1,17 @@
 """
 CSP DocMaker — what the ask-anything chat can look up and draft (No. 114)
 
-The AI model never reaches the database itself. It asks for one of the
-tools below by name; each runs with the signed-in person's own access, so
-an RM's question is answered only from that RM's CSPs (csp_access — chosen
-16 Oct 2026: "Everyone, RMs see only their CSPs"). A CSP someone may not
-see is reported as not found, so the chat cannot be used to learn that it
-exists.
+assistant_engine (rules, no AI model since No. 116) calls these. Each runs
+with the signed-in person's own access, so an RM's question is answered
+only from that RM's CSPs (csp_access — chosen 16 Oct 2026: "Everyone, RMs
+see only their CSPs"). A CSP someone may not see is reported as not found,
+so the chat cannot be used to learn that it exists.
 
-Every tool returns two things:
-  * `data`  — what the model reads to write its answer;
+Every lookup returns two things:
+  * `data`  — the facts, as plain values;
   * `card`  — what the chat screen shows under the answer (a CSP's
               contacts, Download buttons for its PDFs, a message draft
-              with a Send button). Cards come from the database, not from
-              the model's wording, so a number or file shown on a card is
-              never one the model made up.
+              with a Send button), straight from the database.
 
 Drafting is the only "action", and it sends nothing: the draft is kept for
 ASSISTANT_DRAFT_MINUTES and goes out only when the person presses Send
@@ -67,58 +64,8 @@ CONTACT_FIELDS = [
     ("asm_contact", "ASM Contact Number"),
 ]
 
-TOOLS = [
-    {"type": "function", "function": {
-        "name": "find_csps",
-        "description": (
-            "Search CSPs by part of their CSP code, name, mobile number, "
-            "branch, district, state or RM name. Use when the person does "
-            "not give an exact CSP code, or asks for a list."),
-        "parameters": {"type": "object", "properties": {
-            "query": {"type": "string",
-                      "description": "Text to search for"}},
-            "required": ["query"]}}},
-    {"type": "function", "function": {
-        "name": "csp_details",
-        "description": (
-            "Everything on record for one CSP: its contacts and those of its "
-            "branch, RBO, RM, ASM and DC, its address, and which documents "
-            "and photo exist. Use for any question about one CSP."),
-        "parameters": {"type": "object", "properties": {
-            "csp_code": {"type": "string", "description": "The CSP code"}},
-            "required": ["csp_code"]}}},
-    {"type": "function", "function": {
-        "name": "csp_documents",
-        "description": (
-            "The CSP's stored PDF documents (ID card, appointment letter, "
-            "training certificate, BCP), shown to the person with Download "
-            "buttons. Use whenever the person wants a CSP's documents."),
-        "parameters": {"type": "object", "properties": {
-            "csp_code": {"type": "string", "description": "The CSP code"}},
-            "required": ["csp_code"]}}},
-    {"type": "function", "function": {
-        "name": "draft_message",
-        "description": (
-            "Prepare a WhatsApp or email message to a CSP. It is NOT sent: "
-            "the person sees the draft and presses Send themselves. Write "
-            "the message text the person asked for, politely, in English — "
-            "in Hindi only if this request is written in Hindi/Hinglish or "
-            "asks for Hindi. Do not add a greeting or sign-off; those are "
-            "added automatically."),
-        "parameters": {"type": "object", "properties": {
-            "csp_code": {"type": "string", "description": "The CSP code"},
-            "message": {"type": "string",
-                        "description": "The message text, without greeting"},
-            "channel": {"type": "string", "enum": [WHATSAPP, EMAIL, "auto"],
-                        "description": "auto = WhatsApp if the CSP has a "
-                                       "mobile number, else email"}},
-            "required": ["csp_code", "message"]}}},
-]
-TOOL_NAMES = {t["function"]["name"] for t in TOOLS}
-
-
 class ToolError(ValueError):
-    """A tool could not do what was asked; the text is shown to the model."""
+    """A lookup could not do what was asked; the text is the chat's answer."""
 
 
 def _text(value) -> str:
@@ -362,32 +309,49 @@ async def put_back(draft: dict) -> None:
                             ex=int(left))
 
 
-# ---- dispatch ----------------------------------------------------------------
+# ---- setup actions, kept until the Owner presses Do it (No. 117) -------------
 
-async def run(name: str, arguments, session: AsyncSession, user: dict
-              ) -> Tuple[dict, Optional[dict]]:
-    """Run one tool the model asked for. Never raises for a bad request from
-    the model — the reason goes back to the model as data — but does raise
-    for failures of the app itself, which the router reports."""
-    if name not in TOOL_NAMES:
-        return {"error": f"There is no tool called {name!r}."}, None
-    if isinstance(arguments, str):
-        try:
-            arguments = json.loads(arguments or "{}")
-        except ValueError:
-            return {"error": "The tool arguments were not valid JSON."}, None
-    if not isinstance(arguments, dict):
-        return {"error": "The tool arguments must be an object."}, None
+_ACTION_KEY = "assistant:action:{}"
+
+
+async def propose_action(user: dict, kind: str, params: dict, title: str,
+                         detail: str, extra=()) -> dict:
+    """Keep a setup action the chat offers to do, and return its card. It
+    runs only when the same person presses Do it (assistant_router)."""
+    minutes = get_settings().assistant_draft_minutes
+    action = {
+        "id": uuid.uuid4().hex, "kind": kind, "params": params,
+        "title": title, "detail": detail, "extra": list(extra),
+        "owner": _text(user.get("sub")).lower(),
+        "workspace_id": _workspace_text(),
+        "expires_at": (datetime.now(timezone.utc)
+                       + timedelta(minutes=minutes)).isoformat(),
+    }
     try:
-        if name == "find_csps":
-            return await find_csps(session, user, arguments.get("query"))
-        if name == "csp_details":
-            return await csp_details(session, user, arguments.get("csp_code"))
-        if name == "csp_documents":
-            return await csp_documents(session, user,
-                                       arguments.get("csp_code"))
-        return await draft_message(
-            session, user, arguments.get("csp_code"),
-            arguments.get("message"), arguments.get("channel") or "auto")
-    except ToolError as e:
-        return {"error": str(e)}, None
+        await _client().set(_ACTION_KEY.format(action["id"]),
+                            json.dumps(action), ex=max(60, minutes * 60))
+    except Exception as e:
+        logger.error("assistant_tools.propose_action: could not keep the %s "
+                     "action: %s: %s", kind, type(e).__name__, e,
+                     exc_info=True)
+        raise ToolError(f"The action could not be kept (Redis: "
+                        f"{type(e).__name__}); nothing was changed.") from e
+    return {"type": "action", **{k: action[k] for k in (
+        "id", "kind", "title", "detail", "extra", "expires_at")}}
+
+
+async def take_action(action_id: str) -> Optional[dict]:
+    """Remove and return an action — atomically, so it runs once."""
+    if not re.fullmatch(r"[0-9a-f]{32}", action_id or ""):
+        return None
+    raw = await _client().getdel(_ACTION_KEY.format(action_id))
+    return json.loads(raw) if raw else None
+
+
+async def put_back_action(action: dict) -> None:
+    """Someone else's press must not use up the owner's action."""
+    left = (datetime.fromisoformat(action["expires_at"])
+            - datetime.now(timezone.utc)).total_seconds()
+    if left > 5:
+        await _client().set(_ACTION_KEY.format(action["id"]),
+                            json.dumps(action), ex=int(left))

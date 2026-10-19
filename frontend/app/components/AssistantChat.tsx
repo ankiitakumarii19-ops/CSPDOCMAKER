@@ -1,13 +1,14 @@
 "use client";
 
 /**
- * Ask-anything chat (tracker No. 114).
+ * Ask-anything chat (tracker No. 114; no AI model since No. 116).
  *
  * A round button bottom-right on the Admin and RM screens. Ask about a CSP in
  * English, Hindi or Hinglish: its documents (Download / Share), its contacts
- * (RBO, RM, ASM, DC, branch), or "message the CSP and remind them…".
- *
- * What the cards show comes from the database, not from the AI's wording.
+ * (RBO, RM, ASM, DC, branch), what is missing, or "remind <code> to …".
+ * Process questions are answered from the Knowledge Base (Admin → Knowledge
+ * Base). The server answers by fixed rules, so the same question always gets
+ * the same answer, and everything shown comes from the records.
  * A message is only ever a DRAFT here until the person presses Send.
  * RMs get answers about their own CSPs only (enforced by the server).
  */
@@ -17,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../lib/api";
 import type {
   ApiError,
+  AssistantActionResult,
   AssistantCard,
   AssistantDocument,
   AssistantSendResult,
@@ -27,12 +29,16 @@ interface Entry {
   role: "user" | "assistant" | "error";
   content: string;
   cards?: AssistantCard[];
+  suggestions?: string[];
 }
 
 const EXAMPLES = [
   "Do you have the documents of CSP 1A850466?",
   "RBO contact number of CSP 1A851727",
+  "What is missing for 1A851727?",
+  "How many CSPs without photo?",
   "Remind CSP 1A851727 to send their photo by Friday",
+  "What is a BCP?",
 ];
 
 function errorText(e: unknown): string {
@@ -289,6 +295,160 @@ function Draft({ card }: { card: Extract<AssistantCard, { type: "draft" }> }) {
   );
 }
 
+const STEP_STYLE: Record<string, { icon: string; tone: string }> = {
+  done: { icon: "fa-circle-check", tone: "text-eko-dark dark:text-eko" },
+  todo: { icon: "fa-circle", tone: "text-gray-400" },
+  problem: { icon: "fa-triangle-exclamation", tone: "text-amber-600 dark:text-amber-400" },
+  blocked: { icon: "fa-ban", tone: "text-red-600 dark:text-red-400" },
+  optional: { icon: "fa-circle-half-stroke", tone: "text-gray-400" },
+};
+
+/** The Owner's setup checklist (No. 117): each step with what to do; a
+ *  button asks the chat to explain the step or to offer doing it. */
+function SetupChecklist({
+  card,
+  ask,
+}: {
+  card: Extract<AssistantCard, { type: "setup" }>;
+  ask: (q: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+        Setup — {card.done} of {card.total} essential steps done
+      </div>
+      <ul className="space-y-2">
+        {card.steps.map((s) => {
+          const style = STEP_STYLE[s.status] || STEP_STYLE.todo;
+          return (
+            <li key={s.key} className="flex gap-2">
+              <i className={`fas ${style.icon} ${style.tone} mt-0.5 w-4 text-center`}></i>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-gray-900 dark:text-gray-100">
+                  <span className="font-semibold">{s.title}</span>{" "}
+                  <span className={`text-xs ${style.tone}`}>{s.label}</span>
+                </div>
+                <div className="text-xs text-gray-600 dark:text-gray-400">{s.detail}</div>
+                {s.status !== "done" && s.how && (
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    <Rich text={s.how} />
+                  </div>
+                )}
+                {s.status !== "done" && s.ask && (
+                  <button
+                    onClick={() => ask(s.ask as string)}
+                    className="mt-1 px-2.5 py-1 rounded-full border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 hover:border-eko"
+                  >
+                    {/^(create|add|turn)/i.test(s.ask) ? "Do this for me" : "How?"}
+                  </button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+/** A setup change the chat offers to make (No. 117). Nothing changes until
+ *  the Owner presses Do it; the server runs it once and records it. */
+function SetupAction({
+  card,
+  ask,
+}: {
+  card: Extract<AssistantCard, { type: "action" }>;
+  ask: (q: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<AssistantActionResult | null>(null);
+  const [cancelled, setCancelled] = useState(false);
+  const [error, setError] = useState("");
+  const finished = cancelled || result !== null;
+
+  async function run() {
+    setBusy(true);
+    setError("");
+    try {
+      setResult(await api.assistantRunAction(card.id));
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function cancel() {
+    setBusy(true);
+    setError("");
+    try {
+      await api.assistantCancelAction(card.id);
+      setCancelled(true);
+    } catch (e) {
+      setError(errorText(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+        <i className="fas fa-wand-magic-sparkles mr-1"></i>Setup — not done yet
+      </div>
+      <div className="text-sm font-semibold text-gray-900 dark:text-white">{card.title}</div>
+      <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">{card.detail}</div>
+      {card.extra.map((x, i) => (
+        <div key={i} className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+          <Rich text={x} />
+        </div>
+      ))}
+
+      {result && result.ok && (
+        <div className="mt-2 text-sm text-eko-dark dark:text-eko">
+          <i className="fas fa-check-circle mr-1"></i>
+          {result.message}
+        </div>
+      )}
+      {result && !result.ok && (
+        <div className="mt-2 text-sm text-red-600 dark:text-red-400">
+          <i className="fas fa-circle-exclamation mr-1"></i>
+          Not done: {result.message}
+        </div>
+      )}
+      {result && result.ok && result.next && (
+        <button
+          onClick={() => ask(result.next!.ask)}
+          className="mt-2 px-2.5 py-1 rounded-full border border-gray-300 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200 hover:border-eko"
+        >
+          Next: {result.next.title}
+        </button>
+      )}
+      {cancelled && <div className="mt-2 text-sm text-gray-500">Cancelled — nothing was changed.</div>}
+      {error && <div className="mt-2 text-sm text-red-600 dark:text-red-400">{error}</div>}
+
+      {!finished && (
+        <div className="flex gap-2 mt-2">
+          <button
+            onClick={run}
+            disabled={busy}
+            className="px-4 py-1.5 bg-eko hover:bg-eko-dark text-white text-sm font-medium rounded-lg disabled:opacity-50"
+          >
+            {busy ? "Working…" : "Do it"}
+          </button>
+          <button
+            onClick={cancel}
+            disabled={busy}
+            className="px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Card({ card, ask }: { card: AssistantCard; ask: (q: string) => void }) {
   const box =
     "mt-2 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-3";
@@ -296,6 +456,20 @@ function Card({ card, ask }: { card: AssistantCard; ask: (q: string) => void }) 
     return (
       <div className={box}>
         <Draft card={card} />
+      </div>
+    );
+  }
+  if (card.type === "setup") {
+    return (
+      <div className={box}>
+        <SetupChecklist card={card} ask={ask} />
+      </div>
+    );
+  }
+  if (card.type === "action") {
+    return (
+      <div className={box}>
+        <SetupAction card={card} ask={ask} />
       </div>
     );
   }
@@ -372,6 +546,29 @@ export default function AssistantChat() {
     endRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [entries, busy]);
 
+  // A Workspace Owner whose workspace is not ready yet is shown the setup
+  // checklist as soon as the chat opens (No. 117). Others: nothing changes.
+  const [setupChecked, setSetupChecked] = useState(false);
+  useEffect(() => {
+    if (!open || setupChecked || entries.length > 0) return;
+    setSetupChecked(true);
+    api
+      .assistantSetup()
+      .then((s) => {
+        if (s.owner && !s.complete && s.reply) {
+          setEntries((now) =>
+            now.length > 0
+              ? now
+              : [{ role: "assistant", content: s.reply as string, cards: s.cards || [] }]
+          );
+        }
+      })
+      .catch(() => {
+        // Not knowing the setup state must never block the chat itself;
+        // asking "setup status" reports any failure with its Error ID.
+      });
+  }, [open, setupChecked, entries.length]);
+
   useEffect(() => {
     if (!open) return;
     inputRef.current?.focus();
@@ -395,7 +592,15 @@ export default function AssistantChat() {
       .map((e) => ({ role: e.role as "user" | "assistant", content: e.content }));
     try {
       const answer = await api.assistantChat(history);
-      setEntries([...next, { role: "assistant", content: answer.reply, cards: answer.cards }]);
+      setEntries([
+        ...next,
+        {
+          role: "assistant",
+          content: answer.reply,
+          cards: answer.cards,
+          suggestions: answer.suggestions,
+        },
+      ]);
     } catch (e) {
       setEntries([...next, { role: "error", content: errorText(e) }]);
     } finally {
@@ -445,8 +650,9 @@ export default function AssistantChat() {
             {entries.length === 0 && (
               <div className="text-sm text-gray-600 dark:text-gray-400">
                 <p className="mb-3">
-                  Ask in English, Hindi or Hinglish. Messages are shown to you as a draft first —
-                  nothing is sent until you press <strong>Send</strong>.
+                  Ask in English, Hindi or Hinglish. Answers come straight from the app&apos;s
+                  records and the Knowledge Base — no AI. Messages are shown to you as a draft
+                  first — nothing is sent until you press <strong>Send</strong>.
                 </p>
                 <div className="space-y-2">
                   {EXAMPLES.map((ex) => (
@@ -485,6 +691,20 @@ export default function AssistantChat() {
                   {e.cards?.map((c, j) => (
                     <Card key={j} card={c} ask={ask} />
                   ))}
+                  {i === entries.length - 1 && e.suggestions && e.suggestions.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {e.suggestions.map((sg) => (
+                        <button
+                          key={sg}
+                          onClick={() => ask(sg)}
+                          disabled={busy}
+                          className="px-2.5 py-1 rounded-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-xs text-gray-700 dark:text-gray-200 hover:border-eko disabled:opacity-50"
+                        >
+                          {sg}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )
             )}

@@ -1,4 +1,4 @@
-"""Fetch the two OpenCV face models the AI-portrait face check needs.
+"""Fetch the OpenCV face-detection model the passport photo needs.
 
 Run once on a new machine:  python scripts/download_face_models.py
 Each file is checked against the fingerprint recorded on 11 Oct 2026; a
@@ -14,9 +14,6 @@ MODELS = {
     "face_detection_yunet_2023mar.onnx": (
         "face_detection_yunet/face_detection_yunet_2023mar.onnx",
         "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"),
-    "face_recognition_sface_2021dec.onnx": (
-        "face_recognition_sface/face_recognition_sface_2021dec.onnx",
-        "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"),
 }
 TARGET = os.path.join(os.path.dirname(__file__), "..", "app", "assets", "models")
 

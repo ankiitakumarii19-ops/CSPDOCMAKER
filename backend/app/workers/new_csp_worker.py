@@ -100,8 +100,6 @@ def process_new_csps(self):
                 from app.services import ko_level
                 doc_types = ko_level.allowed_documents(
                     csp.csp_code or csp.csp_id, all_doc_types)
-                from app.services import photo_portrait
-                photo_portrait.prepare_for(csp)
                 from app.services import studio_photo
                 studio_photo.prepare_for(csp)   # No. 72
                 missing = check_missing_data(csp, doc_types)

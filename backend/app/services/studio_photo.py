@@ -6,11 +6,11 @@ plain WHITE background and passport framing, with the person's real face.
 Nothing is generated and nothing leaves the machine.
 
 Since 12 Oct 2026 (tracker No. 72) this is THE photo on every document —
-the Cloudflare AI portrait is off — and a new KO's or Sub-KO's photo is
+the AI portrait code was removed on 19 Oct 2026, No. 116 — and a new KO's or Sub-KO's photo is
 edited automatically as soon as the automation has it. Deterministic: the
 same photo always gives the same result.
 
-  1. Find the face (OpenCV YuNet, already used for the face check).
+  1. Find the face (OpenCV YuNet, face_match.py).
   2. Level the head: the whole photo is turned so the eyes are level —
      at most 15 degrees. The face itself is not altered.
   3. Cut the person out (rembg, model u2net_human_seg, run locally) and

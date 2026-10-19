@@ -197,11 +197,6 @@ async def process_workflow(
     if any(dt in template_service.PHOTO_MARKERS for dt in allowed):
         await asyncio.to_thread(_try_photo, csp, False)
 
-    # The agent's AI studio portrait, if it can be made now (No. 70). Run
-    # off the request loop: it can take a few seconds.
-    from app.services import photo_portrait
-    await asyncio.to_thread(photo_portrait.prepare_for, csp)
-
     # 2. Check for missing data
     missing_check = check_missing_data(csp, request.document_types)
     session.add(ValidationResult(

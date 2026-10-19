@@ -166,12 +166,6 @@ class Settings(BaseSettings):
     csp_sync_interval_minutes: int = Field(default=1, alias="CSP_SYNC_INTERVAL_MINUTES")
 
 
-    # ---- AI ----
-    ai_provider: str = Field(default="openai", alias="AI_PROVIDER")
-    ai_api_key: str = Field(default="", alias="AI_API_KEY")
-    ai_model: str = Field(default="gpt-4", alias="AI_MODEL")
-    ai_validation_timeout_seconds: int = Field(default=30, alias="AI_VALIDATION_TIMEOUT_SECONDS")
-
     # ---- Documents ----
     # Relative paths resolve against the repository root (the backend process
     # runs from backend/, while templates live in <repo>/templates/documents).
@@ -187,7 +181,7 @@ class Settings(BaseSettings):
     # Nothing is moved, stretched, added or removed.
     photo_touch_up: bool = Field(default=True, alias="PHOTO_TOUCH_UP")
     # White background + passport framing, made on this machine with the
-    # person's real face (tracker No. 67). Used unless an AI portrait is on.
+    # person's real face (tracker No. 67).
     photo_white_background: bool = Field(default=True,
                                          alias="PHOTO_WHITE_BACKGROUND")
     # The finished photo's size (tracker No. 72). Printed at 35 x 45 mm on
@@ -198,66 +192,11 @@ class Settings(BaseSettings):
                                             alias="PASSPORT_PHOTO_HEIGHT_MM")
     passport_photo_dpi: int = Field(default=500, alias="PASSPORT_PHOTO_DPI")
 
-    # AI studio portrait by Google Gemini (tracker No. 61). Only used when a
-    # key is set; every portrait is face-checked against the CSP's photo.
-    photo_ai_portrait: bool = Field(default=True, alias="PHOTO_AI_PORTRAIT")
-    # Which service makes it. Cloudflare Workers AI chosen 11 Oct 2026 for
-    # its free daily allowance; Gemini kept as the paid alternative.
-    # Decided 12 Oct 2026 (tracker No. 70): while the AI portrait is on, a
-    # document with a photo WAITS for the agent's portrait rather than going
-    # out with a plainer photo. Shown to the RM as a Pending detail.
-    photo_require_ai_portrait: bool = Field(
-        default=True, alias="PHOTO_REQUIRE_AI_PORTRAIT")
-    photo_ai_provider: str = Field(default="cloudflare",
-                                   alias="PHOTO_AI_PROVIDER")
-    cloudflare_account_id: str = Field(default="",
-                                       alias="CLOUDFLARE_ACCOUNT_ID")
-    cloudflare_api_token: str = Field(default="", alias="CLOUDFLARE_API_TOKEN")
-    cloudflare_image_model: str = Field(
-        # The bigger model, chosen 11 Oct 2026 (tracker No. 68) for its
-        # studio look. ~1,500 of the 10,000 free daily units per portrait.
-        default="@cf/black-forest-labs/flux-2-klein-9b",
-        alias="CLOUDFLARE_IMAGE_MODEL")
-    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
-    gemini_image_model: str = Field(
-        default="gemini-nano-banana-2.1", alias="GEMINI_IMAGE_MODEL")
-    gemini_api_base: str = Field(
-        default="https://generativelanguage.googleapis.com/v1",
-        alias="GEMINI_API_BASE")
-    gemini_timeout_seconds: int = Field(default=120,
-                                        alias="GEMINI_TIMEOUT_SECONDS")
-
-    # The ask-anything chat (tracker No. 114, chosen 16 Oct 2026). An AI model
-    # reads the question and looks things up through the app's own read-only
-    # tools; it never sends anything — a message it drafts goes out only when
-    # the person presses Send. cloudflare (free daily allowance, the account
-    # the photo studio already uses) | gemini | off.
-    assistant_provider: str = Field(default="cloudflare",
-                                    alias="ASSISTANT_PROVIDER")
-    # gpt-oss-120b: measured 16 Oct 2026, it looks a CSP up once and answers;
-    # Llama 3.3 70B repeated the same lookup up to three times.
-    assistant_model: str = Field(
-        default="@cf/openai/gpt-oss-120b",
-        alias="ASSISTANT_MODEL")
-    assistant_timeout_seconds: int = Field(default=45,
-                                           alias="ASSISTANT_TIMEOUT_SECONDS")
-    # How long a drafted message waits for its Send press.
+    # The ask-anything chat (tracker No. 114; deterministic since No. 116,
+    # 19 Oct 2026 — no AI model). How long a drafted message waits for its
+    # Send press.
     assistant_draft_minutes: int = Field(default=30,
                                          alias="ASSISTANT_DRAFT_MINUTES")
-    # Measured 11 Oct 2026 on the user's samples and the agents' photos:
-    # same person 0.84-0.92, different people at most 0.43. OpenCV's own
-    # 0.363 would have accepted two different people. Raised from 0.60 to
-    # 0.75 the same day (tracker No. 65), then set to 0.60 (No. 68) when the
-    # user chose the 9B model's studio look knowing faces come out similar
-    # rather than identical (its results: 0.62-0.73). 0.60 still sits well
-    # above every pair of different people measured (at most 0.43).
-    # The same photo gives a different portrait each time (1A852340 scored
-    # 0.85 once, 0.70 the next), so a photo gets a few tries before the
-    # original is settled on. Each try uses ~1,500 of Cloudflare's 10,000
-    # free daily units with the 9B model.
-    photo_ai_attempts: int = Field(default=3, alias="PHOTO_AI_ATTEMPTS")
-    face_match_threshold: float = Field(default=0.60,
-                                        alias="FACE_MATCH_THRESHOLD")
     photo_placeholder_allowed: bool = Field(
         default=True, alias="PHOTO_PLACEHOLDER_ALLOWED")
 

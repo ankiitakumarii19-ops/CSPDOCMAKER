@@ -489,7 +489,7 @@ async def sync_builtin_dashboards(session) -> int:
     return changed
 
 
-async def sync_builtin_messages(session) -> int:
+async def sync_builtin_messages(session, signature: str | None = None) -> int:
     """Give a workspace the wording it starts with.
 
     Chasing missing data is universal — every workspace gets it, because a
@@ -497,6 +497,9 @@ async def sync_builtin_messages(session) -> int:
     asked. What is NOT universal is how it is said. These are supplied as
     a starting point, marked built-in so they cannot be deleted, and fully
     editable: a customer's tone, languages and signature are theirs.
+
+    `signature` replaces the "— Team Eko" / "— Team" sign-off — a new
+    workspace set up from the chat signs with its own name (No. 117).
     """
     from sqlalchemy import select
 
@@ -554,6 +557,13 @@ async def sync_builtin_messages(session) -> int:
             ),
         },
     ]
+
+    if signature:
+        for spec in supplied:
+            body = spec["body"].replace("— Team Eko", f"— {signature}")
+            if body.endswith("— Team"):
+                body = body[:-len("— Team")] + f"— {signature}"
+            spec["body"] = body
 
     existing = {
         t.name for t in

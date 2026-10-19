@@ -29,9 +29,12 @@ from app.models.email_document import EmailDocument
 from app.models.data_request import DataRequest
 from app.models.document_template import DocumentTemplate
 from app.models.whatsapp_message import WhatsAppMessage
+from app.models.knowledge import KnowledgeEntry, KnowledgeMiss
 
 __all__ = [
     "WhatsAppMessage",
+    "KnowledgeEntry",
+    "KnowledgeMiss",
     "WorkspaceMember",
     "Workspace",
     "DataSource",

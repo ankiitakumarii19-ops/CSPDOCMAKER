@@ -104,8 +104,6 @@ def finish_ready(session) -> dict:
             if _try_photo(csp):
                 session.commit()
 
-            from app.services import photo_portrait
-            photo_portrait.prepare_for(csp)
             from app.services import studio_photo
             studio_photo.prepare_for(csp)   # No. 72
             if check_missing_data(csp, types).has_missing_data:

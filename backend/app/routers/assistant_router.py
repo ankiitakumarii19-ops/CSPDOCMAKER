@@ -11,15 +11,14 @@ lookup goes through assistant_tools, which applies csp_access; downloads and
 sends check it again here, so a draft or a document id cannot be used to
 reach another RM's CSP.
 
-Nothing is sent by the AI model. A draft goes out only on the Send press,
-exactly as previewed, once (the draft is removed as it is taken), and every
-send is written to the audit log.
+No AI model (tracker No. 116, 19 Oct 2026): assistant_engine answers by
+fixed rules from the records and the Knowledge Base. A draft goes out only
+on the Send press, exactly as previewed, once (the draft is removed as it is
+taken), and every send is written to the audit log.
 """
 
 import asyncio
-import json
 import logging
-from datetime import date
 from typing import List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -33,7 +32,7 @@ from app.dependencies import require_role
 from app.models.audit_log import AuditLog
 from app.models.csp_record import CSPRecord
 from app.models.stored_document import StoredDocument
-from app.services import (assistant_llm, assistant_tools, csp_access,
+from app.services import (assistant_engine, assistant_tools, csp_access,
                           document_storage_service)
 from app.workspace_context import current_workspace_id
 
@@ -42,7 +41,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 require_user = require_role("rm", "admin", "super_admin")
 
-MAX_TOOL_ROUNDS = 5
 MAX_HISTORY = 12
 
 
@@ -59,101 +57,27 @@ def _who(user: dict) -> str:
     return (user.get("sub") or user.get("email") or "").lower()
 
 
-def _system_prompt(user: dict) -> str:
-    scope = ("every CSP" if csp_access.is_admin(user)
-             else "only the CSPs assigned to them (they are an RM)")
-    return (
-        "You are the assistant inside CSP DocMaker, Eko Bharat Ventures' "
-        "tool for CSPs (Customer Service Points). You help staff find CSP "
-        "information, documents and contacts, and draft messages to CSPs.\n"
-        f"Today is {date.today():%d %B %Y}. The person asking is "
-        f"{user.get('name') or _who(user)}; they may see {scope}.\n"
-        "Rules:\n"
-        "- Answer ONLY from what the tools return. Never guess or invent a "
-        "number, name, email or document. If a tool says something is not "
-        "found or not on record, say so plainly, in the tool's words (e.g. "
-        "'not found among your CSPs').\n"
-        "- A CSP code is the CSP's ID. If the person gives a name or partial "
-        "code, use find_csps; if several match, list them and ask which.\n"
-        "- For documents, call csp_documents: the screen then shows Download "
-        "buttons under your answer, so just say which documents exist.\n"
-        "- To message, remind or text a CSP, call draft_message. It does NOT "
-        "send. Tell the person to check the draft below and press Send. "
-        "Never say a message was sent.\n"
-        "- Contacts, documents and drafts appear as cards under your answer; "
-        "keep your text short and do not repeat every field. Never use "
-        "tables; use short sentences or a bullet list.\n"
-        "- Reply in the language the person used (English, Hindi or "
-        "Hinglish). Be brief and friendly.\n"
-        "- You cannot change CSP data, generate documents or send email "
-        "attachments; say so if asked.")
-
-
 @router.post("/chat")
 async def chat(body: ChatIn, session: AsyncSession = Depends(get_session),
                user=Depends(require_user)):
-    """One question answered. The screen sends the conversation so far
-    (text only); the model looks things up again when it needs to."""
+    """One question answered by fixed rules from the records and the
+    Knowledge Base. The screen sends the conversation so far (text only) so
+    "his RBO number" can follow a question about a CSP."""
     history = [t.model_dump() for t in body.messages[-MAX_HISTORY:]]
     if history[-1]["role"] != "user":
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "The last message must be the question.")
-    messages = [{"role": "system", "content": _system_prompt(user)}] + history
-    cards, tools_used = [], []
-
-    try:
-        for _ in range(MAX_TOOL_ROUNDS):
-            answer = await asyncio.to_thread(
-                assistant_llm.complete, messages, assistant_tools.TOOLS)
-            calls = answer.get("tool_calls") or []
-            if not calls:
-                reply = (answer.get("content") or "").strip()
-                break
-            messages.append({"role": "assistant",
-                             "content": answer.get("content") or "",
-                             "tool_calls": calls})
-            for call in calls:
-                fn = call.get("function") or {}
-                name = fn.get("name", "")
-                data, card = await assistant_tools.run(
-                    name, fn.get("arguments"), session, user)
-                tools_used.append(name)
-                if card is not None:
-                    cards.append(card)
-                messages.append({
-                    "role": "tool", "tool_call_id": call.get("id", ""),
-                    "name": name,
-                    "content": json.dumps(data, default=str)})
-        else:
-            reply = ("I looked several things up but could not finish the "
-                     "answer. Please ask again more simply.")
-    except assistant_llm.AssistantUnavailable as e:
-        logger.error("assistant_router.chat: %s asked; the AI model failed "
-                     "after tools %s: %s", _who(user), tools_used, e,
-                     exc_info=e.__cause__ is not None)
-        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(e))
-
-    cards = await _distinct(cards)
-    if not reply:
-        reply = ("Here is what I found." if cards else
-                 "Sorry, I have no answer for that. Try asking with a CSP code.")
-    logger.info("assistant_router.chat: %s, %d turn(s), tools %s, %d card(s)",
-                _who(user), len(history), tools_used or "none", len(cards))
-    return {"reply": reply, "cards": cards}
-
-
-async def _distinct(cards: list) -> list:
-    """One card per thing. A model that looks the same CSP up twice, or
-    drafts twice, must not show two cards — or leave two drafts that could
-    both be sent. The latest of each wins; earlier drafts are discarded."""
-    latest = {}
-    for card in cards:
-        key = (card["type"], card.get("csp_id") or card.get("query"))
-        earlier = latest.pop(key, None)
-        if earlier is not None and earlier["type"] == "draft":
-            await assistant_tools.take_draft(earlier["id"])
-        latest[key] = card
-    return list(latest.values())
+    question = history[-1]["content"].strip()
+    if not question:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "The question is empty.")
+    result = await assistant_engine.answer(question, history[:-1], session,
+                                           user)
+    logger.info("assistant_router.chat: %s, %d turn(s), answer %s, %d "
+                "card(s)", _who(user), len(history), result.kind,
+                len(result.cards))
+    return {"reply": result.reply, "cards": result.cards,
+            "suggestions": result.suggestions}
 
 
 # ---- drafts ----------------------------------------------------------------
@@ -303,8 +227,87 @@ async def download_document(document_id: str,
         "Cache-Control": "private, no-store"})
 
 
+# ---- setting up the workspace (No. 117) -------------------------------------------
+
+require_owner = require_role("super_admin")
+
+
+@router.get("/setup")
+async def setup_status(session: AsyncSession = Depends(get_session),
+                       user=Depends(require_user)):
+    """The Owner's setup checklist, for the chat to open with while the
+    workspace is not ready. Quick: sheets are not opened here (asking
+    "setup status" in the chat does open them)."""
+    from app.services import workspace_setup
+    if not workspace_setup.is_owner(user):
+        return {"owner": False, "complete": True}
+    steps = await workspace_setup.checklist(session, user, live=False)
+    summary = workspace_setup.summary(steps)
+    return {"owner": True, **summary,
+            "reply": workspace_setup.reply_for(steps),
+            "cards": [{"type": "setup", **summary,
+                       "steps": [s.card() for s in steps]}]}
+
+
+async def _own_action(action_id: str, user: dict) -> dict:
+    gone = HTTPException(status.HTTP_404_NOT_FOUND,
+                         "This has expired or was already done or cancelled. "
+                         "Ask the chat again.")
+    action = await assistant_tools.take_action(action_id)
+    if action is None:
+        raise gone
+    if action.get("owner") != _who(user) or action.get("workspace_id") != str(
+            current_workspace_id() or ""):
+        await assistant_tools.put_back_action(action)
+        raise gone
+    return action
+
+
+@router.post("/actions/{action_id}/run")
+async def run_action(action_id: str,
+                     session: AsyncSession = Depends(get_session),
+                     user=Depends(require_owner)):
+    """The Owner pressed Do it: run the proposed setup action once, through
+    the same server functions the setup screens use, and audit it."""
+    from app.services import workspace_setup
+    action = await _own_action(action_id, user)
+    outcome = await workspace_setup.run(action["kind"], action["params"],
+                                        session, user)
+    try:
+        session.add(AuditLog(
+            workspace_id=current_workspace_id(),
+            action="assistant_setup_action", resource_type="workspace",
+            resource_id=str(current_workspace_id() or ""),
+            result="success" if outcome["ok"] else "failure",
+            metadata_json={"by": _who(user), "kind": action["kind"],
+                           "params": action["params"],
+                           "message": outcome["message"][:300]}))
+        await session.commit()
+    except Exception as e:
+        logger.error("assistant_router.run_action: could not audit the %s "
+                     "action: %s: %s", action["kind"], type(e).__name__, e,
+                     exc_info=True)
+    logger.info("assistant_router.run_action: %s ran %s: %s", _who(user),
+                action["kind"], "done" if outcome["ok"] else "refused")
+    nxt = None
+    if outcome["ok"]:
+        steps = await workspace_setup.checklist(session, user, live=False)
+        todo = [s for s in steps if s.status == workspace_setup.TODO]
+        if todo:
+            nxt = {"title": todo[0].title, "ask": todo[0].ask
+                   or "Setup status"}
+    return {"ok": outcome["ok"], "message": outcome["message"], "next": nxt}
+
+
+@router.delete("/actions/{action_id}")
+async def cancel_action(action_id: str, user=Depends(require_owner)):
+    action = await _own_action(action_id, user)
+    logger.info("assistant_router.cancel_action: %s cancelled %s", _who(user),
+                action["kind"])
+    return {"cancelled": True}
+
+
 @router.get("/status")
 async def assistant_status(user=Depends(require_user)):
-    """Whether the chat can answer, so the screen can say so up front."""
-    return {"available": assistant_llm.is_configured(),
-            "provider": assistant_llm.provider()}
+    """Whether the chat can answer. It needs no outside service, so always."""
+    return {"available": True, "provider": "rules"}

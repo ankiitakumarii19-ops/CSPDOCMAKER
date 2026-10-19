@@ -10,7 +10,6 @@ to drift out of sync.
 """
 
 import logging
-import os
 from typing import Dict, List, Tuple
 
 from app.models.csp_record import CSPRecord
@@ -113,21 +112,6 @@ def check_missing_data(
                         field_type=input_type,
                     )
                 )
-
-        # The agent has a photo, but documents wait for their AI studio
-        # portrait (No. 70). Only a finished portrait counts; this never
-        # calls the AI service itself.
-        from app.services import photo_portrait, template_service
-        photo = (getattr(csp, "photo_url", None) or "").strip()
-        if (doc_type in template_service.PHOTO_MARKERS
-                and photo and os.path.isfile(photo)
-                and photo_portrait.required()
-                and not photo_portrait.cached(photo)):
-            missing_fields.append(MissingField(
-                field_name="studio_photo",
-                field_label="Studio photo (being prepared)",
-                field_type="info",
-            ))
 
         documents.append(
             DocumentMissingData(

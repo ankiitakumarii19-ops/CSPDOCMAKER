@@ -528,11 +528,94 @@ export type AssistantCard =
       preview: string;
       subject: string | null;
       expires_at: string;
+    }
+  | {
+      type: "setup";
+      done: number;
+      total: number;
+      complete: boolean;
+      steps: AssistantSetupStep[];
+    }
+  | {
+      type: "action";
+      id: string;
+      kind: string;
+      title: string;
+      detail: string;
+      extra: string[];
+      expires_at: string;
     };
+
+// ---- Workspace setup through the chat (No. 117) ----
+
+export interface AssistantSetupStep {
+  key: string;
+  title: string;
+  status: "done" | "todo" | "problem" | "blocked" | "optional";
+  label: string;
+  detail: string;
+  how: string;
+  /** A question that makes the chat explain or offer to do this step. */
+  ask: string | null;
+}
+
+export interface AssistantSetupStatus {
+  owner: boolean;
+  complete: boolean;
+  done?: number;
+  total?: number;
+  reply?: string;
+  cards?: AssistantCard[];
+}
+
+export interface AssistantActionResult {
+  ok: boolean;
+  message: string;
+  next: { title: string; ask: string } | null;
+}
 
 export interface AssistantTurn {
   role: "user" | "assistant";
   content: string;
+}
+
+export interface AssistantAnswer {
+  reply: string;
+  cards: AssistantCard[];
+  /** Questions to tap next: related Knowledge Base entries, or examples. */
+  suggestions?: string[];
+}
+
+// ---- Knowledge Base (No. 116) ----
+
+export interface KnowledgeEntry {
+  id: string;
+  question: string;
+  phrasings: string;
+  keywords: string;
+  answer: string;
+  category: string;
+  active: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export type KnowledgeEntryInput = Omit<KnowledgeEntry, "id" | "updated_by" | "updated_at"> & {
+  from_miss?: string | null;
+};
+
+export interface KnowledgeMiss {
+  id: string;
+  question: string;
+  times_asked: number;
+  last_asked_by: string | null;
+  last_asked_at: string | null;
+}
+
+export interface KnowledgeTry {
+  answer_at: number;
+  suggest_at: number;
+  matches: { id: string; question: string; score: number }[];
 }
 
 export interface AssistantSendResult {
@@ -1044,9 +1127,70 @@ class ApiClient {
   }
 
   async assistantChat(messages: AssistantTurn[]) {
-    return this.request<{ reply: string; cards: AssistantCard[] }>(
+    return this.request<AssistantAnswer>(
       "/assistant/chat",
       { method: "POST", body: JSON.stringify({ messages }) }
+    );
+  }
+
+  async assistantSetup() {
+    return this.request<AssistantSetupStatus>("/assistant/setup");
+  }
+
+  async assistantRunAction(actionId: string) {
+    return this.request<AssistantActionResult>(
+      `/assistant/actions/${encodeURIComponent(actionId)}/run`,
+      { method: "POST" }
+    );
+  }
+
+  async assistantCancelAction(actionId: string) {
+    return this.request<{ cancelled: boolean }>(
+      `/assistant/actions/${encodeURIComponent(actionId)}`,
+      { method: "DELETE" }
+    );
+  }
+
+  // ---- Knowledge Base (No. 116; Admin + Super Admin) ----
+  async knowledgeList() {
+    return this.request<{ entries: KnowledgeEntry[] }>("/admin/knowledge");
+  }
+
+  async knowledgeAdd(entry: KnowledgeEntryInput) {
+    return this.request<KnowledgeEntry>("/admin/knowledge", {
+      method: "POST",
+      body: JSON.stringify(entry),
+    });
+  }
+
+  async knowledgeChange(id: string, entry: KnowledgeEntryInput) {
+    return this.request<KnowledgeEntry>(`/admin/knowledge/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(entry),
+    });
+  }
+
+  async knowledgeDelete(id: string) {
+    return this.request<{ deleted: boolean }>(`/admin/knowledge/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async knowledgeTry(question: string) {
+    return this.request<KnowledgeTry>("/admin/knowledge/try", {
+      method: "POST",
+      body: JSON.stringify({ question }),
+    });
+  }
+
+  async knowledgeMisses() {
+    return this.request<{ misses: KnowledgeMiss[] }>("/admin/knowledge/misses");
+  }
+
+  async knowledgeDismissMiss(id: string) {
+    return this.request<{ dismissed: boolean }>(
+      `/admin/knowledge/misses/${encodeURIComponent(id)}`,
+      { method: "DELETE" }
     );
   }
 

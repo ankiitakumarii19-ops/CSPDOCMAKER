@@ -287,6 +287,8 @@ app.include_router(database_router)  # /api/admin/database — Super Admin, read
 app.include_router(whatsapp_message_router)  # /api/admin/whatsapp-messages — Admin + Super Admin (No. 110)
 from app.routers.assistant_router import router as assistant_router
 app.include_router(assistant_router)  # /api/assistant — ask-anything chat, RM/Admin/Super Admin (No. 114)
+from app.routers.knowledge_router import router as knowledge_router
+app.include_router(knowledge_router)  # /api/admin/knowledge — the chat's Knowledge Base, Admin + Super Admin (No. 116)
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
 from app.routers.public_document_router import router as public_document_router
 from app.routers.public_document_router import photo_router as public_photo_router
