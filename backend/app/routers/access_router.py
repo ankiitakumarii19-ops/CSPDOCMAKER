@@ -220,14 +220,8 @@ async def _grant_in_sheet(
     request: GrantRequest,
     user=Depends(require_role("super_admin")),
 ):
-    """Give someone RM or Admin access, by writing them into the sheet."""
-    settings = get_settings()
-    if not settings.email_domain_allowed(request.email):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            f"Only {settings.allowed_email_domains_text} addresses can be "
-            f"given access.",
-        )
+    """Give someone RM or Admin access, by writing them into the sheet.
+    The workspace's domain rule was checked by grant_access (No. 120)."""
 
     tab = _tab(request.role)
     service, rows, columns = _read(tab)
@@ -362,6 +356,33 @@ from app.workspace_context import require_workspace_id  # noqa: E402
 CARRIED_OVER = "Created the workspace, or carried over"
 
 
+async def _this_workspace(session):
+    from app.models.workspace import Workspace
+    return (await session.execute(select(Workspace).where(
+        Workspace.id == require_workspace_id()))).scalars().first()
+
+
+async def member_manager(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Who may see and change this workspace's members: its Owner (Super
+    Admin) always; Admins too when the Owner's rules say so (No. 120)."""
+    from app.services import workspace_rules
+    if (user.get("role") or "").lower() == "super_admin":
+        return user
+    ws = await _this_workspace(session)
+    if ws is not None and (workspace_rules.members_added_by(ws)
+                           == workspace_rules.OWNER_AND_ADMINS):
+        return user
+    raise HTTPException(status.HTTP_403_FORBIDDEN,
+                        "Only the Workspace Owner can manage members here.")
+
+
+def _is_owner(user) -> bool:
+    return (user.get("role") or "").lower() == "super_admin"
+
+
 def _role(value: str) -> UserRole:
     return {"rm": UserRole.RM, "admin": UserRole.ADMIN,
             "super_admin": UserRole.SUPER_ADMIN}[value]
@@ -370,7 +391,7 @@ def _role(value: str) -> UserRole:
 @router.get("")
 async def list_access(
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(member_manager),
 ):
     """Everyone in this workspace, grouped by the Super Admin who added them.
 
@@ -454,15 +475,20 @@ async def list_access(
 async def grant_access(
     request: GrantRequest,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(member_manager),
 ):
     """Add someone to THIS workspace as a Super Admin, Admin or RM."""
-    settings = get_settings()
-    if not settings.email_domain_allowed(request.email):
+    from app.services import workspace_rules
+    if request.role == "super_admin" and not _is_owner(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Only the Workspace Owner can add a Super Admin.")
+    ws = await _this_workspace(session)
+    if ws is not None and not workspace_rules.email_allowed(ws, request.email):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"Only {settings.allowed_email_domains_text} addresses can be "
-            f"given access.",
+            f"This workspace's rules allow only "
+            f"{workspace_rules.domains_text(ws)} addresses. Change them on "
+            f"Setup \u2192 Workspace Rules to add {request.email}.",
         )
     workspace_id = require_workspace_id()
     email = str(request.email).strip().lower()
@@ -504,7 +530,7 @@ async def grant_access(
 async def revoke_access(
     request: RevokeRequest,
     session: AsyncSession = Depends(get_session),
-    user=Depends(require_role("super_admin")),
+    user=Depends(member_manager),
 ):
     """Remove someone's access to THIS workspace. Their record is kept."""
     email = str(request.email).strip().lower()
@@ -518,6 +544,10 @@ async def revoke_access(
     if member is None or not member.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"{email} is not an active member here.")
+    if member.role is UserRole.SUPER_ADMIN and not _is_owner(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "Only the Workspace Owner can remove a Super "
+                            "Admin.")
     if member.role is UserRole.SUPER_ADMIN:
         others = (await session.execute(
             select(WorkspaceMember).where(

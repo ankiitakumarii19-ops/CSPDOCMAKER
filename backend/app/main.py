@@ -289,6 +289,8 @@ from app.routers.assistant_router import router as assistant_router
 app.include_router(assistant_router)  # /api/assistant — ask-anything chat, RM/Admin/Super Admin (No. 114)
 from app.routers.knowledge_router import router as knowledge_router
 app.include_router(knowledge_router)  # /api/admin/knowledge — the chat's Knowledge Base, Admin + Super Admin (No. 116)
+from app.routers.workspace_rules_router import router as workspace_rules_router
+app.include_router(workspace_rules_router)  # /api/admin/workspace-rules — each workspace's own rules (No. 120)
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
 from app.routers.public_document_router import router as public_document_router
 from app.routers.public_document_router import photo_router as public_photo_router

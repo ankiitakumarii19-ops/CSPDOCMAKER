@@ -586,6 +586,25 @@ export interface AssistantAnswer {
   suggestions?: string[];
 }
 
+// ---- Workspace Rules (No. 120) ----
+
+export interface WorkspaceRulesInput {
+  /** Domains that may join, e.g. ["eko.co.in"]; empty = any address. */
+  allowed_email_domains: string[];
+  session_hours: number;
+  members_added_by: "owner" | "owner_and_admins";
+  message_signoff: string;
+}
+
+export interface WorkspaceRules extends WorkspaceRulesInput {
+  workspace: { id: string; name: string };
+  allowed_email_domains_set: boolean;
+  server_defaults: { allowed_email_domains: string[]; session_hours: number };
+  /** After a save: wordings whose sign-off line was changed. */
+  wordings_resigned?: string[];
+  note?: string;
+}
+
 // ---- Knowledge Base (No. 116) ----
 
 export interface KnowledgeEntry {
@@ -1149,6 +1168,18 @@ class ApiClient {
       `/assistant/actions/${encodeURIComponent(actionId)}`,
       { method: "DELETE" }
     );
+  }
+
+  // ---- Workspace Rules (No. 120; read: Admin + Owner, change: Owner) ----
+  async workspaceRules() {
+    return this.request<WorkspaceRules>("/admin/workspace-rules");
+  }
+
+  async saveWorkspaceRules(rules: WorkspaceRulesInput) {
+    return this.request<WorkspaceRules>("/admin/workspace-rules", {
+      method: "PUT",
+      body: JSON.stringify(rules),
+    });
   }
 
   // ---- Knowledge Base (No. 116; Admin + Super Admin) ----

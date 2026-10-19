@@ -138,10 +138,21 @@ async def test_the_rbo_contact_comes_from_the_record(client, csps):
     [card] = body["cards"]
     assert card["type"] == "csp" and card["csp_code"] == MINE
     fields = {f["label"]: f["value"] for f in card["fields"]}
-    assert fields["RBO Contact No."] == "0612-555001"
+    assert fields == {"RBO Contact No.": "0612-555001"}, \
+        "only what was asked — not the whole record"
+    assert card["documents"] == []
 
     body = await _reply(client, f"{MINE} ka RBO kaun hai")
     assert "RBO Patna" in body["reply"]
+
+
+async def test_contact_details_are_the_csps_own_contacts_only(client, csps):
+    body = await _reply(client, f"contact details of {MINE}")
+    [card] = body["cards"]
+    assert [f["key"] for f in card["fields"]] == ["mobile", "email"], \
+        "address is not on record, so it is not on the card"
+    assert "**Address**: not on record" in body["reply"]
+    assert card["documents"] == []
 
 
 async def test_a_missing_value_is_said_to_be_missing(client, csps):
@@ -195,8 +206,13 @@ async def test_missing_details_and_photo_are_listed(client, csps):
     body = await _reply(client, f"what is missing for {MINE}?")
     assert body["reply"].startswith(f"Missing for Asha Devi ({MINE}):")
     assert "**Photo**: not on file" in body["reply"]
+    assert body["cards"] == []
     body = await _reply(client, f"is the photo of {MINE} on file?")
     assert body["reply"].startswith(f"No photo of Asha Devi ({MINE}) is on file")
+    assert body["cards"] == []
+    # Asking for the details still shows the whole record.
+    body = await _reply(client, f"details of {MINE}")
+    assert len(body["cards"][0]["fields"]) > 5
 
 
 async def test_ko_level_and_email_delivery(client, csps):

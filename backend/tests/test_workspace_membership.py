@@ -93,11 +93,21 @@ async def test_a_workspace_name_cannot_be_used_twice(db, other_ws):
     assert not ok and "already exists" in message
 
 
-async def test_a_workspace_cannot_be_created_from_another_domain(db):
-    ok, _, _ = await auth_service.signup_user(
+async def test_anyone_may_create_a_workspace_with_their_own_domain(db):
+    """Decided 19 Oct 2026 (No. 120): any email may create a workspace; it
+    starts allowing only its Owner's own domain."""
+    ok, message, user = await auth_service.signup_user(
         db=db, email="stranger@gmail.com", name="Stranger", password=PASSWORD,
-        requested_role="super_admin", workspace_name="Mine")
-    assert not ok
+        requested_role="super_admin", workspace_name="Mine Gmail")
+    await db.commit()
+    assert ok, message
+    with all_workspaces():
+        ws = (await db.execute(select(Workspace).where(
+            Workspace.id == user.workspace_id))).scalars().one()
+        assert ws.settings == {"allowed_email_domains": ["gmail.com"]}
+        await db.execute(text("DELETE FROM workspaces WHERE id = :w")
+                         .bindparams(w=ws.id))
+        await db.commit()
 
 
 async def test_the_present_workspace_is_called_eko_sbi_kiosk_csp(db):

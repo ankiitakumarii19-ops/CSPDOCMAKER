@@ -51,13 +51,14 @@ router = APIRouter()
 async def auth_config():
     """What the sign-in screen needs to know before anyone is logged in.
 
-    The allowed domains live in one place — the server — so the form and
-    the check behind it cannot disagree. This is deliberately public: it
-    reveals nothing that the error message would not already say.
+    Since No. 120 (19 Oct 2026) there is no server-wide domain rule: anyone
+    may create a workspace, and each workspace's Owner decides which email
+    domains may join it. An empty list tells the form to accept any address;
+    the workspace's own rule is applied after sign-in.
     """
     return {
-        "allowed_email_domains": list(settings.allowed_email_domains),
-        "allowed_email_domains_text": settings.allowed_email_domains_text,
+        "allowed_email_domains": [],
+        "allowed_email_domains_text": "any",
     }
 
 
@@ -345,11 +346,15 @@ def _issue_tokens(user, member, ws) -> OTPVerifyResponse:
         "name": user.name,
         "ws": str(ws.id),
     }
-    logger.info("auth_router: tokens issued for %s in %s (role=%s)",
-                user.email, ws.slug, member.role.value)
+    from datetime import timedelta
+    from app.services import workspace_rules
+    hours = workspace_rules.session_hours(ws)   # the workspace's rule (No. 120)
+    logger.info("auth_router: tokens issued for %s in %s (role=%s, %dh)",
+                user.email, ws.slug, member.role.value, hours)
     return OTPVerifyResponse(
         verified=True,
-        access_token=jwt_service.create_access_token(token_data),
+        access_token=jwt_service.create_access_token(
+            token_data, expires_delta=timedelta(hours=hours)),
         refresh_token=jwt_service.create_refresh_token(token_data),
         role=member.role,
         name=user.name,
@@ -412,9 +417,6 @@ async def resend_otp(
             f"for {settings_now.otp_expiry_seconds // 60} minutes."
         )
     }
-
-    if not settings_now.email_domain_allowed(request.email):
-        return generic
 
     user = await auth_service.get_user_by_email(db, request.email)
     if user is None:

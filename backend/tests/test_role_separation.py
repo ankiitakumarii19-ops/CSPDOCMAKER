@@ -234,5 +234,10 @@ async def test_the_two_capabilities_are_named_apart_in_the_ui():
     # Templates and the builder are behind the shared flag.
     assert 'canConfigure && adminRoute === "templates"' in source
     assert 'canConfigure && adminRoute === "build"' in source
-    # Access is behind the owner's alone.
-    assert 'isOwner && adminRoute === "access"' in source
+    # Access: the Owner's, and an Admin's only when the Owner's workspace
+    # rules allow it (No. 120) — the server checks the same rule, so the
+    # button never 403s. The rules screen itself is the Owner's alone.
+    assert "const canManageMembers = isOwner || adminsManageMembers" in source
+    assert 'canManageMembers && adminRoute === "access"' in source
+    assert 'r.members_added_by === "owner_and_admins"' in source
+    assert 'isOwner && adminRoute === "rules"' in source

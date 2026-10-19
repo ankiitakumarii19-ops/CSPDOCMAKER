@@ -137,6 +137,25 @@ async def checklist(session, user, live: bool = True) -> List[Step]:
     eko = await workspace_service.is_eko(session, current_workspace_id())
     steps: List[Step] = []
 
+    from app.models.workspace import Workspace
+    from app.services import workspace_rules
+    ws = (await session.execute(select(Workspace).where(
+        Workspace.id == current_workspace_id()))).scalars().first()
+
+    # 0. The workspace's own rules (No. 120).
+    if ws is not None:
+        rules = workspace_rules.describe(ws)
+        steps.append(Step(
+            "rules", "Choose your workspace rules", DONE,
+            f"Who can join: {workspace_rules.domains_text(ws)} addresses; "
+            f"sign-in lasts {rules['session_hours']} hours; members added "
+            + ("by you and Admins" if rules["members_added_by"]
+               == workspace_rules.OWNER_AND_ADMINS else "by you only")
+            + (f"; messages signed “— {rules['message_signoff']}”"
+               if rules["message_signoff"] else "") + ".",
+            "Change them any time on Setup → Workspace Rules.",
+            ask="How do I change who can join my workspace?"))
+
     # 1. The team.
     members = await count(WorkspaceMember, WorkspaceMember.active.is_(True))
     steps.append(Step(
@@ -296,6 +315,14 @@ def summary(steps: List[Step]) -> dict:
             "complete": all(s.status == DONE for s in core)}
 
 
+def next_steps(steps: List[Step]) -> List[Step]:
+    """Steps still to do, the essential ones first (connect the sheet before
+    adding the team), each group in checklist order."""
+    todo = [x for x in steps if x.status == TODO]
+    return ([x for x in todo if x.key in CORE]
+            + [x for x in todo if x.key not in CORE])
+
+
 def reply_for(steps: List[Step]) -> str:
     """The checklist as the chat's answer: progress, then what to do next."""
     s = summary(steps)
@@ -303,7 +330,7 @@ def reply_for(steps: List[Step]) -> str:
              "done.**"]
     blocked = [x for x in steps if x.status == BLOCKED]
     problems = [x for x in steps if x.status == PROBLEM]
-    todo = [x for x in steps if x.status == TODO]
+    todo = next_steps(steps)
     if problems:
         lines.append("Fix first: " + "; ".join(
             f"**{x.title}** — {x.detail}" for x in problems))
@@ -334,13 +361,23 @@ def guide() -> list:
          "is done, what is next and what is blocked, and I can do several "
          "steps for you."),
         ("How do I connect my Google Sheet?",
-         "connect sheet\nadd google sheet\nsheet kaise jode\nlink my sheet",
-         "connect sheet, google sheet",
+         "connect sheet\nadd google sheet\nsheet kaise jode\nlink my sheet\n"
+         "add data source\nhow to add a data source\nconnect my data\n"
+         "data source kaise add kare\nwhere do I add my CSP data\n"
+         "upload my csp list\nimport csp data\nadd excel or csv file\n"
+         "csp data kahan dale",
+         "connect sheet, google sheet, data source, csp data, excel, csv, "
+         "import",
+         "Your CSP data comes from a **Google Sheet** (Excel or CSV files "
+         "cannot be connected — put them in a Google Sheet first):\n"
          f"1. Open your Google Sheet and {share}.\n"
          "2. Copy the sheet's link from the browser.\n"
          "3. Ask me **connect sheet <link> tab <tab name>** — I check that it "
          "opens and show you a confirmation before adding it. (Or Setup → "
-         "Sheets → Add a sheet.)"),
+         "Sheets → Add a sheet.)\n"
+         "Note: for a new workspace the app can show and edit the sheet, but "
+         "does not yet load its CSPs into the app — ask me **setup status** "
+         "for where your workspace stands."),
         ("Why can't the app open my sheet?",
          "sheet not opening\ncould not open spreadsheet\npermission denied "
          "sheet\nsheet error\n403",
@@ -358,9 +395,18 @@ def guide() -> list:
          "Ask me **add rm name@eko.co.in** or **add admin name@eko.co.in** "
          "(I confirm before adding), or use Setup → Access. The person then "
          "signs up with that email, picks the same role, and chooses your "
-         "workspace at login. Only "
-         f"{get_settings().allowed_email_domains_text} addresses can be "
-         "added."),
+         "workspace at login. Only addresses your workspace's rules allow "
+         "can be added — set them on Setup → Workspace Rules."),
+        ("How do I change who can join my workspace?",
+         "workspace rules\nallowed domains\nonly my company emails\n"
+         "allow gmail\nemail domain rule\nsign in length\nwho can add "
+         "members\nmessage sign off\nrules kaise badle",
+         "rules, domain, sign-in, sign-off",
+         "Open **Setup → Workspace Rules** (Workspace Owner only). There you "
+         "choose which email domains may join (e.g. only @yourcompany.com, "
+         "or any), how many hours a sign-in lasts, whether Admins may add "
+         "members too, and the sign-off on messages to CSPs. A rule that "
+         "would lock out your own Super Admin account is refused."),
         ("How do I add document templates?",
          "upload template\nadd template\ntemplate kaise upload kare\n"
          "word template",
@@ -449,8 +495,10 @@ async def run(kind: str, params: dict, session, user) -> dict:
             from app.workspace_context import current_workspace_id
             ws = (await session.execute(select(Workspace).where(
                 Workspace.id == current_workspace_id()))).scalars().first()
-            added = await sync_builtin_messages(
-                session, signature=f"Team {ws.name}" if ws else None)
+            from app.services import workspace_rules
+            sign = (workspace_rules.signoff(ws) or f"Team {ws.name}"
+                    if ws else None)
+            added = await sync_builtin_messages(session, signature=sign)
             return {"ok": True, "message": (
                 f"Added {added} message wording(s). Edit them any time on "
                 "Setup → Messaging." if added else

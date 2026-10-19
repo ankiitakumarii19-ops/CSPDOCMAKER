@@ -227,18 +227,18 @@ async def test_an_unexpected_error_gives_the_user_an_error_id(migrated_db, monke
     from app.main import app
     transport = httpx.ASGITransport(app=app, raise_app_exceptions=False)
     client = httpx.AsyncClient(transport=transport, base_url="http://test")
-    from app.routers import auth_router
+    from app.services import auth_service
 
-    class Broken:
-        @property
-        def allowed_email_domains(self):
-            raise RuntimeError("database exploded")
-    monkeypatch.setattr(auth_router, "settings", Broken())
-    r = await client.get("/api/auth/config", headers={"X-Request-ID": "err-777"})
+    async def broken(*a, **k):
+        raise RuntimeError("database exploded")
+    monkeypatch.setattr(auth_service, "get_user_by_email", broken)
+    r = await client.post("/api/auth/resend-otp", json={"email": "a@eko.co.in"},
+                          headers={"X-Request-ID": "err-777"})
     assert r.status_code == 500
     body = r.json()
     assert body["error_id"] == "err-777"
-    assert "GET /api/auth/config" in body["detail"] and "err-777" in body["detail"]
+    assert ("POST /api/auth/resend-otp" in body["detail"]
+            and "err-777" in body["detail"])
     assert "database exploded" not in body["detail"], "internals leaked to the user"
     failed = [x for x in _logs_for("err-777") if x.get("event") in ("failed", "unhandled")]
     assert failed and any("database exploded" in x.get("error_message", "") for x in failed)

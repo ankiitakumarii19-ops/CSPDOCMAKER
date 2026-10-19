@@ -14,6 +14,7 @@ import Agents from "./Agents";
 import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
+import WorkspaceRules from "./WorkspaceRules";
 import DashboardView from "./DashboardView";
 import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
@@ -85,6 +86,16 @@ export default function AdminDashboard() {
   //                anything.
   const isOwner = user?.role === "super_admin";
   const canConfigure = isOwner || user?.role === "admin";
+  // An Admin manages members too when the Owner's rules say so (No. 120).
+  const [adminsManageMembers, setAdminsManageMembers] = useState(false);
+  useEffect(() => {
+    if (user?.role !== "admin") return;
+    api
+      .workspaceRules()
+      .then((r) => setAdminsManageMembers(r.members_added_by === "owner_and_admins"))
+      .catch(() => setAdminsManageMembers(false));
+  }, [user?.role]);
+  const canManageMembers = isOwner || adminsManageMembers;
 
   // The dashboards are data now. The permanent one still renders the
   // existing screen below — it has filters, drill-down and CSV export, and
@@ -306,7 +317,7 @@ export default function AdminDashboard() {
               </button>
               {/* Access is the Workspace Owner's alone. An Admin who
                   could grant access could grant themselves anything. */}
-              {isOwner && (
+              {canManageMembers && (
                 <button
                   onClick={() => setAdminRoute("access")}
                   className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -316,6 +327,19 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <i className="fas fa-users-gear w-5 text-center"></i> Access
+                </button>
+              )}
+              {/* Each workspace's own rules (No. 120): the Owner's alone. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("rules")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "rules"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-scale-balanced w-5 text-center"></i> Workspace Rules
                 </button>
               )}
               {/* The sheets every other screen is derived from. Admins
@@ -439,7 +463,10 @@ export default function AdminDashboard() {
             {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
-            {isOwner && adminRoute === "access" && <AccessControl />}
+            {canManageMembers && adminRoute === "access" && (
+              <AccessControl canAddSuperAdmin={isOwner} />
+            )}
+            {isOwner && adminRoute === "rules" && <WorkspaceRules canEdit={isOwner} />}
             {canConfigure && adminRoute === "sheets" && <Sheets canManage={isOwner} />}
             {canConfigure && adminRoute === "database" && <Database />}
 

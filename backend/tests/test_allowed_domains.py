@@ -60,13 +60,13 @@ async def test_an_empty_address_is_refused():
 
 # ---- the sign-in screen reads the rule from the server -----------------
 
-async def test_the_config_endpoint_lists_the_domains(client):
+async def test_the_sign_in_screen_accepts_any_address(client):
+    """No server-wide domain rule since No. 120: anyone may create a
+    workspace, and each workspace's Owner chooses who may join it."""
     r = await client.get("/api/auth/config")
     assert r.status_code == 200, r.text
-    body = r.json()
-    assert "eko.co.in" in body["allowed_email_domains"]
-    assert "ekosupport.in" in body["allowed_email_domains"]
-    assert "@" in body["allowed_email_domains_text"]
+    assert r.json() == {"allowed_email_domains": [],
+                        "allowed_email_domains_text": "any"}
 
 
 async def test_the_config_endpoint_needs_no_token(client):
@@ -77,13 +77,18 @@ async def test_the_config_endpoint_needs_no_token(client):
 
 # ---- signup enforces it ------------------------------------------------
 
-async def test_signup_refuses_an_outside_domain(client):
+async def test_an_rm_nobody_added_cannot_sign_up(client, monkeypatch):
+    """Any address may now try, but an RM still needs a workspace to have
+    added them (or Eko's Authorization sheet to list them)."""
+    from app.services import google_sheets_service
+    monkeypatch.setattr(google_sheets_service, "check_authorization",
+                        lambda email, role: (False, None))
     r = await client.post("/api/auth/signup", json={
         "email": "outsider@gmail.com", "name": "Outsider",
         "password": "CorrectHorse9!", "requested_role": "rm",
     })
-    assert r.status_code in (400, 403, 422)
-    assert "gmail.com" not in r.text.lower() or "allowed" in r.text.lower()
+    assert r.status_code != 200
+    assert "has not been added" in r.text
 
 
 async def test_signup_still_requires_authorization_on_an_allowed_domain(client):

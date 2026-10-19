@@ -24,7 +24,13 @@ import type {
   LoginEntry,
 } from "../lib/api";
 
-export default function AccessControl() {
+export default function AccessControl({
+  canAddSuperAdmin = true,
+}: {
+  /** False for an Admin managing members by the Owner's rules (No. 120):
+   *  only the Owner adds or removes a Super Admin. */
+  canAddSuperAdmin?: boolean;
+} = {}) {
   const [data, setData] = useState<AccessListing | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -252,9 +258,11 @@ export default function AccessControl() {
               >
                 <option value="rm">RM — works their own CSPs</option>
                 <option value="admin">Admin — dashboards only</option>
-                <option value="super_admin">
-                  Super Admin — runs this workspace, adds people
-                </option>
+                {canAddSuperAdmin && (
+                  <option value="super_admin">
+                    Super Admin — runs this workspace, adds people
+                  </option>
+                )}
               </select>
             </div>
           </div>

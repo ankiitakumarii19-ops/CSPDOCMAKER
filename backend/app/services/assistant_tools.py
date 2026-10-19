@@ -192,14 +192,34 @@ def usable_email(csp: CSPRecord) -> str:
 
 
 def preview_text(channel: str, csp: CSPRecord, message: str,
-                 sender_name: str) -> str:
-    """Exactly what the CSP will receive."""
+                 sender_name: str,
+                 organisation: str = "Eko Bharat Ventures Pvt Ltd") -> str:
+    """Exactly what the CSP will receive. The email's last line is the
+    workspace's sign-off (No. 120); the WhatsApp wording is the one Meta
+    approved and stays fixed."""
     if channel == WHATSAPP:
         from app.services.whatsapp_platform import one_line
         return WHATSAPP_WORDING.format(name=one_line(csp.name or "CSP"),
                                        message=one_line(message))
     return (f"Namaste {csp.name or 'CSP'},\n\n{message}\n\n"
-            f"— {sender_name}\nEko Bharat Ventures Pvt Ltd")
+            f"— {sender_name}\n{organisation}")
+
+
+async def _organisation(session) -> str:
+    """The email sign-off line: the workspace's chosen sign-off; otherwise
+    Eko's company name for Eko and the workspace's name for any other."""
+    from app.models.workspace import Workspace
+    from app.services import workspace_rules, workspace_service
+    from app.workspace_context import current_workspace_id
+    ws = (await session.execute(select(Workspace).where(
+        Workspace.id == current_workspace_id()))).scalars().first()
+    if ws is None:
+        return "Eko Bharat Ventures Pvt Ltd"
+    if workspace_rules.signoff(ws):
+        return workspace_rules.signoff(ws)
+    if await workspace_service.is_eko(session, ws.id):
+        return "Eko Bharat Ventures Pvt Ltd"
+    return ws.name
 
 
 async def draft_message(session, user, csp_code, message, channel="auto"
@@ -236,7 +256,8 @@ async def draft_message(session, user, csp_code, message, channel="auto"
         "csp_id": csp.csp_id, "csp_code": csp.csp_code or csp.csp_id,
         "csp_name": csp.name, "channel": channel, "to": to,
         "message": message,
-        "preview": preview_text(channel, csp, message, sender),
+        "preview": preview_text(channel, csp, message, sender,
+                                await _organisation(session)),
         "subject": (EMAIL_SUBJECT.format(code=csp.csp_code or csp.csp_id)
                     if channel == EMAIL else None),
         "owner": _text(user.get("sub")).lower(),

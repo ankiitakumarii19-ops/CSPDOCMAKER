@@ -292,7 +292,7 @@ async def run_action(action_id: str,
     nxt = None
     if outcome["ok"]:
         steps = await workspace_setup.checklist(session, user, live=False)
-        todo = [s for s in steps if s.status == workspace_setup.TODO]
+        todo = workspace_setup.next_steps(steps)
         if todo:
             nxt = {"title": todo[0].title, "ask": todo[0].ask
                    or "Setup status"}

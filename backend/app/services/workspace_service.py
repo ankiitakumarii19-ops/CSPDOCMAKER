@@ -63,10 +63,14 @@ async def create_workspace(session, name: str, owner_email: str,
     It has no data sources, so no background job has anything to read for
     it until its Super Admin connects one.
     """
+    from app.services import workspace_rules
+
     email = owner_email.strip().lower()
     with all_workspaces():
         ws = Workspace(id=uuid.uuid4(), slug=_slug(name),
-                       name=clean_name(name), owner_email=email)
+                       name=clean_name(name), owner_email=email,
+                       # Its Owner's own domain until they choose (No. 120).
+                       settings=workspace_rules.starting_rules(email))
         session.add(ws)
         await session.flush()
         session.add(WorkspaceMember(
@@ -80,7 +84,13 @@ async def create_workspace(session, name: str, owner_email: str,
 
 
 async def memberships(session, email: str) -> List[tuple]:
-    """Every workspace this person may enter: [(member, workspace), ...]."""
+    """Every workspace this person may enter: [(member, workspace), ...].
+
+    A workspace whose rules do not allow this person's email domain is left
+    out (No. 120) — sign-in, choosing a workspace and every request go
+    through here, so that one check covers them all."""
+    from app.services import workspace_rules
+
     address = (email or "").strip().lower()
     with all_workspaces():
         rows = (await session.execute(
@@ -91,7 +101,13 @@ async def memberships(session, email: str) -> List[tuple]:
                    Workspace.active.is_(True))
             .order_by(Workspace.created_at)
         )).all()
-    return [(m, w) for m, w in rows]
+    allowed = [(m, w) for m, w in rows
+               if workspace_rules.email_allowed(w, address)]
+    if len(allowed) < len(rows):
+        logger.info("workspace_service.memberships: %d workspace(s) left out "
+                    "for an address their rules do not allow",
+                    len(rows) - len(allowed))
+    return allowed
 
 
 async def membership(session, email: str,

@@ -194,6 +194,9 @@ def _requested_fields(t: str) -> List[str]:
     for words, fields in PLACE:
         if _has(t, *words):
             return list(fields)
+    if _has(t, "contact details", "contact detail", "contact info",
+            "contacts", "sampark", "संपर्क"):
+        return ["mobile", "email", "address"]
     if _has(t, *EMAIL):
         return ["email"]
     if _has(t, *CONTACT):
@@ -350,8 +353,7 @@ async def _about_csp(session, user, csp, question: str, t: str) -> Answer:
                  f"Nothing is missing for {who}: every detail the documents "
                  "need is on record" + (", and the photo is on file." if photo
                                         else "."))
-        _, card = await assistant_tools.csp_details(session, user, csp.csp_id)
-        return Answer(reply, [card], kind="csp")
+        return Answer(reply, kind="csp")
 
     if _has(t, *DELIVERY_WORDS) and (_has(t, *DOC_WORDS) or _has(
             t, "mailed", "emailed", "delivered", "delivery")):
@@ -401,8 +403,7 @@ async def _about_csp(session, user, csp, question: str, t: str) -> Answer:
                  "Certificate cannot be made without one. An RM can upload it "
                  "on the CSP's card, or the CSP can send it through their "
                  "details form.")
-        _, card = await assistant_tools.csp_details(session, user, csp.csp_id)
-        return Answer(reply, [card], kind="csp")
+        return Answer(reply, kind="csp")
 
     if _has(t, *LEVEL_WORDS) and not _requested_fields(t):
         from app.services import ko_level
@@ -421,7 +422,12 @@ async def _about_csp(session, user, csp, question: str, t: str) -> Answer:
             value = str(value).strip() if value not in (None, "") else ""
             lines.append(f"- **{LABELS.get(f, f)}**: "
                          + (value or "not on record"))
-        return Answer(f"For {who}:\n" + "\n".join(lines), [card], kind="csp")
+        # Only what was asked: the card keeps a number tap-to-call, but not
+        # the CSP's whole record or its documents (asked 19 Oct 2026).
+        card = {**card, "documents": [],
+                "fields": [f for f in card["fields"] if f["key"] in wanted]}
+        return Answer(f"For {who}:\n" + "\n".join(lines),
+                      [card] if card["fields"] else [], kind="csp")
     return Answer(f"Here is what is on record for {who}.", [card], kind="csp")
 
 
@@ -685,7 +691,6 @@ async def _setup(session, user, question: str, t: str) -> Optional[Answer]:
     """A setup question or command, or None when it is not one."""
     from app.services import agent_registry, workspace_setup
     from app.services import sheet_admin_service as sheets
-    from app.config import get_settings
 
     owner = workspace_setup.is_owner(user)
     admin = csp_access.is_admin(user)
@@ -719,11 +724,17 @@ async def _setup(session, user, question: str, t: str) -> Optional[Answer]:
                           "Admin?", suggestions=[f"add rm {address}",
                                                  f"add admin {address}"],
                           kind="setup")
-        settings = get_settings()
-        if not settings.email_domain_allowed(address):
-            return Answer(f"{address} cannot be added: only "
-                          f"{settings.allowed_email_domains_text} addresses "
-                          "can be given access.", kind="setup")
+        from app.models.workspace import Workspace
+        from app.services import workspace_rules
+        from app.workspace_context import current_workspace_id
+        ws = (await session.execute(select(Workspace).where(
+            Workspace.id == current_workspace_id()))).scalars().first()
+        if ws is not None and not workspace_rules.email_allowed(ws, address):
+            return Answer(f"{address} cannot be added: this workspace's "
+                          "rules allow only "
+                          f"{workspace_rules.domains_text(ws)} addresses. "
+                          "Change them on Setup → Workspace Rules.",
+                          kind="setup")
         name = " ".join(p.title() for p in re.split(r"[._-]+",
                         address.split("@")[0]) if p)
         label = {"rm": "an RM", "admin": "an Admin",

@@ -95,7 +95,7 @@ async def signup_user(
 
     Args:
         db: Database session.
-        email: User email (must be on an allowed company domain).
+        email: User email (any domain; workspaces set their own rules, No. 120).
         name: User full name.
         password: Plaintext password.
         requested_role: 'rm' or 'admin'.
@@ -103,12 +103,9 @@ async def signup_user(
     Returns:
         Tuple of (success, message, user).
     """
-    # 1. Domain check
-    if not settings.email_domain_allowed(email):
-        return False, (
-            f"Only {settings.allowed_email_domains_text} email addresses "
-            f"are allowed."
-        ), None
+    # 1. No server-wide domain check (No. 120, 19 Oct 2026): anyone may
+    # create a workspace; who may join one is that workspace's rule, applied
+    # when a membership is looked up (workspace_service.memberships).
 
     # 2. Check if user already exists
     existing = await get_user_by_email(db, email)
@@ -148,7 +145,7 @@ async def signup_user(
                 "only if you are listed as a Super Admin of Eko SBI Kiosk CSP.)"
             ), None
     elif requested_role == "super_admin":
-        # (b) Anyone on an allowed domain may create their OWN workspace.
+        # (b) Anyone, with any email (No. 120), may create their OWN workspace.
         # It starts empty and sees nothing of any other workspace.
         problem = workspace_service.name_problem(workspace_name or "")
         if problem:
@@ -263,12 +260,9 @@ async def login_user(
     Returns:
         Tuple of (success, message, user).
     """
-    # 1. Domain check
-    if not settings.email_domain_allowed(email):
-        return False, (
-            f"Only {settings.allowed_email_domains_text} email addresses "
-            f"are allowed."
-        ), None
+    # 1. No server-wide domain check (No. 120): which workspaces this person
+    # may enter is decided by each workspace's own rules after the code is
+    # verified (workspace_service.memberships).
 
     # 2. Find user
     user = await get_user_by_email(db, email)
