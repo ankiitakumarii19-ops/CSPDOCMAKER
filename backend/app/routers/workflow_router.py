@@ -82,7 +82,7 @@ def _ask_csp_now(csp_id: str, workspace_id) -> dict:
             ).scalars().first()
             if record is None:
                 return {"sent": False, "via": "", "reason": "CSP not found"}
-            outcome = sender.ask_for_details(sync, record)
+            outcome = sender.ask_for_details(sync, record, manual=True)
     except (sender.NoChannel, sender.NoTemplate) as e:
         logger.warning("workflow: CSP %s not asked: %s", csp_id, e)
         return {"sent": False, "via": "", "reason": str(e)}

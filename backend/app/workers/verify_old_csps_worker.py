@@ -70,6 +70,10 @@ def to_verify(session, limit: int) -> list:
         DataRequest.created_at > datetime.now(timezone.utc) - RECENTLY,
         DataRequest.sent_to.isnot(None),
         DataRequest.delivery_error.is_(None))
+    from app.services.message_sender import RETRY_FAILED_AFTER
+    failed_just_now = select(DataRequest.csp_id).where(
+        DataRequest.created_at > datetime.now(timezone.utc) - RETRY_FAILED_AFTER,
+        DataRequest.delivery_error.isnot(None))
     return list(session.execute(
         select(CSPRecord).where(
             func.upper(CSPRecord.csp_id).in_(copied_in),
@@ -79,7 +83,8 @@ def to_verify(session, limit: int) -> list:
             CSPRecord.new_csp_processed_at.is_(None),
             CSPRecord.csp_id.not_in(emailed),
             CSPRecord.csp_id.not_in(verified),
-            CSPRecord.csp_id.not_in(recently))
+            CSPRecord.csp_id.not_in(recently),
+            CSPRecord.csp_id.not_in(failed_just_now))
         .order_by(CSPRecord.csp_id).limit(limit)).scalars().all())
 
 

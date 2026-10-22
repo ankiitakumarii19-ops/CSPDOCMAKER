@@ -177,6 +177,11 @@ async def test_a_csp_whose_send_failed_is_tried_again_next_batch(db):
     db.status = whatsapp_platform.FAILED
     assert w.run_batch(db.session, now=NOON_IST)["sent"] == []
     db.status = whatsapp_platform.SENT
+    assert w.run_batch(db.session, now=NOON_IST)["sent"] == [], \
+        "waits 30 minutes after a failed try (No. 137)"
+    db.session.execute(text("UPDATE data_requests SET created_at = "
+                            "created_at - interval '31 minutes'"))
+    db.session.commit()
     assert w.run_batch(db.session, now=NOON_IST)["sent"] == ["1A960051"], \
         "a failed ask does not block the CSP for 3 days"
     assert w.run_batch(db.session, now=NOON_IST)["sent"] == [], \
@@ -206,4 +211,41 @@ def test_the_supplied_verification_wording_is_the_new_one():
     src = inspect.getsource(dts.sync_builtin_messages)
     assert "please confirm your details for your CSP" in src
     assert "your CSP documents need your details" not in src
+
+
+# ---- No. 137: an automatic ask waits after a failed one ----------------------
+
+async def test_automatic_asks_wait_after_a_failure_but_manual_ones_do_not(db):
+    from app.services import message_sender, whatsapp_platform
+    _old(db.session, "1A960061")
+    db.session.commit()
+    csp = db.session.query(CSPRecord).filter_by(csp_id="1A960061").one()
+    db.status = whatsapp_platform.FAILED
+    assert message_sender.ask_for_details(db.session, csp)["sent"] is False
+    tries = len(db.sent)
+    out = message_sender.ask_for_details(db.session, csp)
+    assert out["sent"] is False and "30 minutes" in out["reason"]
+    assert len(db.sent) == tries, "nothing sent while waiting"
+    db.status = whatsapp_platform.SENT
+    assert message_sender.ask_for_details(db.session, csp,
+                                          manual=True)["sent"] is True, \
+        "someone pressing Send is never held back"
+
+
+async def test_the_sbi_kiosk_wording_gets_the_new_first_sentence(db):
+    """The SQL of migration d4f6b8c0e2a5, on a saved SBI Kiosk wording."""
+    import importlib.util
+    import pathlib
+    path = next(pathlib.Path(__file__).parents[1].glob(
+        "alembic/versions/d4f6b8c0e2a5_*.py"))
+    spec = importlib.util.spec_from_file_location("m137", path)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    body = m.OLD + " check what is already filled.\n\n{link}\n\n— Team Eko"
+    got = db.session.execute(text(
+        "SELECT :new || substr(:body, length(:old) + 1)"),
+        {"new": m.NEW, "old": m.OLD, "body": body}).scalar()
+    assert got.startswith("Namaste {name}, please confirm your details for "
+                          "your SBI Kiosk CSP documents. Open this link, check")
+    assert got.endswith("{link}\n\n— Team Eko")
 

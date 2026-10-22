@@ -22,7 +22,7 @@ Three rules this holds to:
 """
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from sqlalchemy import select
@@ -206,11 +206,32 @@ def address_for(record, channel_kind: str) -> Tuple[str, str]:
     return "", ""
 
 
+# After a failed ask, the automatic jobs leave that CSP alone this long
+# (22 Oct 2026, No. 137). Without it a job running every few minutes tried
+# the same CSP on every run while the WhatsApp platform was failing, and
+# filled the Messages screen with the same rejection.
+RETRY_FAILED_AFTER = timedelta(minutes=30)
+
+
+def failed_recently(session: Session, csp_id: str) -> Optional[datetime]:
+    """When this CSP's last ask failed, if within RETRY_FAILED_AFTER."""
+    from app.models.data_request import DataRequest
+    since = datetime.now(timezone.utc) - RETRY_FAILED_AFTER
+    return session.execute(
+        select(DataRequest.created_at).where(
+            DataRequest.csp_id == csp_id,
+            DataRequest.delivery_error.isnot(None),
+            DataRequest.created_at > since,
+        ).order_by(DataRequest.created_at.desc())
+    ).scalars().first()
+
+
 @telemetry.traced("ask_csp_for_details", "message_sender")
 def ask_for_details(session: Session, record, *,
                     channel: Optional[MessageChannel] = None,
                     template: Optional[MessageTemplate] = None,
                     verify: bool = False,
+                    manual: bool = False,
                     ) -> dict:
     """Send one CSP a link to confirm their own details.
 
@@ -222,6 +243,14 @@ def ask_for_details(session: Session, record, *,
         # Inactive / not live yet (No. 121): nothing is sent to this CSP.
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": record.send_hold}
+    if not manual:
+        # Someone pressing Send (manual=True) is never held back.
+        failed_at = failed_recently(session, record.csp_id)
+        if failed_at is not None:
+            return {"csp_id": record.csp_id, "sent": False,
+                    "reason": "the last try failed; tried again "
+                              f"{int(RETRY_FAILED_AFTER.total_seconds() // 60)}"
+                              " minutes after it"}
     channel = channel or choose_channel(session)
     template = template or choose_template(session)
 

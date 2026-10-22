@@ -291,7 +291,8 @@ async def send_now(
                     failed += 1
                     continue
                 outcome = sender.ask_for_details(
-                    sync, record, channel=channel, template=template)
+                    sync, record, channel=channel, template=template,
+                    manual=True)
                 results.append(outcome)
                 if outcome.get("sent"):
                     sent += 1
