@@ -174,7 +174,7 @@ def test_several_pdfs_become_one():
 
 
 def test_no_whatsapp_while_the_app_is_on_localhost(monkeypatch):
-    """The PDF link would be dead, so nothing is sent at all."""
+    """A laptop copy of the app never messages a CSP."""
     import uuid
     from types import SimpleNamespace
     from app.config import get_settings
@@ -193,7 +193,8 @@ def test_no_whatsapp_while_the_app_is_on_localhost(monkeypatch):
     assert out["status"] == "skipped" and sent == []
 
 
-def test_on_a_public_address_the_notice_goes_with_the_pdf(monkeypatch):
+def test_the_notice_says_they_were_emailed_and_carries_no_pdf(monkeypatch):
+    """No. 135: the documents are not sent on WhatsApp, only the notice."""
     import uuid
     from types import SimpleNamespace
     from app.config import get_settings
@@ -217,8 +218,11 @@ def test_on_a_public_address_the_notice_goes_with_the_pdf(monkeypatch):
     job = SimpleNamespace(workspace_id=uuid.uuid4(), id=uuid.uuid4())
     out = dw.notify(session, csp, job, ["CSP ID Card", "BCP"])
     assert out["status"] == wa.SENT
-    assert seen["url"].startswith("https://cspdocmaker.eko.in/api/public/documents/")
+    assert seen["url"] is None, "no PDF on WhatsApp"
     assert seen["values"]["documents"] == "CSP ID Card, BCP"
+    assert seen["values"]["email"] == "r@example.com"
+    assert "sent to your email {email}" in dw.BODY
+    assert "attached" not in dw.BODY.lower()
 
 
 def test_a_whatsapp_failure_never_raises(monkeypatch):

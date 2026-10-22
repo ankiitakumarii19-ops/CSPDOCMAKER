@@ -1,12 +1,15 @@
 """
-CSP DocMaker — "your documents are ready", on WhatsApp, with the PDFs
+CSP DocMaker — "your documents have been emailed", on WhatsApp
 
 Decided 12 Oct 2026 (tracker No. 78): after a CSP's documents are emailed,
-they are also sent a WhatsApp notice with the documents attached. Sent through
-Eko's WhatsApp platform (whatsapp_platform.py).
+they are also sent a WhatsApp notice. Sent through Eko's WhatsApp platform
+(whatsapp_platform.py).
 
-WhatsApp attaches a document by fetching it from a public web address, so
-each delivery gets a private link:
+Changed 22 Oct 2026 (No. 135, asked): the documents are NOT sent on WhatsApp
+any more. The notice only tells the CSP that their documents were emailed,
+and to which address. The private PDF link below is no longer put in new
+messages; it is kept so links already sent keep working for their 7 days.
+What it was:
 
   * signed with the app's secret, so it cannot be guessed or altered;
   * good for 7 days, then refused;
@@ -16,9 +19,10 @@ each delivery gets a private link:
 Guards, in order — any one failing means no WhatsApp, and the email that
 already went is unaffected:
 
+  * the CSP is not on hold;
   * an active WhatsApp channel (provider eko_wabs) is configured;
-  * the app is on a public address (PUBLIC_APP_URL is not localhost) — the
-    same rule that stops a dead link reaching a CSP;
+  * the app is on a public address (PUBLIC_APP_URL is not localhost) — so
+    a laptop copy of the app never messages a CSP;
   * the CSP has a usable mobile number.
 
 Never raises: a WhatsApp problem must not undo or fail a delivery that the
@@ -38,19 +42,20 @@ TOKEN_TYPE = "documents-link"
 # The wording. Kept stable on purpose: Meta approves a wording once, and the
 # platform reuses that approval as long as the text does not change.
 #
-# Changed 13 Oct 2026 (tracker No. 90): the earlier wording was approved by
-# Meta WITHOUT a document header, so a send with the PDF attached was refused
-# (#132018). This wording is registered in Eko's WhatsApp console WITH a
-# Document header (deploy/WHATSAPP-DOCUMENTS-TEMPLATE.md); it must match that
-# template exactly, character for character.
+# Changed 22 Oct 2026 (No. 135): no PDF, so no Document header — a plain
+# Utility template (deploy/WHATSAPP-DOCUMENTS-TEMPLATE.md). The platform
+# submits a new wording to Meta on its first send; it must then stay exactly
+# as approved, character for character.
 BODY = (
-    "Namaste {name}, your CSP documents ({documents}) have been issued. The "
-    "PDF is attached to this message and has also been emailed to {email}.\n\n"
-    "नमस्ते {name}, आपके CSP दस्तावेज़ ({documents}) जारी कर दिए गए हैं। PDF इस "
-    "संदेश के साथ संलग्न है और {email} पर ईमेल भी किया गया है।\n\n"
+    "Namaste {name}, your CSP documents ({documents}) have been issued and "
+    "sent to your email {email}. Please check your inbox, and the Spam "
+    "folder too.\n\n"
+    "नमस्ते {name}, आपके CSP दस्तावेज़ ({documents}) जारी कर दिए गए हैं और "
+    "आपके ईमेल {email} पर भेज दिए गए हैं। कृपया अपना इनबॉक्स और Spam फ़ोल्डर "
+    "भी देखें।\n\n"
     "Namaste {name}, aapke CSP documents ({documents}) jaari kar diye gaye "
-    "hain. PDF is message ke saath attached hai aur {email} par email bhi "
-    "kiya gaya hai.\n\n"
+    "hain aur aapke email {email} par bhej diye gaye hain. Kripya apna inbox "
+    "aur Spam folder bhi dekhein.\n\n"
     "— Team Eko"
 )
 
@@ -99,7 +104,8 @@ def whatsapp_channel(session):
 
 @telemetry.traced("whatsapp_documents_ready", "documents_whatsapp")
 def notify(session, csp, job, document_names: List[str]) -> dict:
-    """Send the WhatsApp notice for a delivery that was just emailed."""
+    """Tell the CSP on WhatsApp that their documents were emailed (no
+    PDF on WhatsApp — No. 135)."""
     from app.services import message_log, message_sender
     from app.services import whatsapp_platform as wa
 
@@ -109,11 +115,12 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
         channel = whatsapp_channel(session)
         if channel is None:
             return _skip(csp, "no active WhatsApp channel")
-        link = link_for(job.workspace_id, job.id, csp.csp_id)
-        if not message_sender.link_is_reachable(link):
-            return _skip(csp, "the app is not on a public address yet "
-                              "(PUBLIC_APP_URL), so WhatsApp cannot fetch "
-                              "the PDF")
+        from app.config import get_settings
+        if not message_sender.link_is_reachable(
+                get_settings().public_app_url):
+            return _skip(csp, "the app is not on a public address "
+                              "(PUBLIC_APP_URL) — a laptop copy never "
+                              "messages a CSP")
         if not wa.phone_for_whatsapp(csp.mobile or ""):
             return _skip(csp, "no usable mobile number")
 
@@ -123,8 +130,7 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
              "documents": ", ".join(document_names),
              "email": csp.email or "your email"},
             source_name=message_log.source_name(
-                message_log.KIND_DOCUMENTS_READY, csp.csp_id),
-            document_url=link)
+                message_log.KIND_DOCUMENTS_READY, csp.csp_id))
         # For the WhatsApp messages screen (No. 110).
         message_log.record(
             session, kind=message_log.KIND_DOCUMENTS_READY,

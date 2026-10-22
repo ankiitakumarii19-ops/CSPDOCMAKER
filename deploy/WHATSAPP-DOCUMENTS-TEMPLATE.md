@@ -1,24 +1,31 @@
-# WhatsApp template: "documents ready" (with the PDF attached)
+# WhatsApp template: "documents emailed" (no attachment)
 
-Tracker No. 90. Create this ONCE in Eko's WhatsApp console:
+Tracker No. 135 (22 Oct 2026). The documents are NOT sent on WhatsApp; this
+message only tells the CSP they were emailed. (Replaces No. 90's template
+with a Document header, which is no longer used.)
+
+The app's WhatsApp platform submits this wording to Meta by itself the first
+time a CSP's documents are emailed; until Meta approves it (minutes to about
+a day) that notice shows as "waiting for Meta's approval" on the WhatsApp
+messages screen and is not re-sent — the CSP still has the email. To have it
+approved BEFORE the first CSP, create it yourself in Eko's WhatsApp console:
 https://indev.eko.in/whatsapp-console/ → **Templates** → new template.
 
 | Field | Value |
 |---|---|
-| Name | `cspdocmaker_documents_ready_pdf_v1` |
 | Category | **Utility** |
 | Language | **English (en_US)** |
-| Header | **Document** — upload any small sample PDF (Meta uses it only as the example) |
+| Header | **None** |
 | Footer / buttons | none |
 
 ## Body — paste EXACTLY (every character, line break and dash)
 
 ```
-Namaste {{1}}, your CSP documents ({{2}}) have been issued. The PDF is attached to this message and has also been emailed to {{3}}.
+Namaste {{1}}, your CSP documents ({{2}}) have been issued and sent to your email {{3}}. Please check your inbox, and the Spam folder too.
 
-नमस्ते {{4}}, आपके CSP दस्तावेज़ ({{5}}) जारी कर दिए गए हैं। PDF इस संदेश के साथ संलग्न है और {{6}} पर ईमेल भी किया गया है।
+नमस्ते {{4}}, आपके CSP दस्तावेज़ ({{5}}) जारी कर दिए गए हैं और आपके ईमेल {{6}} पर भेज दिए गए हैं। कृपया अपना इनबॉक्स और Spam फ़ोल्डर भी देखें।
 
-Namaste {{7}}, aapke CSP documents ({{8}}) jaari kar diye gaye hain. PDF is message ke saath attached hai aur {{9}} par email bhi kiya gaya hai.
+Namaste {{7}}, aapke CSP documents ({{8}}) jaari kar diye gaye hain aur aapke email {{9}} par bhej diye gaye hain. Kripya apna inbox aur Spam folder bhi dekhein.
 
 — Team Eko
 ```
@@ -27,22 +34,9 @@ Namaste {{7}}, aapke CSP documents ({{8}}) jaari kar diye gaye hain. PDF is mess
 
 | Variable | Fills in | Sample |
 |---|---|---|
-| {{1}} | name | Ramesh Kumar |
-| {{2}} | documents | ID Card, Appointment Letter |
-| {{3}} | email | ramesh@example.com |
-| {{4}} | name | Ramesh Kumar |
-| {{5}} | documents | ID Card, Appointment Letter |
-| {{6}} | email | ramesh@example.com |
-| {{7}} | name | Ramesh Kumar |
-| {{8}} | documents | ID Card, Appointment Letter |
-| {{9}} | email | ramesh@example.com |
-
-## After Meta approves it
-
-Nothing else to do: the app looks the wording up by its exact text and sends
-with the PDF attached. Check it with `python scripts/check_whatsapp.py`
-(it lists approval status) or in the console's Templates list.
+| {{1}}, {{4}}, {{7}} | name | Ramesh Kumar |
+| {{2}}, {{5}}, {{8}} | documents | CSP ID Card, Appointment Letter |
+| {{3}}, {{6}}, {{9}} | email | ramesh@example.com |
 
 If Meta REJECTS it, send the rejection reason to the developer: the wording
-in `backend/app/services/documents_whatsapp.py` must then change to match a
-new template.
+in `backend/app/services/documents_whatsapp.py` must then change to match.

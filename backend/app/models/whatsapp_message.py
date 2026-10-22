@@ -35,7 +35,7 @@ from app.workspace_context import default_workspace_id
 # Which message it was. Same keys as MessageTemplate.purpose.
 KIND_DATA_REQUEST = "data_request"        # please confirm your details
 KIND_MISSING_DATA = "missing_data"        # these details are still needed
-KIND_DOCUMENTS_READY = "documents_ready"  # your documents, PDF attached
+KIND_DOCUMENTS_READY = "documents_ready"  # your documents were emailed
 KIND_OTHER = "other"                      # e.g. the plain WhatsApp test
 KINDS = (KIND_DATA_REQUEST, KIND_MISSING_DATA, KIND_DOCUMENTS_READY,
          KIND_OTHER)
