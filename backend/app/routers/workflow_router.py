@@ -162,6 +162,13 @@ async def process_workflow(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"CSP with ID '{csp_id}' not found.",
         )
+    if csp.send_hold:
+        # Inactive / not live yet (No. 121): nothing is made or sent.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Nothing can be sent to {csp.name} ({csp_id}): "
+                   f"{csp.send_hold}")
+    _refuse_while_emails_paused()
 
     # The BCP is for a KO only (No. 57). Asking for it for a Sub-KO is
     # dropped; asking for nothing else is refused, plainly.
@@ -528,6 +535,12 @@ async def confirm_and_send(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"CSP '{job.csp_id}' not found.",
         )
+    if csp.send_hold:
+        # Put on hold after the documents were made (No. 121): not sent.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Not sent to {csp.name} ({csp.csp_id}): {csp.send_hold}")
+    _refuse_while_emails_paused()
 
     # Final email validation check
     email_valid, email_error = document_validation_service.validate_csp_email(csp)
@@ -676,3 +689,11 @@ async def confirm_and_send(
         "email_sent": True,
         "documents_sent": len(doc_files),
     }
+
+
+def _refuse_while_emails_paused() -> None:
+    """No. 133: while emails are paused, documents are not made or sent."""
+    from app.services import email_service
+    if email_service.paused():
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=email_service.PAUSED_REASON)

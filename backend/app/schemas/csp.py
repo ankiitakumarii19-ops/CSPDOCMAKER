@@ -45,6 +45,8 @@ class CSPDetailResponse(BaseModel):
     rm_name: Optional[str] = None
     rm_email: Optional[str] = None
     rm_resolution: Optional[str] = None
+    # Why nothing may be sent to this CSP now (No. 121), or None.
+    send_hold: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

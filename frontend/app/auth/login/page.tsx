@@ -369,8 +369,10 @@ export default function AuthPage() {
       </div>
 
       {/* Right: Auth Forms */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white dark:bg-gray-900">
-        <div className="w-full max-w-md">
+      {/* Scrolls by itself: the app frame does not (layout.tsx), and the
+          sign-up form is taller than a phone screen. */}
+      <div className="w-full lg:w-1/2 flex items-start justify-center p-8 bg-white dark:bg-gray-900 overflow-y-auto">
+        <div className="w-full max-w-md my-auto">
           {/* Theme Toggle in Auth */}
           <div className="absolute top-6 right-6">
             <button

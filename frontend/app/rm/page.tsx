@@ -557,6 +557,14 @@ export default function RMDashboard() {
                         {csp.name}
                       </h4>
                       <p className="text-sm text-gray-500 font-medium">{csp.csp_id}</p>
+                      {csp.send_hold && (
+                        // Inactive / not live yet (No. 121): the server refuses
+                        // any send; this says why before the RM tries.
+                        <p className="mt-2 px-3 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-xs text-amber-800 dark:text-amber-300 text-left">
+                          <i className="fas fa-hand mr-1"></i>
+                          On hold: {csp.send_hold}
+                        </p>
+                      )}
                     </div>
                     <div className="p-4 space-y-3 text-sm">
                       {[

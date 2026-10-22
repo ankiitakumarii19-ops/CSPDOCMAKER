@@ -93,6 +93,12 @@ def process_new_csps(self):
                     len(pending))
 
         for csp in pending:
+            if csp.send_hold:
+                # Inactive / not live yet (No. 121): nothing goes out. Left
+                # unprocessed, so it is picked up once the hold is lifted.
+                logger.info("new_csp_worker: %s on hold, skipped: %s",
+                            csp.csp_id, csp.send_hold)
+                continue
             try:
                 if _try_photo(csp):
                     session.commit()
@@ -104,6 +110,16 @@ def process_new_csps(self):
                 studio_photo.prepare_for(csp)   # No. 72
                 missing = check_missing_data(csp, doc_types)
                 if missing.has_missing_data:
+                    # No. 125: Zoho first, then the CSP on WhatsApp for what
+                    # is still missing (an open request is reused, so they
+                    # are never asked twice). If Zoho had it all, the
+                    # documents go out now.
+                    asked = _ask_csp(session, csp)
+                    missing = check_missing_data(csp, doc_types)
+                    logger.info("new_csp_worker: CSP %s details ask: %s",
+                                csp.csp_id, asked.get("reason") or
+                                ("sent" if asked.get("sent") else "not sent"))
+                if missing.has_missing_data:
                     message, details = alert_service.describe_missing(missing)
                     alert_service.raise_alert(
                         session, csp.csp_id, csp.rm_email,
@@ -113,6 +129,14 @@ def process_new_csps(self):
                     alerted += 1
                     logger.info("new_csp_worker: CSP %s blocked — %s",
                                 csp.csp_id, message)
+                    continue
+
+                from app.services import email_service
+                if email_service.paused():
+                    # No. 133: left unprocessed, so the documents are made
+                    # and mailed once emails are turned back on.
+                    logger.info("new_csp_worker: CSP %s ready — waiting, "
+                                "emails are paused", csp.csp_id)
                     continue
 
                 _process_one(session, csp, doc_types)
@@ -141,6 +165,25 @@ def process_new_csps(self):
         "%d failed", len(pending), processed, alerted, failed,
     )
     return summary
+
+
+def _ask_csp(session, csp) -> dict:
+    """Zoho first, then the CSP on WhatsApp (message_sender.ask_for_details).
+    Never stops the run: no channel / wording, or any failure, is the answer
+    and is logged; the RM alert still goes up."""
+    from app.services import message_sender
+    try:
+        return message_sender.ask_for_details(session, csp)
+    except (message_sender.NoChannel, message_sender.NoTemplate) as e:
+        logger.warning("new_csp_worker: CSP %s not asked — %s",
+                       csp.csp_id, e)
+        return {"csp_id": csp.csp_id, "sent": False, "reason": str(e)}
+    except Exception as e:
+        session.rollback()
+        logger.error("new_csp_worker: asking CSP %s failed: %s: %s",
+                     csp.csp_id, type(e).__name__, e, exc_info=True)
+        return {"csp_id": csp.csp_id, "sent": False,
+                "reason": f"{type(e).__name__}"}
 
 
 def _try_photo(csp, from_crm: bool = True) -> bool:

@@ -281,6 +281,46 @@ def _lead_matches(record: Dict, digits: str, name: str, branch: str) -> bool:
     return agreed >= 2
 
 
+# Where a CSP's address is on their Lead (asked 22 Oct 2026): the "Shop
+# Address with Shop Name" box, or else the Business Address section put
+# together. The Home Address field and the attached documents are not used.
+ADDRESS = "Shop / Business Address"
+SHOP_ADDRESS = "Shop_Address_with_Shop_Name"
+BUSINESS_ADDRESS = ("Shop_Name", "Street", "Landmark", "City", "States",
+                    "Zip_Code")
+
+
+def _text(value) -> str:
+    if isinstance(value, bool) or value is None:
+        return ""
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    return value.strip() if isinstance(value, str) else ""
+
+
+def lead_address(lead: Dict) -> str:
+    """The CSP's address from their Lead, or "" when there is none. The
+    Business Address counts only with a Street or Landmark — a city, state
+    and PIN alone is not an address, so the CSP is asked instead. Nor is a
+    shop box with no number in it at all (seen on a real Lead: "Online
+    shop") — a real address has a house, ward or PIN number."""
+    shop = _text(lead.get(SHOP_ADDRESS))
+    if shop and any(ch.isdigit() for ch in shop):
+        return shop
+    shop_name, street, landmark, city, state, pin = (
+        _text(lead.get(k)) for k in BUSINESS_ADDRESS)
+    if not (street or landmark):
+        return ""
+    tail = " ".join(p for p in (state, pin) if p)
+    return ", ".join(p for p in (shop_name, street, landmark, city, tail) if p)
+
+
+def lead_field(lead: Dict, key: str) -> str:
+    """One value from a Lead as clean text; ADDRESS is put together by
+    lead_address."""
+    return lead_address(lead) if key == ADDRESS else _text(lead.get(key))
+
+
 def find_lead(phone: str, name: str = "", branch_code: str = "") -> Optional[Dict]:
     """Find this CSP's Lead, where the KYC pack is attached.
 

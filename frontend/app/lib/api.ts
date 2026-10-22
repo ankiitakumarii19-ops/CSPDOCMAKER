@@ -464,6 +464,8 @@ export interface CSPDetail {
   rm_name?: string | null;
   rm_email?: string | null;
   rm_resolution?: string | null;
+  /** Why nothing may be sent to this CSP now (No. 121), or null. */
+  send_hold?: string | null;
 }
 
 // ---- Ask-anything chat (No. 114) ----
@@ -584,6 +586,40 @@ export interface AssistantAnswer {
   cards: AssistantCard[];
   /** Questions to tap next: related Knowledge Base entries, or examples. */
   suggestions?: string[];
+}
+
+// ---- Emails (No. 127) ----
+
+export interface EmailCounts {
+  title: string;
+  sent: number;
+  failed: number;
+  bounced: number;
+  opened: number;
+  not_opened: number;
+}
+
+export interface EmailRow {
+  id: string;
+  csp_id: string | null;
+  csp_name: string | null;
+  to: string;
+  kind: string;
+  subject: string;
+  status: "failed" | "bounced" | "opened" | "not_opened";
+  sent_at: string;
+  error: string | null;
+  opened_at: string | null;
+  open_count: number;
+  bounced_at: string | null;
+  bounce_reason: string | null;
+}
+
+export interface EmailReport {
+  counts: Record<string, EmailCounts>;
+  total: number;
+  messages: EmailRow[];
+  note: string;
 }
 
 // ---- Workspace Rules (No. 120) ----
@@ -1167,6 +1203,21 @@ class ApiClient {
     return this.request<{ cancelled: boolean }>(
       `/assistant/actions/${encodeURIComponent(actionId)}`,
       { method: "DELETE" }
+    );
+  }
+
+  // ---- Emails (No. 127; Admin + Super Admin) ----
+  async emailMessages(filter: { kind?: string; status?: string; q?: string }) {
+    const params = new URLSearchParams();
+    Object.entries(filter).forEach(([k, v]) => v && params.set(k, v));
+    const qs = params.toString();
+    return this.request<EmailReport>(`/admin/email-messages${qs ? `?${qs}` : ""}`);
+  }
+
+  async checkEmailBounces() {
+    return this.request<{ checked: boolean; notices?: number; marked?: number; reason?: string }>(
+      "/admin/email-messages/refresh",
+      { method: "POST" }
     );
   }
 

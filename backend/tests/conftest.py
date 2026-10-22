@@ -22,6 +22,14 @@ os.environ["SMS_PROVIDER"] = "stub"
 # Pinned so the suite does not change behaviour with the developer's .env.
 # Tests that care about photos being required turn this off themselves.
 os.environ["PHOTO_PLACEHOLDER_ALLOWED"] = "true"
+# Never reach the real Zoho account from the suite (No. 124 asks Zoho before
+# messaging a CSP). Tests that need Zoho put a stand-in in its place.
+os.environ["ZOHO_CLIENT_ID"] = ""
+os.environ["ZOHO_CLIENT_SECRET"] = ""
+os.environ["ZOHO_REFRESH_TOKEN"] = ""
+# The developer's .env may pause emails (No. 133); the suite tests sending
+# with it off, and the pause tests turn it on themselves.
+os.environ["EMAILS_PAUSED"] = "false"
 # Test runs write their logs and traces to a throwaway folder.
 import tempfile as _tempfile
 os.environ["LOG_DIR"] = _tempfile.mkdtemp(prefix="cspdocmaker-test-logs-")

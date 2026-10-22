@@ -387,8 +387,12 @@ export default function CSPDetailsForm({
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
+  // The app's frame (layout.tsx) is one screen tall with scrolling off —
+  // the admin and RM screens scroll inside their own panels. This page has
+  // no panel, so it scrolls itself; without this a CSP on a phone could not
+  // reach anything below the first screen (reported 21 Oct 2026).
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 py-8 px-4">
+    <div className="flex-1 min-h-0 h-full overflow-y-auto overscroll-contain bg-gray-50 dark:bg-gray-900 py-8 px-4">
       <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-700 p-6 sm:p-8">
         {children}
       </div>

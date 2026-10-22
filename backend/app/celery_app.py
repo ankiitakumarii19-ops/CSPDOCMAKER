@@ -67,6 +67,26 @@ celery_app.conf.update(
                 "expires": (settings.csp_sync_interval_minutes + 2) * 60 - 5
             },
         },
+        # Eko's Calling and Lead raw data sheets (No. 121).
+        "sync-source-sheets": {
+            "task": "workers.sync_source_sheets",
+            "schedule": settings.source_sheets_interval_minutes * 60,
+            "options": {
+                "expires": settings.source_sheets_interval_minutes * 60 - 5
+            },
+        },
+        # Old CSPs asked to verify their details, 25 at a time (No. 126).
+        "verify-old-csps": {
+            "task": "workers.verify_old_csps",
+            "schedule": settings.verify_interval_minutes * 60,
+            "options": {"expires": settings.verify_interval_minutes * 60 - 5},
+        },
+        # Emails that bounced (No. 127).
+        "check-email-bounces": {
+            "task": "workers.check_email_bounces",
+            "schedule": settings.email_bounce_minutes * 60,
+            "options": {"expires": settings.email_bounce_minutes * 60 - 5},
+        },
         # RM requests that were waiting for the CSP's details (No. 53).
         "complete-pending-requests": {
             "task": "workers.complete_pending_requests",
@@ -133,6 +153,9 @@ celery_app.conf.beat_schedule.update(_agent_schedule())
 celery_app.conf.include = [
     "app.workers.auth_sync_worker",
     "app.workers.csp_sync_worker",
+    "app.workers.source_sheets_worker",
+    "app.workers.verify_old_csps_worker",
+    "app.workers.email_bounce_worker",
     "app.workers.new_csp_worker",
     "app.workers.pending_request_worker",
     "app.workers.sheet_photo_worker",

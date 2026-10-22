@@ -83,7 +83,7 @@ def sent(monkeypatch):
     """Capture instead of actually emailing anybody."""
     outbox = []
 
-    def capture(to, subject, html, plain):
+    def capture(to, subject, html, plain, message_id=None):
         outbox.append({"to": to, "subject": subject, "body": plain})
         return True
 

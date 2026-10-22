@@ -30,11 +30,15 @@ from app.models.data_request import DataRequest
 from app.models.document_template import DocumentTemplate
 from app.models.whatsapp_message import WhatsAppMessage
 from app.models.knowledge import KnowledgeEntry, KnowledgeMiss
+from app.models.source_sheet import SourceSheetState
+from app.models.email_message import EmailMessage
 
 __all__ = [
     "WhatsAppMessage",
     "KnowledgeEntry",
     "KnowledgeMiss",
+    "SourceSheetState",
+    "EmailMessage",
     "WorkspaceMember",
     "Workspace",
     "DataSource",

@@ -251,6 +251,12 @@ async def auto_issue(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"CSP {csp_id} not found.",
         )
+    if record.send_hold:
+        # Inactive / not live yet (No. 121): nothing is made or sent.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Nothing can be sent to {record.name} ({csp_id}): "
+                   f"{record.send_hold}")
 
     if record.new_csp_processed_at is not None:
         raise HTTPException(

@@ -102,12 +102,16 @@ async def test_a_request_for_nothing_is_refused(db_session, csp):
 
 async def test_the_csp_is_asked_for_everything_info_could_not_fill(
         db_session):
-    """Changed 11 Oct 2026 (tracker No. 53): an RM is never asked, so a
-    bank detail INFO cannot answer (AO, RBO) goes to the CSP."""
+    """21 Oct 2026: the CSP is asked for their own details, plus AO and
+    RBO Name when nothing could map them — never DC, ASM, RM or LHO."""
     blank = CSPRecord(csp_id="1A900002", name="", origin="new")
     asked = svc.fields_to_ask(blank)
     assert "rbo_name" in asked and "ao" in asked
     assert "gender" in asked
+    assert not {"dc", "dc_email", "dc_contact", "asm_name", "asm_email",
+                "asm_contact", "rm_name", "lho"} & set(asked)
+    link = fo.request_fields(blank)
+    assert "ao" in link and "rbo_name" in link and "dc" not in link
 
 
 async def test_a_detail_info_already_filled_is_not_asked(db_session):
@@ -116,7 +120,19 @@ async def test_a_detail_info_already_filled_is_not_asked(db_session):
     asked = svc.fields_to_ask(record)
     assert not {"ao", "rbo_name", "dc"} & set(asked)
     link_fields = fo.request_fields(record)
-    assert "ao" not in link_fields and "lho" in link_fields
+    assert "ao" not in link_fields and "rbo_name" not in link_fields
+    assert "lho" not in link_fields and "asm_email" not in link_fields, \
+        "organisation details are never on the CSP's form"
+
+
+async def test_the_verification_form_always_has_ao_and_rbo(db_session):
+    """21 Oct 2026: an old CSP verifying their record checks their AO and
+    RBO Name too, even when they are already mapped."""
+    record = CSPRecord(csp_id="1A900004", name="X", origin="baseline",
+                       ao="Patna AO", rbo_name="RBO 1", dc="Anish Kumar")
+    link_fields = fo.request_fields(record, verify=True)
+    assert link_fields[-2:] == ["ao", "rbo_name"]
+    assert "dc" not in link_fields and "lho" not in link_fields
 
 
 # ---- it answers once, and expires ---------------------------------------

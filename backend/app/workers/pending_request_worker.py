@@ -99,6 +99,13 @@ def finish_ready(session) -> dict:
             finished += 1
             continue
 
+        if csp.send_hold:
+            # Inactive / not live yet (No. 121): the request waits.
+            logger.info("pending_request_worker: %s on hold, waiting: %s",
+                        csp.csp_id, csp.send_hold)
+            waiting += 1
+            continue
+
         try:
             # A missing photo may be in the CRM by now.
             if _try_photo(csp):
@@ -107,6 +114,11 @@ def finish_ready(session) -> dict:
             from app.services import studio_photo
             studio_photo.prepare_for(csp)   # No. 72
             if check_missing_data(csp, types).has_missing_data:
+                waiting += 1
+                continue
+            from app.services import email_service
+            if email_service.paused():
+                # No. 133: the request waits until emails are back on.
                 waiting += 1
                 continue
 

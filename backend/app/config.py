@@ -135,6 +135,11 @@ class Settings(BaseSettings):
     smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
     smtp_from_email: str = Field(default="", alias="SMTP_FROM_EMAIL")
     smtp_from_name: str = Field(default="CSP DocMaker", alias="SMTP_FROM_NAME")
+    # Asked 22 Oct 2026 (No. 133): while the sending address is being
+    # changed, no email goes out — documents, chat emails, anything — except
+    # the sign-in codes, so the team can still sign in. Documents that are
+    # due simply wait and go out once this is turned off.
+    emails_paused: bool = Field(default=False, alias="EMAILS_PAUSED")
 
     # ---- CSP Google Sheet (live CSP data source) ----
     google_sheets_csp_sheet_id: str = Field(
@@ -164,6 +169,50 @@ class Settings(BaseSettings):
                 if ko_level.level_of(code) == ko_level.SUB_KO
                 else self.google_sheets_csp_sheet_name)
     csp_sync_interval_minutes: int = Field(default=1, alias="CSP_SYNC_INTERVAL_MINUTES")
+
+    # ---- Where Eko's CSPs come from (tracker No. 121, 21 Oct 2026) ----
+    # The Calling sheet lists the CSPs already working (old); "Terminal
+    # Status" Inactive or empty means nothing is sent to them. The Lead raw
+    # data sheet lists CSPs being onboarded; "Remarks" = LEAD_LIVE_REMARK
+    # means live — anything else means still pending, nothing is sent. Rows
+    # are copied into CSPDATA (KOData/SUBKOData). Empty ids = switched off.
+    calling_sheet_id: str = Field(default="", alias="CALLING_SHEET_ID")
+    calling_sheet_tab: str = Field(default="Calling Sheet New",
+                                   alias="CALLING_SHEET_TAB")
+    calling_header_row: int = Field(default=2, alias="CALLING_HEADER_ROW")
+    lead_sheet_id: str = Field(default="", alias="LEAD_SHEET_ID")
+    lead_sheet_tab: str = Field(default="Lead raw data",
+                                alias="LEAD_SHEET_TAB")
+    lead_header_row: int = Field(default=1, alias="LEAD_HEADER_ROW")
+    lead_live_remark: str = Field(default="Go Live Done",
+                                  alias="LEAD_LIVE_REMARK")
+    source_sheets_interval_minutes: int = Field(
+        default=5, alias="SOURCE_SHEETS_INTERVAL_MINUTES")
+
+
+    # WhatsApp every old CSP to verify their details (No. 126), gently: a
+    # batch every few minutes, in the day only. Only where the Calling sheet
+    # is connected (the server).
+    verify_old_csps_enabled: bool = Field(default=True,
+                                          alias="VERIFY_OLD_CSPS_ENABLED")
+    verify_batch_size: int = Field(default=25, alias="VERIFY_BATCH_SIZE")
+    verify_interval_minutes: int = Field(default=15,
+                                         alias="VERIFY_INTERVAL_MINUTES")
+    verify_start_hour: int = Field(default=8, alias="VERIFY_START_HOUR")
+    verify_end_hour: int = Field(default=20, alias="VERIFY_END_HOUR")
+    verify_stop_after: int = Field(default=5, alias="VERIFY_STOP_AFTER")
+    # The temporary Address tab for old CSPs (No. 129): matched by CSP code
+    # into the empty Address cells of the CSPs copied in from the Calling
+    # sheet. Verification waits until it has been read once.
+    address_sheet_id: str = Field(default="", alias="ADDRESS_SHEET_ID")
+    address_sheet_tab: str = Field(default="Address", alias="ADDRESS_SHEET_TAB")
+    verify_wait_for_address: bool = Field(default=True,
+                                          alias="VERIFY_WAIT_FOR_ADDRESS")
+
+    # Email tracking (No. 127): bounce notices are read from the sending
+    # Gmail inbox with the SMTP login, every EMAIL_BOUNCE_MINUTES.
+    imap_host: str = Field(default="imap.gmail.com", alias="IMAP_HOST")
+    email_bounce_minutes: int = Field(default=15, alias="EMAIL_BOUNCE_MINUTES")
 
 
     # ---- Documents ----

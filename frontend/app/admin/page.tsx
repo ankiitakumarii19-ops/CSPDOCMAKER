@@ -15,6 +15,7 @@ import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
 import WorkspaceRules from "./WorkspaceRules";
+import EmailMessages from "./EmailMessages";
 import DashboardView from "./DashboardView";
 import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
@@ -264,6 +265,17 @@ export default function AdminDashboard() {
           >
             <i className="fab fa-whatsapp w-5 text-center"></i> WhatsApp messages
           </button>
+          {/* Every email to a CSP and what became of it (No. 127). */}
+          <button
+            onClick={() => setAdminRoute("emails")}
+            className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+              adminRoute === "emails"
+                ? "bg-navy-800 text-white border-l-4 border-eko"
+                : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+            }`}
+          >
+            <i className="fas fa-envelope w-5 text-center"></i> Emails
+          </button>
           {canConfigure && (
             <button
               onClick={() => setAdminRoute("build")}
@@ -460,6 +472,7 @@ export default function AdminDashboard() {
               <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
             {adminRoute === "whatsapp" && <WhatsAppMessages />}
+            {adminRoute === "emails" && <EmailMessages />}
             {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}

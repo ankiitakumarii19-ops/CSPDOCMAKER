@@ -144,7 +144,9 @@ def main() -> int:
             # Straight through the server's email account (the one that
             # emails CSPs their documents): no Email messaging channel is
             # needed, and none is on — real CSPs are asked on WhatsApp only.
-            sent, why = message_sender._send_email(a.to, subject, body)
+            sent, why = message_sender._send_email(
+                a.to, subject, body, kind="other", csp_id=record.csp_id,
+                csp_name=record.name)
             results.append(("email", a.to, sent, why, None))
 
         if a.whatsapp:

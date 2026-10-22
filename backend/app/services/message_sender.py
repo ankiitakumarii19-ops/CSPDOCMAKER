@@ -133,32 +133,46 @@ def choose_template(session: Session, purpose: str = PURPOSE_DATA_REQUEST
 
 # ---- actually sending ----------------------------------------------------
 
-def _send_email(to: str, subject: str, body: str) -> Tuple[bool, str]:
-    """Send plain text through the existing SMTP path."""
-    from app.services import email_service
+def _send_email(to: str, subject: str, body: str, *,
+                kind: str = "other", csp_id: Optional[str] = None,
+                csp_name: Optional[str] = None) -> Tuple[bool, str]:
+    """Send plain text through the existing SMTP path, and record it
+    (No. 127): sent or failed, and later opened / bounced."""
+    from app.services import email_log, email_service
 
+    if email_service.paused():
+        logger.info("message_sender: email to %s not sent — emails are "
+                    "paused", to)
+        return False, email_service.PAUSED_REASON
+    track = email_log.tracker(get_settings().smtp_from_email
+                              or get_settings().smtp_username)
     html = (
         '<div style="font-family:system-ui,sans-serif;font-size:15px;'
         'line-height:1.6;white-space:pre-wrap">'
         + body.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-        + "</div>"
+        + "</div>" + track.pixel_html
     )
     try:
-        ok = email_service._send_via_smtp(to, subject, html, body)
-        return ok, "" if ok else "SMTP reported failure"
+        ok = email_service._send_via_smtp(to, subject, html, body,
+                                          message_id=track.message_id)
+        why = "" if ok else "SMTP reported failure"
     except Exception as e:
         # Returned to the caller (recorded on the request as its delivery
         # error) — and logged here with the traceback.
         logger.warning("message_sender: email to a CSP failed: %s: %s",
                        type(e).__name__, e, exc_info=True)
-        return False, f"{type(e).__name__}: {e}"
+        ok, why = False, f"{type(e).__name__}: {e}"
+    email_log.record(kind=kind, to_email=to, subject=subject, ok=ok,
+                     error=why, track=track, csp_id=csp_id, csp_name=csp_name)
+    return ok, why
 
 
-def send_via(channel: MessageChannel, to: str, subject: str, body: str
-             ) -> Tuple[bool, str]:
-    """Dispatch on the channel's kind. Returns (sent, why not)."""
+def send_via(channel: MessageChannel, to: str, subject: str, body: str,
+             **tracking) -> Tuple[bool, str]:
+    """Dispatch on the channel's kind. Returns (sent, why not). `tracking`
+    (kind, csp_id, csp_name) is what the email is recorded as (No. 127)."""
     if channel.kind == EMAIL:
-        return _send_email(to, subject, body)
+        return _send_email(to, subject, body, **tracking)
     if channel.kind == WHATSAPP:
         # WhatsApp needs a Meta-approved template with values filled in, not
         # a finished text; it is sent by whatsapp_platform.send (No. 78).
@@ -196,6 +210,7 @@ def address_for(record, channel_kind: str) -> Tuple[str, str]:
 def ask_for_details(session: Session, record, *,
                     channel: Optional[MessageChannel] = None,
                     template: Optional[MessageTemplate] = None,
+                    verify: bool = False,
                     ) -> dict:
     """Send one CSP a link to confirm their own details.
 
@@ -203,6 +218,10 @@ def ask_for_details(session: Session, record, *,
     twice with two different links is confusing, and the first one would
     silently stop working.
     """
+    if getattr(record, "send_hold", None):
+        # Inactive / not live yet (No. 121): nothing is sent to this CSP.
+        return {"csp_id": record.csp_id, "sent": False,
+                "reason": record.send_hold}
     channel = channel or choose_channel(session)
     template = template or choose_template(session)
 
@@ -219,10 +238,20 @@ def ask_for_details(session: Session, record, *,
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": "already asked and waiting for a reply"}
 
+    # Zoho first (No. 124): what Eko's team typed into the CSP's Zoho Lead
+    # is filled in, and the CSP is asked only for what is still missing.
+    if drs.fields_to_ask(record):
+        from app.services import zoho_fill
+        filled = zoho_fill.fill_from_zoho(session, record)
+        if filled:
+            session.commit()
+
     fields = drs.fields_to_ask(record)
-    if not fields:
+    if not fields and not verify:
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": "nothing is missing from their own details"}
+    # verify=True (No. 126): an old CSP checks their whole record even when
+    # nothing is blank — a wrong value on file is still worth catching.
 
     to, via = address_for(record, channel.kind)
     if not to:
@@ -233,7 +262,7 @@ def ask_for_details(session: Session, record, *,
         request, token = existing, None
     else:
         request, token = drs.create(session, record.csp_id,
-                                    fo.request_fields(record))
+                                    fo.request_fields(record, verify))
 
     if token is None:
         # An open request whose link was never delivered. The token cannot
@@ -241,7 +270,7 @@ def ask_for_details(session: Session, record, *,
         # issued and the old one closed.
         drs.cancel(session, record.csp_id, "its link was never delivered")
         request, token = drs.create(session, record.csp_id,
-                                    fo.request_fields(record))
+                                    fo.request_fields(record, verify))
 
     link = drs.link_for(token)
     if not link_is_reachable(link):
@@ -261,7 +290,8 @@ def ask_for_details(session: Session, record, *,
         # sent as a Meta-approved template with the values filled in.
         from app.services import whatsapp_platform as wa
         from app.services import message_log
-        readable = ", ".join(fo.label_of(f) for f in fields)
+        readable = (", ".join(fo.label_of(f) for f in fields)
+                    or "all your details")
         kind = (message_log.KIND_MISSING_DATA
                 if template.purpose == PURPOSE_MISSING_DATA
                 else message_log.KIND_DATA_REQUEST)
@@ -278,7 +308,10 @@ def ask_for_details(session: Session, record, *,
             csp_id=record.csp_id, csp_name=getattr(record, "name", "") or "",
             data_request_id=request.id)
     else:
-        sent, why = send_via(channel, to, subject, body)
+        from app.models.email_message import KIND_DETAILS
+        sent, why = send_via(channel, to, subject, body, kind=KIND_DETAILS,
+                             csp_id=record.csp_id,
+                             csp_name=getattr(record, "name", "") or "")
 
     request.sent_via = via
     request.sent_to = to

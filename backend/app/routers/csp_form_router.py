@@ -139,6 +139,49 @@ async def _csp(session: AsyncSession, csp_id: str):
     return record
 
 
+VERIFIED_BY = "the CSP's verification answer"
+
+
+async def _documents_after_verification(session: AsyncSession, record) -> None:
+    """An old CSP copied in from the Calling sheet who has answered their
+    verification form gets their documents (asked 22 Oct 2026, No. 134):
+    they are enrolled exactly as an RM's "issue documents" does, and the
+    new-CSP job makes and mails them — or alerts the RM if something a
+    document needs is still missing.
+
+    Only once their answer is in the sheet (otherwise the next sync would
+    put the old values back under the documents). Never a CSP that was in
+    CSPDATA before the import, never one on hold, never twice. Never fails
+    the CSP's submission: a problem is logged.
+    """
+    from datetime import datetime, timezone
+
+    from sqlalchemy import func, select
+
+    from app.models.source_sheet import SourceSheetState
+    if (record.origin != "baseline" or record.send_hold
+            or record.new_csp_processed_at is not None
+            or record.auto_enrolled_at is not None):
+        return
+    try:
+        copied_in = (await session.execute(select(SourceSheetState.id).where(
+            func.upper(SourceSheetState.csp_code)
+            == (record.csp_id or "").upper(),
+            SourceSheetState.imported_as == "baseline"))).first()
+        if copied_in is None:
+            return
+        record.auto_enrolled_at = datetime.now(timezone.utc)
+        record.auto_enrolled_by = VERIFIED_BY
+        await session.commit()
+        logger.info("csp_form_router: %s verified their details — enrolled "
+                    "for their documents", record.csp_id)
+    except Exception as e:
+        await session.rollback()
+        logger.error("csp_form_router: %s verified their details but could "
+                     "not be enrolled for their documents: %s: %s",
+                     record.csp_id, type(e).__name__, e, exc_info=True)
+
+
 def _field_payload(record, field: str) -> dict:
     value = getattr(record, field, None)
     if field == "photo_url":
@@ -288,6 +331,9 @@ async def submit_form(
                 "csp_form_router.submit_form: CSP %s — could not note whether "
                 "the sheet was updated: %s: %s", request_row.csp_id,
                 type(e).__name__, e, exc_info=True)
+
+        if sheet_error is None:
+            await _documents_after_verification(session, record)
 
     logger.info(
         "csp_form_router.submit_form: CSP %s returned %d field(s)%s",

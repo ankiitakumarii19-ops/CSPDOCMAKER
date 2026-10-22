@@ -125,6 +125,10 @@ class CSPRecord(Base):
         ),
     )
     status: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    # Why nothing may be sent to this CSP now (No. 121): Inactive in the
+    # Calling sheet, or not yet "Go Live Done" in the Lead raw data sheet.
+    # Set by the source-sheets job; every sending path checks it.
+    send_hold: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     # ---- Sync / workflow bookkeeping ----
     origin: Mapped[str] = mapped_column(

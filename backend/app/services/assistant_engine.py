@@ -379,8 +379,10 @@ async def _about_csp(session, user, csp, question: str, t: str) -> Answer:
         docs = card["documents"]
         if not docs:
             reply = (f"No documents are stored for {who} yet. They are made "
-                     "when an RM requests them, or automatically for a new "
-                     "CSP once every detail and the photo are on record.")
+                     "when an RM requests them, automatically for a new "
+                     "CSP once every detail and the photo are on record, "
+                     "or for an old CSP once they answer their "
+                     "verification form.")
         else:
             reply = (f"Yes — {len(docs)} document"
                      f"{'' if len(docs) == 1 else 's'} stored for {who}:\n"

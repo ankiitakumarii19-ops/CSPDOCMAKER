@@ -153,18 +153,25 @@ def sync_csp_data(self):
             ).scalar_one_or_none()
 
             if existing is None:
+                # A row the Calling / Lead raw data job added (No. 121) says
+                # itself whether it is old or new, and whether it is on hold:
+                # an old CSP copied into KOData must never be mailed as new.
+                from app.services import source_sheets
+                origin, hold = source_sheets.state_for_new_record(
+                    session, csp_id)
                 record = CSPRecord(
                     csp_id=csp_id,
                     source_row_identifier=csp_id,
                     source_last_updated=now,
-                    origin="baseline" if is_baseline else "new",
+                    origin=origin or ("baseline" if is_baseline else "new"),
+                    send_hold=hold,
                     rm_email=rm_email,
                     rm_resolution=how,
                     **{k: v for k, v in mapped.items() if k not in _SYNC_EXCLUDED and v},
                 )
                 session.add(record)
                 created += 1
-                if not is_baseline:
+                if record.origin == "new":
                     logger.info("csp_sync_worker: new CSP detected: %s", csp_id)
                 continue
 

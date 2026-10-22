@@ -296,4 +296,7 @@ from app.routers.public_document_router import router as public_document_router
 from app.routers.public_document_router import photo_router as public_photo_router
 app.include_router(public_document_router)  # PUBLIC — signed 7-day link (No. 78)
 app.include_router(public_photo_router)     # PUBLIC — signed 1-day photo link for the sheet (No. 91)
+from app.routers.email_message_router import public_router as email_open_router, router as email_message_router
+app.include_router(email_open_router)       # PUBLIC — the 'opened' picture in each email (No. 127)
+app.include_router(email_message_router)    # /api/admin/email-messages — Admin + Super Admin (No. 127)
 

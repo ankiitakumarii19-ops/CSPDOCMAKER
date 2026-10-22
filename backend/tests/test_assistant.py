@@ -490,7 +490,7 @@ async def test_email_is_used_when_there_is_no_mobile(client, csps, monkeypatch):
     from app.services import message_sender
     mails = []
     monkeypatch.setattr(message_sender, "_send_email",
-                        lambda to, subject, body: mails.append(
+                        lambda to, subject, body, **tracking: mails.append(
                             (to, subject, body)) or (True, ""))
     [card] = await _draft(client, code=NO_MOBILE)
     assert card["channel"] == "email" and card["to"] == "only@example.com"

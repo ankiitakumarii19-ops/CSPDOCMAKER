@@ -293,16 +293,35 @@ def form_fields() -> List[str]:
     is already known, and the CSP corrects what is wrong — rather than
     showing only the blanks. They are verifying their record, not filling a
     gap, so a wrong value already on file gets a chance to be fixed.
+
+    The "do you already have these documents? Yes / No" questions were
+    removed on 21 Oct 2026 (asked for). A link sent before still shows them,
+    since its questions are fixed when the link is made.
     """
-    return list(CSP_EDITABLE) + list(DOCUMENTS_HELD)
+    return list(CSP_EDITABLE)
 
 
-def request_fields(record) -> List[str]:
-    """Everything a CSP's link asks: their own details (all of them, for
-    checking), what they already hold, and any ORG detail INFO could not
-    fill. INFO is applied on every sync, so an ORG field still blank on the
-    record is one INFO could not answer."""
-    return form_fields() + [f for f in ORG_OWNED if _is_blank(record, f)]
+# Organisation details the CSP knows and is asked for when nothing could
+# map them (decided 21 Oct 2026): their AO and their RBO.
+ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("ao", "rbo_name")
+
+
+def request_fields(record, verify: bool = False) -> List[str]:
+    """Everything a CSP's link asks: their OWN details (all of them, for
+    checking), plus AO and RBO Name when nothing could map them.
+
+    verify=True (the old CSPs' verification message, asked 21 Oct 2026):
+    AO and RBO Name are always on the form, pre-filled when known, so the
+    CSP checks them too.
+
+    Changed 21 Oct 2026 (asked for): the form has only the CSP's own
+    details, for both the verification and the details-missing message —
+    except AO and RBO Name, which the CSP knows and is asked for if blank.
+    DC, ASM, RM and LHO are never asked from the CSP: when INFO cannot fill
+    one, the RM is alerted and Eko's team fixes it in the INFO sheet or
+    CSPDATA. (Before, No. 53, the CSP was asked for all of them.)"""
+    return form_fields() + [f for f in ASKED_FROM_CSP_WHEN_BLANK
+                            if verify or _is_blank(record, f)]
 
 
 def unfillable_by_info(fields) -> List[str]:

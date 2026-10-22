@@ -221,6 +221,38 @@ def update_row(spreadsheet_id: str, tab: str, row_number: int,
     return written, unknown
 
 
+def append_rows(spreadsheet_id: str, tab: str,
+                rows: List[Dict[str, str]]) -> int:
+    """Add many rows at the end in ONE request (No. 121: hundreds of CSPs
+    at once would otherwise hit Google's per-minute write limit). Each row
+    is {header: value}; values are written as typed text (RAW), exactly as
+    read from the source sheet. Returns how many rows were added."""
+    if not rows:
+        return 0
+    header = _header(spreadsheet_id, tab)
+    if not header:
+        raise SheetAdminError(f"{tab!r} has no header row.")
+    unknown = {name for r in rows for name in r if name not in header}
+    if unknown:
+        raise SheetAdminError(f"{tab!r} has no column(s) "
+                              + ", ".join(sorted(unknown)))
+    values = [[str(r.get(name, "") or "") for name in header] for r in rows]
+    try:
+        _service().spreadsheets().values().append(
+            spreadsheetId=spreadsheet_id,
+            range=_quote_tab(tab),
+            valueInputOption="RAW",
+            insertDataOption="INSERT_ROWS",
+            body={"values": values},
+        ).execute()
+    except Exception as e:
+        _reset()
+        raise SheetAdminError(
+            f"Could not add {len(rows)} row(s) to {tab!r}: "
+            f"{type(e).__name__}: {e}") from e
+    return len(rows)
+
+
 def append_row(spreadsheet_id: str, tab: str,
                cells: Dict[str, str]) -> Tuple[int, List[str]]:
     """Add a row at the end. Returns (its row number, unknown columns)."""

@@ -225,6 +225,10 @@ async def _organisation(session) -> str:
 async def draft_message(session, user, csp_code, message, channel="auto"
                         ) -> Tuple[dict, dict]:
     csp = await find_one(session, user, csp_code)
+    if csp.send_hold:
+        # Inactive / not live yet (No. 121): no message is even drafted.
+        raise ToolError(f"Nothing can be sent to {csp.name} "
+                        f"({csp.csp_code or csp.csp_id}): {csp.send_hold}")
     message = _text(message)
     if not message:
         raise ToolError("The message is empty — ask what to say.")

@@ -104,6 +104,8 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
     from app.services import whatsapp_platform as wa
 
     try:
+        if getattr(csp, "send_hold", None):
+            return _skip(csp, csp.send_hold)        # No. 121
         channel = whatsapp_channel(session)
         if channel is None:
             return _skip(csp, "no active WhatsApp channel")

@@ -135,6 +135,7 @@ def _send_via_smtp(
     subject: str,
     html_body: str,
     plain_body: str,
+    message_id: Optional[str] = None,
 ) -> bool:
     """Send an email via SMTP."""
     from_email = settings.smtp_from_email or settings.smtp_username
@@ -155,6 +156,8 @@ def _send_via_smtp(
     msg["From"] = f"{settings.smtp_from_name} <{from_email}>"
     msg["To"] = to_email
     msg["Subject"] = subject
+    if message_id:
+        msg["Message-ID"] = message_id   # No. 127: matches a bounce back
 
     # Attach plain text first, then HTML (email clients prefer the last alternative)
     msg.attach(MIMEText(plain_body, "plain", "utf-8"))
@@ -405,12 +408,54 @@ def _logo_part():
     return part
 
 
+PAUSED_REASON = ("Emails are paused (EMAILS_PAUSED=true) — nothing is "
+                 "mailed until it is turned off. Sign-in codes still go out.")
+
+
+def paused() -> bool:
+    """Whether emails other than sign-in codes are on hold (No. 133)."""
+    return bool(get_settings().emails_paused)
+
+
 def send_documents_email(
     to_email: str,
     csp_name: str,
     csp_id: str,
     doc_names: List[str],
     doc_filepaths: List[str],
+) -> bool:
+    """Send the documents and record the email (No. 127): sent or failed,
+    and later opened / bounced. Same arguments and answer as before."""
+    from app.models.email_message import KIND_DOCUMENTS
+    from app.services import email_log
+
+    if paused():
+        # Callers check first and wait; this is the last line of defence.
+        logger.error("email_service.send_documents_email: NOT sent to %s "
+                     "for CSP %s — %s", to_email, csp_id, PAUSED_REASON)
+        return False
+
+    from_email = (settings.smtp_from_email or settings.smtp_username
+                  or settings.gmail_sender_email)
+    track = email_log.tracker(from_email)
+    ok = _send_documents_email(to_email, csp_name, csp_id, doc_names,
+                               doc_filepaths, track)
+    if settings.email_method.lower().strip() != "console":
+        email_log.record(
+            kind=KIND_DOCUMENTS, to_email=to_email,
+            subject=documents_subject(csp_id), ok=ok,
+            error="" if ok else "not sent — see the server log for this CSP",
+            track=track, csp_id=csp_id, csp_name=csp_name)
+    return ok
+
+
+def _send_documents_email(
+    to_email: str,
+    csp_name: str,
+    csp_id: str,
+    doc_names: List[str],
+    doc_filepaths: List[str],
+    track=None,
 ) -> bool:
     """Send generated documents to a CSP's email as attachments.
 
@@ -430,6 +475,10 @@ def send_documents_email(
     logo = _logo_part()
     html_body = _build_documents_html(csp_name, csp_id, doc_names,
                                       with_logo=logo is not None)
+    if track is not None and track.pixel_html:
+        # The "opened" picture (No. 127), at the very end of the email.
+        html_body = (html_body.replace("</body>", track.pixel_html + "</body>")
+                     if "</body>" in html_body else html_body + track.pixel_html)
     plain_body = _build_documents_plain(csp_name, csp_id, doc_names)
 
     method = settings.email_method.lower().strip()
@@ -455,6 +504,8 @@ def send_documents_email(
     msg["From"] = f"{settings.smtp_from_name} <{from_email}>"
     msg["To"] = to_email
     msg["Subject"] = subject
+    if track is not None:
+        msg["Message-ID"] = track.message_id   # matches a bounce back to it
 
     # Add body as alternative (HTML + plain text), with the logo the HTML
     # shows held beside it (multipart/related) so it is part of the email.

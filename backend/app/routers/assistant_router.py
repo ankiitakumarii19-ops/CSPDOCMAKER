@@ -129,6 +129,10 @@ async def send_draft(draft_id: str,
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             "This CSP is no longer among the CSPs you may "
                             "message. Nothing was sent.")
+    if csp.send_hold:
+        # Put on hold after the draft was made (No. 121): not sent.
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"Not sent: {csp.send_hold}")
 
     if draft["channel"] == assistant_tools.WHATSAPP:
         outcome = await _send_whatsapp(session, draft, csp)
@@ -182,9 +186,11 @@ async def _send_whatsapp(session: AsyncSession, draft: dict, csp) -> dict:
 async def _send_email(draft: dict) -> dict:
     from app.services import message_sender
 
+    from app.models.email_message import KIND_CHAT
     ok, why = await asyncio.to_thread(
-        message_sender._send_email, draft["to"], draft["subject"],
-        draft["preview"])
+        lambda: message_sender._send_email(
+            draft["to"], draft["subject"], draft["preview"], kind=KIND_CHAT,
+            csp_id=draft.get("csp_id"), csp_name=draft.get("csp_name")))
     return {"state": "sent" if ok else "failed", "reason": why}
 
 
