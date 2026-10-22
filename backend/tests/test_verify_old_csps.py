@@ -166,3 +166,44 @@ async def test_verification_waits_until_the_address_tab_was_read(db, monkeypatch
     assert w.run_batch(db.session, now=NOON_IST)["sent"] == ["1A960041"]
     db.session.execute(text("DELETE FROM sync_runs WHERE source = 'address'"))
     db.session.commit()
+
+
+# ---- No. 136: failed sends are retried; one batch at a time ------------------
+
+async def test_a_csp_whose_send_failed_is_tried_again_next_batch(db):
+    from app.services import whatsapp_platform
+    _old(db.session, "1A960051")
+    db.session.commit()
+    db.status = whatsapp_platform.FAILED
+    assert w.run_batch(db.session, now=NOON_IST)["sent"] == []
+    db.status = whatsapp_platform.SENT
+    assert w.run_batch(db.session, now=NOON_IST)["sent"] == ["1A960051"], \
+        "a failed ask does not block the CSP for 3 days"
+    assert w.run_batch(db.session, now=NOON_IST)["sent"] == [], \
+        "a delivered ask does"
+
+
+async def test_only_one_batch_runs_at_a_time(db):
+    _old(db.session, "1A960052")
+    db.session.commit()
+    holder = db.session.get_bind().connect()
+    try:
+        assert holder.execute(text("SELECT pg_try_advisory_lock(:k)"),
+                              {"k": w.LOCK_KEY}).scalar()
+        assert w.run_batch(db.session, now=NOON_IST) == {
+            "skipped": "another verification batch is still running"}
+        assert db.sent == []
+    finally:
+        holder.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": w.LOCK_KEY})
+        holder.close()
+    assert w.run_batch(db.session, now=NOON_IST)["sent"] == ["1A960052"]
+
+
+def test_the_supplied_verification_wording_is_the_new_one():
+    import inspect
+
+    from app.services import document_template_service as dts
+    src = inspect.getsource(dts.sync_builtin_messages)
+    assert "please confirm your details for your CSP" in src
+    assert "your CSP documents need your details" not in src
+

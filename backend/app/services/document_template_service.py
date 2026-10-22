@@ -515,8 +515,11 @@ async def sync_builtin_messages(session, signature: str | None = None) -> int:
             "channel_kind": WHATSAPP,
             "languages": ["en", "hi", "hi-Latn"],
             "body": (
-                "Namaste {name}, your CSP documents need your details "
-                "confirmed. Please open this link, check what is already "
+                # First sentence changed 22 Oct 2026 (No. 136): a new
+                # template for the WhatsApp platform (see migration
+                # c3e5a7b9d1f4).
+                "Namaste {name}, please confirm your details for your CSP "
+                "documents. Open this link, check what is already "
                 "filled, correct anything wrong, and submit. You can submit "
                 "only ONCE, so please check carefully before you send.\n\n"
                 "{link}\n\n"

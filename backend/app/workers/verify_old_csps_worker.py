@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
 RECENTLY = timedelta(days=3)
+LOCK_KEY = 7261126   # a fixed number: the Postgres lock for one batch at a time
 
 
 def in_hours(now: datetime, start: int, end: int) -> bool:
@@ -63,8 +64,12 @@ def to_verify(session, limit: int) -> list:
                .join(EmailJob, EmailJob.processing_job_id == ProcessingJob.id)
                .where(EmailJob.status == EmailStatus.SENT))
     verified = select(DataRequest.csp_id).where(DataRequest.status == ANSWERED)
+    # Only an ask that actually reached the CSP counts (22 Oct 2026, No. 136):
+    # one the WhatsApp platform failed or held back is retried next batch.
     recently = select(DataRequest.csp_id).where(
-        DataRequest.created_at > datetime.now(timezone.utc) - RECENTLY)
+        DataRequest.created_at > datetime.now(timezone.utc) - RECENTLY,
+        DataRequest.sent_to.isnot(None),
+        DataRequest.delivery_error.is_(None))
     return list(session.execute(
         select(CSPRecord).where(
             func.upper(CSPRecord.csp_id).in_(copied_in),
@@ -80,7 +85,6 @@ def to_verify(session, limit: int) -> list:
 
 def run_batch(session, now: datetime = None) -> dict:
     from app.config import get_settings
-    from app.services import message_sender
 
     s = get_settings()
     now = now or datetime.now(timezone.utc)
@@ -97,6 +101,27 @@ def run_batch(session, now: datetime = None) -> dict:
             SyncRun.status == "completed")).scalar()
         if not done:
             return {"skipped": "waiting for the Address tab to be read"}
+    # One batch at a time (No. 136): two at once (a restart while one is
+    # running) picked the same CSPs and messaged them twice.
+    from sqlalchemy import text
+    lock = session.get_bind().connect()
+    try:
+        if not lock.execute(text("SELECT pg_try_advisory_lock(:k)"),
+                            {"k": LOCK_KEY}).scalar():
+            return {"skipped": "another verification batch is still running"}
+        try:
+            return _send_batch(session, s)
+        finally:
+            lock.execute(text("SELECT pg_advisory_unlock(:k)"),
+                         {"k": LOCK_KEY})
+            lock.commit()
+    finally:
+        lock.close()
+
+
+def _send_batch(session, s) -> dict:
+    from app.services import message_sender
+
     batch = to_verify(session, s.verify_batch_size)
     sent, not_sent, failures_in_row = [], {}, 0
     for csp in batch:
