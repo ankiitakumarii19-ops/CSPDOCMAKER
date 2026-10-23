@@ -230,40 +230,67 @@ def _all_but_ao(tmp_path, **override):
     photo = tmp_path / "p.png"
     photo.write_bytes(b"photo")
     fields = dict(gender="Female", address="A", district="D", state="S",
-                  branch_name="B", branch_code="BR01", photo_url=str(photo))
+                  branch_name="B", branch_code="BR01", photo_url=str(photo),
+                  rbo_name="RBO 1")
     fields.update(override)
     return fields
 
 
-async def test_only_ao_left_after_answering_is_not_asked_again(
-        db, sent, tmp_path):
-    """23 Oct (No. 140): "don't WhatsApp twice if only AO is left" — and
-    since No. 141 / No. 142 a blank AO or RBO Name is mapped from INFO,
-    never asked at all."""
+async def test_an_unmapped_ao_is_asked_after_verification(db, sent, tmp_path):
+    """23 Oct (No. 143): AO INFO could not map goes in the "details still
+    needed" message after the CSP's verification."""
     _missing_wording(db)
     record = _csp(db, **_all_but_ao(tmp_path))
     _answered_once(db, record)
+
+    assert sender.ask_for_details(db, record)["sent"] is True
+    assert "you have not filled" in sent[0]["body"]
+    assert "AO" in sent[0]["body"]
+
+
+async def test_an_unmapped_rbo_is_asked_after_verification(
+        db, sent, tmp_path):
+    _missing_wording(db)
+    record = _csp(db, **_all_but_ao(tmp_path, ao="AO GAYA", rbo_name=None))
+    _answered_once(db, record)
+
+    assert sender.ask_for_details(db, record)["sent"] is True
+    from app.services import field_ownership as fo
+    assert fo.label_of("rbo_name") in sent[0]["body"]
+
+
+async def test_only_ao_still_blank_after_that_is_not_asked_again(
+        db, sent, tmp_path):
+    """No. 140: "don't WhatsApp twice if only AO is left" — the RM's."""
+    _missing_wording(db)
+    record = _csp(db, **_all_but_ao(tmp_path))
+    _answered_once(db, record)      # the verification
+    _answered_once(db, record)      # the details-still-needed form
 
     result = sender.ask_for_details(db, record)
 
     assert result["sent"] is False
+    assert "RM is alerted" in result["reason"]
     assert sent == []
 
 
-async def test_only_ao_left_on_a_first_ask_is_not_asked(db, sent, tmp_path):
-    record = _csp(db, **_all_but_ao(tmp_path))
-    assert sender.ask_for_details(db, record)["sent"] is False
-    assert sent == []
-
-
-async def test_ao_is_not_named_when_something_else_is_left(
+async def test_something_else_blank_is_still_asked_after_two_forms(
         db, sent, tmp_path):
     _missing_wording(db)
     record = _csp(db, **_all_but_ao(tmp_path, gender=None))
     _answered_once(db, record)
+    _answered_once(db, record)
 
     assert sender.ask_for_details(db, record)["sent"] is True
-    assert "Gender" in sent[0]["body"] and "AO" not in sent[0]["body"]
+    assert "Gender" in sent[0]["body"]
+
+
+async def test_pressing_send_asks_for_ao_whatever_happened_before(
+        db, sent, tmp_path):
+    record = _csp(db, **_all_but_ao(tmp_path))
+    _answered_once(db, record)
+    _answered_once(db, record)
+    assert sender.ask_for_details(db, record, manual=True)["sent"] is True
 
 
 async def test_a_csp_missing_nothing_is_not_asked(db, sent, tmp_path):

@@ -68,13 +68,18 @@ def open_request_for(session: Session, csp_id: str) -> Optional[DataRequest]:
     return request
 
 
+def answered_count(session: Session, csp_id: str) -> int:
+    """How many forms this CSP has submitted."""
+    from sqlalchemy import func
+    return session.execute(
+        select(func.count(DataRequest.id))
+        .where(DataRequest.csp_id == csp_id, DataRequest.status == ANSWERED)
+    ).scalar() or 0
+
+
 def has_answered(session: Session, csp_id: str) -> bool:
     """Whether this CSP has submitted a form before (any request answered)."""
-    return session.execute(
-        select(DataRequest.id)
-        .where(DataRequest.csp_id == csp_id, DataRequest.status == ANSWERED)
-        .limit(1)
-    ).first() is not None
+    return answered_count(session, csp_id) > 0
 
 
 def _is_expired(request: DataRequest) -> bool:
@@ -211,13 +216,14 @@ def cancel(session: Session, csp_id: str, reason: str = "") -> int:
 
 
 def fields_to_ask(record) -> List[str]:
-    """What the CSP is asked for: their OWN details still missing.
+    """What the CSP is asked for: their OWN details still missing, plus AO
+    and RBO Name when INFO could not map them (No. 143).
 
     Changed 21 Oct 2026 (asked for): DC, ASM, RM and LHO are no longer asked
     from the CSP — a missing one is the RM's alert and the INFO sheet's to
-    fill. AO and RBO Name followed on 23 Oct 2026 (No. 141, No. 142): INFO's
-    AO block maps them. (11 Oct, No. 53, every organisation detail was
-    asked.)
+    fill. AO and RBO Name are mapped from INFO's AO block first (No. 141,
+    No. 142), so only an unmappable one reaches the CSP. (11 Oct, No. 53,
+    every organisation detail was asked.)
     """
     missing = fo.missing(record)
     return missing[fo.CSP] + [f for f in missing[fo.ORG]

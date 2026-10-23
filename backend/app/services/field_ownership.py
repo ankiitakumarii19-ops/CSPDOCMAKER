@@ -303,11 +303,12 @@ def form_fields() -> List[str]:
     return list(CSP_EDITABLE)
 
 
-# Organisation details the CSP is asked for when nothing could map them.
-# Was AO and RBO Name (21 Oct 2026); both left on 23 Oct 2026 (No. 141,
-# No. 142): INFO's AO block maps them, and a blank one is the RM's, never
-# the CSP's.
-ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ()
+# Organisation details the CSP is asked for when nothing could map them
+# (21 Oct 2026). Since 23 Oct (No. 141, No. 142) the sync fills both from
+# INFO's AO block first, so one still blank here is one INFO could not map
+# — and the CSP is asked for it in the "details still needed" message
+# (No. 143), once: message_sender stops after that.
+ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("ao", "rbo_name")
 
 # Shown pre-filled on the verification form for the CSP to check (No. 130).
 ON_VERIFICATION_FORM: Tuple[str, ...] = ("ao", "rbo_name")
@@ -328,8 +329,8 @@ def request_fields(record, verify: bool = False) -> List[str]:
     one, the RM is alerted and Eko's team fixes it in the INFO sheet or
     CSPDATA. (Before, No. 53, the CSP was asked for all of them.)
 
-    23 Oct 2026 (No. 141, No. 142): AO and RBO Name only on the
-    verification form; a blank one is mapped from INFO, never asked."""
+    23 Oct 2026 (No. 141-143): a blank AO / RBO Name is mapped from INFO
+    first; only one INFO could not map is on the CSP's form."""
     if verify:
         return form_fields() + list(ON_VERIFICATION_FORM)
     return form_fields() + [f for f in ASKED_FROM_CSP_WHEN_BLANK

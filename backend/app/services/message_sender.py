@@ -303,6 +303,18 @@ def ask_for_details(session: Session, record, *,
     # verify=True (No. 126): an old CSP checks their whole record even when
     # nothing is blank — a wrong value on file is still worth catching.
 
+    if (not verify and not manual and fields
+            and set(fields) <= set(fo.ASKED_FROM_CSP_WHEN_BLANK)
+            and drs.answered_count(session, record.csp_id) >= 2):
+        # No. 143: AO / RBO Name INFO could not map are asked in the
+        # "details still needed" message after the first form — once. Still
+        # blank after that, they are the RM's (No. 140: "don't WhatsApp
+        # twice if only AO is left"); the missing-data alert asks them.
+        return {"csp_id": record.csp_id, "sent": False,
+                "reason": "only AO / RBO Name is still blank after the "
+                          "CSP was asked for it — not asked again; their "
+                          "RM is alerted to fill it"}
+
     to, via = address_for(record, channel.kind)
     if not to:
         return {"csp_id": record.csp_id, "sent": False,
