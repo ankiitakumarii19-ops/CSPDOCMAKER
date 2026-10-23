@@ -238,7 +238,8 @@ def _all_but_ao(tmp_path, **override):
 
 async def test_only_ao_left_after_answering_is_not_asked_again(
         db, sent, tmp_path):
-    """23 Oct (No. 140): "don't WhatsApp twice if only AO is left"."""
+    """23 Oct (No. 140): "don't WhatsApp twice if only AO is left" — and
+    since No. 141 a blank AO is mapped from INFO, never asked at all."""
     _missing_wording(db)
     record = _csp(db, **_all_but_ao(tmp_path))
     _answered_once(db, record)
@@ -246,29 +247,23 @@ async def test_only_ao_left_after_answering_is_not_asked_again(
     result = sender.ask_for_details(db, record)
 
     assert result["sent"] is False
-    assert "only AO" in result["reason"]
     assert sent == []
 
 
-async def test_ao_and_something_else_left_is_still_asked(db, sent, tmp_path):
+async def test_only_ao_left_on_a_first_ask_is_not_asked(db, sent, tmp_path):
+    record = _csp(db, **_all_but_ao(tmp_path))
+    assert sender.ask_for_details(db, record)["sent"] is False
+    assert sent == []
+
+
+async def test_ao_is_not_named_when_something_else_is_left(
+        db, sent, tmp_path):
     _missing_wording(db)
     record = _csp(db, **_all_but_ao(tmp_path, gender=None))
     _answered_once(db, record)
 
     assert sender.ask_for_details(db, record)["sent"] is True
-    assert "Gender" in sent[0]["body"] and "AO" in sent[0]["body"]
-
-
-async def test_only_ao_left_on_a_first_ask_is_still_asked(db, sent, tmp_path):
-    record = _csp(db, **_all_but_ao(tmp_path))
-    assert sender.ask_for_details(db, record)["sent"] is True
-
-
-async def test_only_ao_left_is_sent_when_someone_presses_send(
-        db, sent, tmp_path):
-    record = _csp(db, **_all_but_ao(tmp_path))
-    _answered_once(db, record)
-    assert sender.ask_for_details(db, record, manual=True)["sent"] is True
+    assert "Gender" in sent[0]["body"] and "AO" not in sent[0]["body"]
 
 
 async def test_a_csp_missing_nothing_is_not_asked(db, sent, tmp_path):

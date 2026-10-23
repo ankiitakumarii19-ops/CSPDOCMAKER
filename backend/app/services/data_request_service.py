@@ -211,13 +211,14 @@ def cancel(session: Session, csp_id: str, reason: str = "") -> int:
 
 
 def fields_to_ask(record) -> List[str]:
-    """What the CSP is asked for: their OWN details still missing, plus AO
-    and RBO Name if nothing could map them.
+    """What the CSP is asked for: their OWN details still missing, plus RBO
+    Name if nothing could map it.
 
     Changed 21 Oct 2026 (asked for): DC, ASM, RM and LHO are no longer asked
     from the CSP — a missing one is the RM's alert and the INFO sheet's to
-    fill. AO and RBO Name the CSP knows, so they still are. (11 Oct, No. 53,
-    every organisation detail was asked.)
+    fill. RBO Name the CSP knows, so it still is. AO followed DC on 23 Oct
+    2026 (No. 141): INFO's AO block maps it. (11 Oct, No. 53, every
+    organisation detail was asked.)
     """
     missing = fo.missing(record)
     return missing[fo.CSP] + [f for f in missing[fo.ORG]

@@ -231,3 +231,84 @@ def test_resolution_still_works_without_info():
         {"vandana": "vandana.kumar.intern@eko.co.in"},
         {"patna": "vandana"}, info=None)
     assert (email, how) == ("vandana.kumar.intern@eko.co.in", rm_resolution.BY_LHO)
+
+
+# ---- the AO block (No. 141) ----------------------------------------------
+# Rows from the real tab (23 Oct 2026), with the bare "LHO" list above it.
+
+AO_ROWS = INFO_ROWS + [
+    [], [],
+    ["LHO"], ["Patna"], ["Chandigarh"],
+    [],
+    ["LHO", "LHO Email ID", "State", "AO", "AO Email ID", "District",
+     "RBO Name", "RBO Code", "RBO Email ID", "Branch Name"],
+    ["Patna", "x@sbi.co.in", "Bihar", "AO BHAGALPUR", "", "Jamui", "Jamui",
+     "2", "", "GOPALPUR, CHAKAI BAZAR, LAXMIPUR ( DISTJAMUI), JAMUI"],
+    ["Patna", "x@sbi.co.in", "Bihar", "AO BHAGALPUR", "", "Madhepura",
+     "Saharsa", "3", "", "MURLIGANJ"],
+    ["Mumbai Metro", "y@sbi.co.in", "Maharashtra", "AO NASHIK", "",
+     "Nandurbar", "Nandurbar", "1", "", "VISARWADI"],
+    ["Lucknow", "z@sbi.co.in", "Uttar Pradesh", "AO LUCKNOW EAST", "",
+     "Lucknow", "RBO 1", "1", "", "CHINHAT"],
+    ["Lucknow", "z@sbi.co.in", "Uttar Pradesh", "AO LUCKNOW WEST", "",
+     "Lucknow", "RBO 2", "2", "", "ALAMBAGH"],
+    ["Chandigarh", "c@sbi.co.in", "Haryana", "AO-PANCHKULA", "",
+     "Yamuna Nagar", "RBO 3", "1", "", "ACB JAGADHRI, JAMUI"],
+]
+
+
+@pytest.fixture
+def ao_info():
+    return InfoDirectory.from_rows(AO_ROWS)
+
+
+def test_the_ao_block_is_read_and_the_people_still_are(ao_info):
+    assert len(ao_info.ao_areas) == 6
+    assert sum(1 for p in ao_info.people if p.role == DC) == 2
+
+
+def test_a_blank_ao_is_filled_from_the_branch(ao_info):
+    """Yogesh (1A851379): Nandurbar, branch VISARWADI, AO blank in KOData."""
+    filled = ao_info.fill_missing({"ao": "", "branch_name": "Visarwadi",
+                                   "district": "Nandurbar",
+                                   "state": "Maharashtra"})
+    assert filled["ao"] == "AO NASHIK"
+
+
+def test_branch_names_match_ignoring_spaces_and_brackets(ao_info):
+    assert ao_info.find_ao("Laxmipur (DistJamui)", state="Bihar") \
+        == "AO BHAGALPUR"
+
+
+def test_the_district_answers_when_the_branch_is_not_listed(ao_info):
+    assert ao_info.find_ao("", "Madhepura", "Bihar") == "AO BHAGALPUR"
+
+
+def test_a_district_split_between_two_aos_answers_nothing(ao_info):
+    assert ao_info.find_ao("Some New Branch", "Lucknow",
+                           "Uttar Pradesh") == ""
+
+
+def test_the_branch_still_decides_in_a_split_district(ao_info):
+    assert ao_info.find_ao("Alambagh", "Lucknow", "Uttar Pradesh") \
+        == "AO LUCKNOW WEST"
+
+
+def test_the_state_keeps_a_shared_branch_name_apart(ao_info):
+    """JAMUI is a branch in Bihar and (here) in Haryana."""
+    assert ao_info.find_ao("Jamui", state="Bihar") == "AO BHAGALPUR"
+    assert ao_info.find_ao("Jamui", state="Haryana") == "AO-PANCHKULA"
+    assert ao_info.find_ao("Jamui") == "", "two AOs and no State: no guess"
+
+
+def test_an_ao_already_in_the_sheet_is_never_replaced(ao_info):
+    filled = ao_info.fill_missing({"ao": "AO SOMEWHERE",
+                                   "branch_name": "Visarwadi",
+                                   "state": "Maharashtra"})
+    assert "ao" not in filled
+
+
+def test_without_the_ao_block_nothing_is_filled(info):
+    assert "ao" not in info.fill_missing({"ao": "", "branch_name": "Jamui",
+                                          "district": "Jamui",
+                                          "state": "Bihar"})

@@ -83,13 +83,15 @@ ORG_OWNED: Tuple[str, ...] = (
 #   * lho/state               — every one of the 79 districts in the DC block
 #                               belongs to exactly one DC, and that row names
 #                               both, so the district implies them.
-# ao and rbo_name are bank facts. The INFO tab is Eko's own org chart and
-# holds no column for either, so they are always asked for.
+#   * ao                      — INFO's AO block (23 Oct 2026, No. 141): the
+#                               branch, else the district, picks one AO.
+# rbo_name is a bank fact INFO does not map, so it is always asked for.
 INFO_CAN_FILL: Tuple[str, ...] = (
     "dc", "dc_email", "dc_contact",
     "asm_name", "asm_email", "asm_contact",
     "rm_name",
     "lho", "state",
+    "ao",
 )
 
 ALWAYS_MANUAL: Tuple[str, ...] = tuple(
@@ -302,13 +304,18 @@ def form_fields() -> List[str]:
 
 
 # Organisation details the CSP knows and is asked for when nothing could
-# map them (decided 21 Oct 2026): their AO and their RBO.
-ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("ao", "rbo_name")
+# map them (decided 21 Oct 2026): their RBO. AO left this list on 23 Oct
+# 2026 (No. 141): it is mapped from INFO's AO block, and a blank one is the
+# RM's, never the CSP's.
+ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("rbo_name",)
+
+# Shown pre-filled on the verification form for the CSP to check (No. 130).
+ON_VERIFICATION_FORM: Tuple[str, ...] = ("ao", "rbo_name")
 
 
 def request_fields(record, verify: bool = False) -> List[str]:
     """Everything a CSP's link asks: their OWN details (all of them, for
-    checking), plus AO and RBO Name when nothing could map them.
+    checking), plus RBO Name when nothing could map it.
 
     verify=True (the old CSPs' verification message, asked 21 Oct 2026):
     AO and RBO Name are always on the form, pre-filled when known, so the
@@ -319,9 +326,14 @@ def request_fields(record, verify: bool = False) -> List[str]:
     except AO and RBO Name, which the CSP knows and is asked for if blank.
     DC, ASM, RM and LHO are never asked from the CSP: when INFO cannot fill
     one, the RM is alerted and Eko's team fixes it in the INFO sheet or
-    CSPDATA. (Before, No. 53, the CSP was asked for all of them.)"""
+    CSPDATA. (Before, No. 53, the CSP was asked for all of them.)
+
+    23 Oct 2026 (No. 141): AO only on the verification form; a blank AO is
+    mapped from INFO, never asked."""
+    if verify:
+        return form_fields() + list(ON_VERIFICATION_FORM)
     return form_fields() + [f for f in ASKED_FROM_CSP_WHEN_BLANK
-                            if verify or _is_blank(record, f)]
+                            if _is_blank(record, f)]
 
 
 def unfillable_by_info(fields) -> List[str]:

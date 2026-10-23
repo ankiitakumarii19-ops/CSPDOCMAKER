@@ -233,10 +233,6 @@ def address_for(record, channel_kind: str) -> Tuple[str, str]:
 # filled the Messages screen with the same rejection.
 RETRY_FAILED_AFTER = timedelta(minutes=30)
 
-# Blank after the CSP has answered once, these alone are not worth another
-# WhatsApp (No. 140): the RM fills them in the sheet.
-NOT_ASKED_TWICE = frozenset({"ao"})
-
 
 def failed_recently(session: Session, csp_id: str) -> Optional[datetime]:
     """When this CSP's last ask failed, if within RETRY_FAILED_AFTER."""
@@ -306,15 +302,6 @@ def ask_for_details(session: Session, record, *,
                 "reason": "nothing is missing from their own details"}
     # verify=True (No. 126): an old CSP checks their whole record even when
     # nothing is blank — a wrong value on file is still worth catching.
-
-    if (not verify and not manual and set(fields) <= NOT_ASKED_TWICE
-            and drs.has_answered(session, record.csp_id)):
-        # 23 Oct 2026 (No. 140): "don't WhatsApp twice if only AO is left".
-        # They have answered once; the RM's missing-data alert covers it.
-        return {"csp_id": record.csp_id, "sent": False,
-                "reason": "only AO is still blank and they have already "
-                          "answered once — not asked again; their RM is "
-                          "alerted to fill it"}
 
     to, via = address_for(record, channel.kind)
     if not to:

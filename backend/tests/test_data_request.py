@@ -102,16 +102,17 @@ async def test_a_request_for_nothing_is_refused(db_session, csp):
 
 async def test_the_csp_is_asked_for_everything_info_could_not_fill(
         db_session):
-    """21 Oct 2026: the CSP is asked for their own details, plus AO and
-    RBO Name when nothing could map them — never DC, ASM, RM or LHO."""
+    """21 Oct 2026: the CSP is asked for their own details, plus RBO Name
+    when nothing could map it — never DC, ASM, RM or LHO. Nor AO since
+    23 Oct (No. 141): INFO's AO block maps it."""
     blank = CSPRecord(csp_id="1A900002", name="", origin="new")
     asked = svc.fields_to_ask(blank)
-    assert "rbo_name" in asked and "ao" in asked
+    assert "rbo_name" in asked and "ao" not in asked
     assert "gender" in asked
     assert not {"dc", "dc_email", "dc_contact", "asm_name", "asm_email",
                 "asm_contact", "rm_name", "lho"} & set(asked)
     link = fo.request_fields(blank)
-    assert "ao" in link and "rbo_name" in link and "dc" not in link
+    assert "rbo_name" in link and "ao" not in link and "dc" not in link
 
 
 async def test_a_detail_info_already_filled_is_not_asked(db_session):

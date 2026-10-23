@@ -17,6 +17,15 @@ starting with its own header row:
 LHO, State and Districts hold comma-separated lists, so one person can cover
 several of each.
 
+A fifth block (added 23 Oct 2026, No. 141) is the bank's side, one row per
+district:
+
+    LHO | LHO Email ID | State | AO | AO Email ID | District | RBO Name |
+    RBO Code | RBO Email ID | Branch Name
+
+Branch Name lists that district's branches, comma-separated. It fills a
+blank AO: by the CSP's branch first, then by their district.
+
 A lookup only answers when exactly one person matches. Two ASMs share the
 Chandigarh LHO (one for Haryana, one for Punjab), so an LHO alone is not
 always enough; where a match is ambiguous this returns nothing and the field
@@ -27,6 +36,7 @@ that remains the authorization sheet's job alone.
 """
 
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
@@ -60,6 +70,15 @@ COLUMN_ALIASES: Dict[str, str] = {
 
 MULTI_VALUE_ATTRS = ("lhos", "states", "districts")
 
+# The AO block's header row starts with "LHO" and has an "AO" column; the
+# bare "LHO" list above it has neither, and is ignored.
+AO_COLUMNS: Dict[str, str] = {
+    "state": "state",
+    "ao": "ao",
+    "district": "district",
+    "branch name": "branches",
+}
+
 
 def normalize(value: str) -> str:
     """Case- and space-insensitive form used for every comparison."""
@@ -69,6 +88,12 @@ def normalize(value: str) -> str:
 def split_list(value: str) -> List[str]:
     """'Bihar, Jharkhand' → ['bihar', 'jharkhand']."""
     return [normalize(part) for part in (value or "").split(",") if normalize(part)]
+
+
+def place_key(value: str) -> str:
+    """Branch and district names compared on letters and digits only:
+    'LAXMIPUR ( DISTJAMUI)' and 'Laxmipur (DistJamui)' are the same."""
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).split())
 
 
 def split_raw(value: str) -> List[str]:
@@ -113,17 +138,32 @@ class Person:
         return normalize(district) in self.districts
 
 
+AO_BLOCK = "ao_block"
+
+
+@dataclass
+class AOArea:
+    """One row of the AO block: a district, its AO and its branches."""
+    ao: str
+    state: str = ""                                      # normalize()d
+    district: str = ""                                   # place_key()
+    branches: List[str] = field(default_factory=list)    # place_key()s
+
+
 class InfoDirectory:
     """Parsed INFO tab, queryable by territory."""
 
-    def __init__(self, people: Sequence[Person]):
+    def __init__(self, people: Sequence[Person],
+                 ao_areas: Sequence[AOArea] = ()):
         self.people = list(people)
+        self.ao_areas = list(ao_areas)
 
     # ---- construction ---------------------------------------------------
 
     @classmethod
     def from_rows(cls, rows: Sequence[Sequence[str]]) -> "InfoDirectory":
         people: List[Person] = []
+        ao_areas: List[AOArea] = []
         role: Optional[str] = None
         columns: Dict[int, str] = {}
 
@@ -131,6 +171,28 @@ class InfoDirectory:
             cells = [c.strip() if isinstance(c, str) else "" for c in (raw or [])]
             if not any(cells):
                 role, columns = None, {}   # a blank row closes the block
+                continue
+
+            if (normalize(cells[0]) == "lho"
+                    and "ao" in {normalize(c) for c in cells}):
+                role, columns = AO_BLOCK, {}
+                for index, heading in enumerate(cells):
+                    attribute = AO_COLUMNS.get(normalize(heading))
+                    if attribute:
+                        columns[index] = attribute
+                continue
+
+            if role == AO_BLOCK:
+                values = {attribute: (cells[i] if i < len(cells) else "")
+                          for i, attribute in columns.items()}
+                ao = " ".join(values.get("ao", "").split())
+                if ao:
+                    ao_areas.append(AOArea(
+                        ao=ao, state=normalize(values.get("state", "")),
+                        district=place_key(values.get("district", "")),
+                        branches=[place_key(b) for b in
+                                  values.get("branches", "").split(",")
+                                  if place_key(b)]))
                 continue
 
             header_role = BLOCK_HEADERS.get(normalize(cells[0]))
@@ -162,12 +224,13 @@ class InfoDirectory:
             people.append(person)
 
         logger.info(
-            "info_directory: parsed %d people (%s)",
+            "info_directory: parsed %d people (%s), %d AO rows",
             len(people),
             ", ".join(f"{r}={sum(1 for p in people if p.role == r)}"
                       for r in (RM, ASM, CIRCLE_HEAD, DC)),
+            len(ao_areas),
         )
-        return cls(people)
+        return cls(people, ao_areas)
 
     @classmethod
     def load(cls) -> "InfoDirectory":
@@ -218,6 +281,30 @@ class InfoDirectory:
                 return match
 
         return None
+
+    def find_ao(self, branch_name: str = "", district: str = "",
+                state: str = "") -> str:
+        """The CSP's AO, or '' when the AO block cannot say for certain.
+
+        The branch decides first (a branch has one AO); the district only
+        when the branch is not listed. Either answers only when every match
+        names the same AO — Lucknow district is split between two AOs, so it
+        alone answers nothing. Within the CSP's State when the block lists
+        that State, so a branch name used in two States cannot pick wrongly.
+        """
+        areas = self.ao_areas
+        if normalize(state) and any(a.state == normalize(state) for a in areas):
+            areas = [a for a in areas if a.state == normalize(state)]
+
+        for key, matches in (
+                (place_key(branch_name), lambda a, k: k in a.branches),
+                (place_key(district), lambda a, k: a.district == k)):
+            if not key:
+                continue
+            found = {normalize(a.ao): a.ao for a in areas if matches(a, key)}
+            if len(found) == 1:
+                return next(iter(found.values()))
+        return ""
 
     # ---- what a CSP row is missing --------------------------------------
 
@@ -275,6 +362,12 @@ class InfoDirectory:
                     filled["asm_email"] = person.email
                 if blank("asm_contact") and person.mobile:
                     filled["asm_contact"] = person.mobile
+
+        # AO — from the AO block, by branch then district (No. 141).
+        if blank("ao"):
+            ao = self.find_ao(mapped.get("branch_name", ""), district, state)
+            if ao:
+                filled["ao"] = ao
 
         # Circle Head — matched on territory. No document prints one; it is
         # stored so an admin can filter by it.
