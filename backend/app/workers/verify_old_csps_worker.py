@@ -166,11 +166,17 @@ def verify_old_csps(self):
 
     s = get_settings()
     if not (s.verify_old_csps_enabled and s.calling_sheet_id):
-        return {"skipped": "off, or the Calling sheet is not connected"}
-    engine = create_engine(s.database_url.replace(
-        "postgresql+asyncpg://", "postgresql+psycopg2://"))
-    try:
-        with Session(engine) as session:
-            return run_batch(session)
-    finally:
-        engine.dispose()
+        result = {"skipped": "off, or the Calling sheet is not connected"}
+    else:
+        engine = create_engine(s.database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"))
+        try:
+            with Session(engine) as session:
+                result = run_batch(session)
+        finally:
+            engine.dispose()
+    if result.get("skipped"):
+        # Said in the log in words (No. 144): Celery's own line cuts the
+        # result to "{...}", which hid why nothing was sent.
+        logger.info("verify_old_csps: nothing sent — %s", result["skipped"])
+    return result

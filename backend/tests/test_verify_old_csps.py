@@ -249,3 +249,24 @@ async def test_the_sbi_kiosk_wording_gets_the_new_first_sentence(db):
                           "your SBI Kiosk CSP documents. Open this link, check")
     assert got.endswith("{link}\n\n— Team Eko")
 
+
+
+def test_a_skipped_run_says_why_in_the_log(db, monkeypatch):
+    """No. 144: Celery's own log line cut the result to "{...}", so a run
+    that sent nothing did not say why."""
+    import logging
+    lines = []
+
+    class Keep(logging.Handler):
+        def emit(self, record):
+            lines.append(record.getMessage())
+
+    handler = Keep(logging.INFO)
+    w.logger.addHandler(handler)
+    monkeypatch.setattr(get_settings(), "verify_old_csps_enabled", False)
+    try:
+        w.verify_old_csps.apply().get()
+    finally:
+        w.logger.removeHandler(handler)
+    assert ("verify_old_csps: nothing sent — off, or the Calling sheet is "
+            "not connected") in lines
