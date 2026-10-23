@@ -185,15 +185,80 @@ async def test_a_csp_that_goes_live_is_added_as_new_with_zoho_filling_blanks(
     assert _run(world).imported_new == [], "added once only"
 
 
-async def test_a_live_csp_in_the_calling_sheet_stays_old(world):
+async def test_a_csp_in_both_sheets_that_goes_live_becomes_new(world):
+    """23 Oct 2026 (No. 145): not live in the Lead sheet when this started,
+    "Go Live Done" since — NEW, even though the Calling sheet has it.
+    (Until then it stayed old.)"""
     world.calling = [calling_row("1A900008", "Old Hand")]
     world.lead = [lead_row("1A900008", "Old Hand", "Hard copy signed by branch")]
     _run(world)
+    assert _state(world, "1A900008").imported_as == "baseline"
+    world.session.add(CSPRecord(csp_id="1A900008", csp_code="1A900008",
+                                name="Old Hand", origin="baseline"))
+    world.session.commit()
+
     world.lead = [lead_row("1A900008", "Old Hand", "Go Live Done")]
     s = _run(world)
-    assert s.went_live == ["1A900008"] and s.imported_new == []
-    assert _state(world, "1A900008").imported_as == "baseline"
+
+    assert s.went_live == ["1A900008"] and s.became_new == ["1A900008"]
+    assert _state(world, "1A900008").imported_as == "new"
     assert _state(world, "1A900008").hold_reason is None, "hold lifted"
+    world.session.expire_all()
+    record = world.session.execute(select(CSPRecord)).scalars().one()
+    assert record.origin == "new", "the new-CSP job now issues its documents"
+    assert source_sheets.state_for_new_record(world.session, "1A900008") == \
+        ("new", None)
+    assert _run(world).became_new == [], "changed once only"
+
+
+async def test_one_live_before_this_started_stays_old(world):
+    """The 58 already "Go Live Done" on 22 Oct keep the old CSPs' path."""
+    world.calling = [calling_row("1A900021", "Live Early")]
+    world.lead = [lead_row("1A900021", "Live Early", "Go Live Done")]
+    _run(world)
+    s = _run(world)
+    assert s.became_new == []
+    assert _state(world, "1A900021").imported_as == "baseline"
+
+
+async def test_one_that_goes_live_before_it_is_copied_in_is_added_as_new(
+        world):
+    # Only in the Lead sheet at first, so not copied in on the first run.
+    world.lead = [lead_row("1A900022", "Late Copy", "CAT 2 pending")]
+    _run(world)
+    world.calling = [calling_row("1A900022", "Late Copy")]
+    world.lead = [lead_row("1A900022", "Late Copy", "Go Live Done")]
+    s = _run(world)
+    assert s.imported_new == ["1A900022"]
+    assert _state(world, "1A900022").imported_as == "new"
+
+
+async def test_a_csp_in_cspdata_before_the_import_is_never_made_new(world):
+    """21 Oct 2026: CSPs already in CSPDATA are left alone."""
+    world.data[KO] = [{"CSP Code": "1A900023"}]
+    world.calling = [calling_row("1A900023", "Was There")]
+    world.lead = [lead_row("1A900023", "Was There", "CAT 2 pending")]
+    _run(world)
+    world.lead = [lead_row("1A900023", "Was There", "Go Live Done")]
+    s = _run(world)
+    assert s.became_new == []
+    assert _state(world, "1A900023").imported_as is None
+
+
+async def test_a_csp_whose_documents_were_made_is_not_made_new(world):
+    from datetime import datetime, timezone
+    world.calling = [calling_row("1A900024", "Done")]
+    world.lead = [lead_row("1A900024", "Done", "CAT 2 pending")]
+    _run(world)
+    world.session.add(CSPRecord(csp_id="1A900024", csp_code="1A900024",
+                                name="Done", origin="baseline",
+                                new_csp_processed_at=datetime.now(timezone.utc)))
+    world.session.commit()
+    world.lead = [lead_row("1A900024", "Done", "Go Live Done")]
+    _run(world)
+    world.session.expire_all()
+    assert world.session.execute(select(CSPRecord)).scalars().one(
+    ).origin == "baseline"
 
 
 async def test_the_rbo_name_comes_from_lead_raw_data_not_the_rbo_number(world):

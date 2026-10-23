@@ -265,6 +265,7 @@ class Summary:
     went_live: List[str] = field(default_factory=list)
     imported_new: List[str] = field(default_factory=list)
     imported_old: int = 0
+    became_new: List[str] = field(default_factory=list)
     held: int = 0
     addresses_filled: int = 0
     skipped: List[str] = field(default_factory=list)
@@ -274,6 +275,7 @@ class Summary:
                 f"Calling {self.calling_rows} rows, Lead {self.lead_rows} "
                 f"rows; went live {len(self.went_live)}; added to CSPDATA: "
                 f"{len(self.imported_new)} new, {self.imported_old} old; "
+                f"{len(self.became_new)} old -> new on going live; "
                 f"{self.held} on hold; {self.addresses_filled} address(es) "
                 f"from the Address tab; skipped {len(self.skipped)}")
 
@@ -366,6 +368,17 @@ def run(session) -> Summary:
         if st.hold_reason:
             summary.held += 1
 
+    # Not live in the Lead sheet when this started, "Go Live Done" since:
+    # NEW, even though the Calling sheet has it (23 Oct 2026, No. 145) —
+    # its documents are made and mailed like any new CSP's, and it is not
+    # sent the old CSPs' verification. Only a CSP this job copied in; one
+    # that was in CSPDATA before is never touched (21 Oct 2026).
+    for c, st in states.items():
+        if (st.imported_as == "baseline" and st.went_live_at is not None
+                and not st.baseline_live and st.lead_live):
+            st.imported_as = "new"
+            summary.became_new.append(c)
+
     # Rows to add to CSPDATA, grouped by tab.
     to_add: Dict[str, List[dict]] = {}
     added: List[tuple] = []
@@ -386,10 +399,11 @@ def run(session) -> Summary:
         if c in in_data or st.imported_as:
             continue
         if c in by_calling:
-            # In the Calling sheet: old, even now that it is live.
+            # In the Calling sheet too: still NEW, since it went live after
+            # this started (No. 145; before, it was copied in as old).
             cells = {**mapped(by_lead[c], FROM_LEAD),
                      **mapped(by_calling[c], FROM_CALLING)}
-            plan(c, cells, "baseline")
+            plan(c, cells, "new")
         else:
             cells = mapped(by_lead[c], FROM_LEAD)
             filled = zoho_fill(cells)
@@ -442,6 +456,14 @@ def run(session) -> Summary:
         st = states.get(code_of(csp.csp_id))
         if st is not None and csp.send_hold != st.hold_reason:
             csp.send_hold = st.hold_reason
+        if (st is not None and st.imported_as == "new"
+                and csp.origin == "baseline"
+                and csp.new_csp_processed_at is None):
+            # Went live after this started (No. 145): the new-CSP job now
+            # makes and mails its documents.
+            csp.origin = "new"
+            logger.info("source_sheets: %s went live — now a new CSP",
+                        csp.csp_id)
         if code_of(csp.csp_id) in fill and not (csp.address or "").strip():
             csp.address = fill[code_of(csp.csp_id)]   # the sync agrees next run
     session.commit()
