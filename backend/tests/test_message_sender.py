@@ -226,6 +226,51 @@ async def test_without_a_missing_wording_the_confirm_one_is_used(db, sent):
     assert sent[0]["subject"] == "Please confirm your details"
 
 
+def _all_but_ao(tmp_path, **override):
+    photo = tmp_path / "p.png"
+    photo.write_bytes(b"photo")
+    fields = dict(gender="Female", address="A", district="D", state="S",
+                  branch_name="B", branch_code="BR01", photo_url=str(photo),
+                  rbo_name="RBO")
+    fields.update(override)
+    return fields
+
+
+async def test_only_ao_left_after_answering_is_not_asked_again(
+        db, sent, tmp_path):
+    """23 Oct (No. 140): "don't WhatsApp twice if only AO is left"."""
+    _missing_wording(db)
+    record = _csp(db, **_all_but_ao(tmp_path))
+    _answered_once(db, record)
+
+    result = sender.ask_for_details(db, record)
+
+    assert result["sent"] is False
+    assert "only AO" in result["reason"]
+    assert sent == []
+
+
+async def test_ao_and_something_else_left_is_still_asked(db, sent, tmp_path):
+    _missing_wording(db)
+    record = _csp(db, **_all_but_ao(tmp_path, gender=None))
+    _answered_once(db, record)
+
+    assert sender.ask_for_details(db, record)["sent"] is True
+    assert "Gender" in sent[0]["body"] and "AO" in sent[0]["body"]
+
+
+async def test_only_ao_left_on_a_first_ask_is_still_asked(db, sent, tmp_path):
+    record = _csp(db, **_all_but_ao(tmp_path))
+    assert sender.ask_for_details(db, record)["sent"] is True
+
+
+async def test_only_ao_left_is_sent_when_someone_presses_send(
+        db, sent, tmp_path):
+    record = _csp(db, **_all_but_ao(tmp_path))
+    _answered_once(db, record)
+    assert sender.ask_for_details(db, record, manual=True)["sent"] is True
+
+
 async def test_a_csp_missing_nothing_is_not_asked(db, sent, tmp_path):
     # Every field the CSP owns, including the branch name and code — and,
     # since 11 Oct 2026 (tracker No. 53), the bank/organisation details too,
