@@ -43,8 +43,10 @@ class CSPRecord(Base):
         String(255), nullable=True,
         comment="CSP registered email — used as the trusted recipient"
     )
+    # 50, not 20 (No. 144): Calling-sheet cells hold two numbers,
+    # "9905985993/ 7563993807", and one such row failed the whole sync.
     mobile: Mapped[str | None] = mapped_column(
-        String(20), nullable=True,
+        String(50), nullable=True,
         comment="CSP registered mobile — used for SMS notification"
     )
     address: Mapped[str | None] = mapped_column(Text, nullable=True)

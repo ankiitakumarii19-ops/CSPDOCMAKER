@@ -106,8 +106,23 @@ async def test_the_same_person_normalizes_the_same_way(raw, expected):
     assert c.normalize_mobile(raw) == expected
 
 
+@pytest.mark.parametrize("raw,expected", [
+    ("9905985993/ 7563993807", "919905985993"),
+    ("6201988553 \\840487472", "916201988553"),
+    ("7080591551, 8528067923/ 8707427390", "917080591551"),
+    ("8053593168/  9671943531 /", "918053593168"),
+    ("12345 / 9812345670", "919812345670"),
+    ("9812345670 or 9812345671", "919812345670"),
+])
+async def test_a_cell_with_two_numbers_gives_the_first_usable_one(
+        raw, expected):
+    """No. 144: 14 Calling-sheet CSPs have two numbers in one cell. (Until
+    23 Oct 2026 such a cell gave no number at all.)"""
+    assert c.normalize_mobile(raw) == expected
+
+
 @pytest.mark.parametrize("raw", ["", "   ", "12345", "not a number",
-                                 "9812345672 / 9812345673"])
+                                 "12345 / 678"])
 async def test_an_implausible_number_is_refused_not_guessed(raw):
     """Sending to a wrong number is worse than not sending."""
     assert c.normalize_mobile(raw) == ""

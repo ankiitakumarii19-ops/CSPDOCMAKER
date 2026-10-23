@@ -221,6 +221,60 @@ def test_rows_without_a_csp_code_are_skipped(sync_db, authorized_rms, mock_sheet
     assert sync_db.execute(select(CSPRecord)).scalars().all()[0].csp_id == "C1"
 
 
+def test_a_mobile_cell_with_two_numbers_is_saved(sync_db, authorized_rms,
+                                                 mock_sheet):
+    """No. 144: "9905985993/ 7563993807" did not fit the column, and the
+    whole sync failed with it."""
+    mock_sheet([sheet_row(**{"CSP Code": "C1", "CSP Name": "One",
+                             "CSP Mobile Number": "9905985993/ 7563993807"})])
+    assert run_sync()["skipped_rows"] == 0
+    record = sync_db.execute(select(CSPRecord)).scalars().one()
+    assert record.mobile == "9905985993/ 7563993807"
+
+
+def test_one_row_the_database_refuses_does_not_stop_the_rest(
+        sync_db, authorized_rms, mock_sheet):
+    mock_sheet([
+        sheet_row(**{"CSP Code": "C1", "CSP Name": "One"}),
+        sheet_row(**{"CSP Code": "C2", "CSP Name": "Two",
+                     "CSP Mobile Number": "9" * 60}),
+        sheet_row(**{"CSP Code": "C3", "CSP Name": "Three"}),
+    ])
+    result = run_sync()
+
+    assert result["skipped_rows"] == 1
+    saved = {r.csp_id for r in sync_db.execute(select(CSPRecord)).scalars()}
+    assert saved == {"C1", "C3"}
+    run = sync_db.execute(select(SyncRun)).scalars().one()
+    assert run.status == "completed"
+    assert "C2" in run.error_message, "the skipped row is not named"
+
+
+def test_a_sync_that_cannot_be_saved_is_marked_failed(
+        sync_db, authorized_rms, mock_sheet, monkeypatch):
+    """Not left "running" with no error, as 1333 runs were on the server."""
+    from sqlalchemy.orm import Session as OrmSession
+    mock_sheet([sheet_row(**{"CSP Code": "C1", "CSP Name": "One"})])
+    real_commit = OrmSession.commit
+    calls = {"n": 0}
+
+    def commit_fails_once_at_the_end(self):
+        calls["n"] += 1
+        if calls["n"] == 2:      # 1: the run row; 2: the sync itself
+            raise RuntimeError("database went away")
+        return real_commit(self)
+
+    monkeypatch.setattr(OrmSession, "commit", commit_fails_once_at_the_end)
+    with pytest.raises(Exception):
+        run_sync()
+    monkeypatch.setattr(OrmSession, "commit", real_commit)
+
+    sync_db.expire_all()
+    runs = sync_db.execute(select(SyncRun)).scalars().all()
+    assert runs and runs[0].status == "failed"
+    assert "database went away" in runs[0].error_message
+
+
 def test_a_sheet_failure_is_recorded_and_retried_not_shown(sync_db, monkeypatch):
     import app.services.csp_gsheet_service as gsheet
 

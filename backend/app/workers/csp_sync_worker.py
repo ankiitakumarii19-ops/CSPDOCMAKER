@@ -126,6 +126,7 @@ def sync_csp_data(self):
         lho_to_name = rm_resolution.build_lho_to_name(mapped_rows)
 
         created = updated = skipped = 0
+        failed_rows = []
         now = datetime.now(timezone.utc)
 
         for mapped in mapped_rows:
@@ -148,49 +149,71 @@ def sync_csp_data(self):
                 if person is not None and person.name:
                     mapped["rm_name"] = person.name
 
-            existing = session.execute(
-                select(CSPRecord).where(CSPRecord.csp_id == csp_id)
-            ).scalar_one_or_none()
+            # Each row is saved on its own (No. 144): one cell the database
+            # refuses — a mobile cell holding two numbers was too long —
+            # used to fail the single commit at the end, so NO row was
+            # saved and the run stayed "running" with no error. Now that row
+            # is skipped and named, and every other row still goes in.
+            savepoint = session.begin_nested()
+            try:
+                is_new = changed = False
+                existing = session.execute(
+                    select(CSPRecord).where(CSPRecord.csp_id == csp_id)
+                ).scalar_one_or_none()
 
-            if existing is None:
-                # A row the Calling / Lead raw data job added (No. 121) says
-                # itself whether it is old or new, and whether it is on hold:
-                # an old CSP copied into KOData must never be mailed as new.
-                from app.services import source_sheets
-                origin, hold = source_sheets.state_for_new_record(
-                    session, csp_id)
-                record = CSPRecord(
-                    csp_id=csp_id,
-                    source_row_identifier=csp_id,
-                    source_last_updated=now,
-                    origin=origin or ("baseline" if is_baseline else "new"),
-                    send_hold=hold,
-                    rm_email=rm_email,
-                    rm_resolution=how,
-                    **{k: v for k, v in mapped.items() if k not in _SYNC_EXCLUDED and v},
-                )
-                session.add(record)
+                if existing is None:
+                    # A row the Calling / Lead raw data job added (No. 121)
+                    # says itself whether it is old or new, and whether it is
+                    # on hold: an old CSP copied into KOData must never be
+                    # mailed as new.
+                    from app.services import source_sheets
+                    origin, hold = source_sheets.state_for_new_record(
+                        session, csp_id)
+                    record = CSPRecord(
+                        csp_id=csp_id,
+                        source_row_identifier=csp_id,
+                        source_last_updated=now,
+                        origin=origin or ("baseline" if is_baseline else "new"),
+                        send_hold=hold,
+                        rm_email=rm_email,
+                        rm_resolution=how,
+                        **{k: v for k, v in mapped.items() if k not in _SYNC_EXCLUDED and v},
+                    )
+                    session.add(record)
+                    is_new = True
+                else:
+                    # Field-level diff — only changed cells are written.
+                    for field, value in mapped.items():
+                        if field in _SYNC_EXCLUDED:
+                            continue
+                        if (not value and field in _KEEP_IF_SHEET_BLANK
+                                and getattr(existing, field, None)):
+                            continue   # keep what we already have
+                        if (getattr(existing, field, None) or "") != value:
+                            setattr(existing, field, value or None)
+                            changed = True
+                    if (existing.rm_email or "") != (rm_email or "") or existing.rm_resolution != how:
+                        existing.rm_email, existing.rm_resolution = rm_email, how
+                        changed = True
+                    if changed:
+                        existing.source_last_updated = now
+                session.flush()
+                savepoint.commit()
+            except Exception as e:
+                savepoint.rollback()
+                skipped += 1
+                failed_rows.append(csp_id)
+                logger.error(
+                    "csp_sync_worker: CSP %s could not be saved and was "
+                    "skipped: %s: %s", csp_id, type(e).__name__,
+                    str(e).splitlines()[0][:300], exc_info=True)
+                continue
+
+            if is_new:
                 created += 1
                 if record.origin == "new":
                     logger.info("csp_sync_worker: new CSP detected: %s", csp_id)
-                continue
-
-            # Field-level diff — only changed cells are written.
-            changed = False
-            for field, value in mapped.items():
-                if field in _SYNC_EXCLUDED:
-                    continue
-                if (not value and field in _KEEP_IF_SHEET_BLANK
-                        and getattr(existing, field, None)):
-                    continue   # keep what we already have
-                if (getattr(existing, field, None) or "") != value:
-                    setattr(existing, field, value or None)
-                    changed = True
-            if (existing.rm_email or "") != (rm_email or "") or existing.rm_resolution != how:
-                existing.rm_email, existing.rm_resolution = rm_email, how
-                changed = True
-            if changed:
-                existing.source_last_updated = now
+            elif changed:
                 updated += 1
 
         run.status = "completed"
@@ -198,8 +221,23 @@ def sync_csp_data(self):
         run.created_count = created
         run.updated_count = updated
         run.skipped_count = skipped
+        run.error_message = (
+            f"{len(failed_rows)} row(s) could not be saved: "
+            f"{', '.join(failed_rows[:20])}" if failed_rows else None)
         run.finished_at = datetime.now(timezone.utc)
-        session.commit()
+        try:
+            session.commit()
+        except Exception as e:
+            # Recorded on the run, not left looking "running" forever.
+            session.rollback()
+            run.status = "failed"
+            run.error_message = f"{type(e).__name__}: {e}"[:2000]
+            run.finished_at = datetime.now(timezone.utc)
+            session.commit()
+            engine.dispose()
+            logger.error("csp_sync_worker: the sync could not be saved: "
+                         "%s: %s", type(e).__name__, e, exc_info=True)
+            raise
 
     engine.dispose()
 

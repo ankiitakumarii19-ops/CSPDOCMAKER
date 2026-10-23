@@ -132,6 +132,8 @@ def contacts_for(records) -> list:
 
 
 _DIGITS = re.compile(r"\D+")
+# Between two numbers in one cell: / \ , ; or "or".
+_SEPARATORS = re.compile(r"\s*(?:[/\\,;]|\bor\b)\s*", re.IGNORECASE)
 INDIA_CC = "91"
 
 
@@ -141,7 +143,17 @@ def normalize_mobile(value: str) -> str:
     Sheet cells carry '+91 98123 45670', '09812345670' and '9812345670' for
     the same person. Anything that is not a plausible Indian mobile returns
     empty rather than being sent to a wrong number.
+
+    A cell with two numbers ("9905985993/ 7563993807", No. 144) gives the
+    first one that is plausible.
     """
+    parts = _SEPARATORS.split(value or "")
+    if len(parts) > 1:
+        for part in parts:
+            number = normalize_mobile(part)
+            if number:
+                return number
+        return ""
     digits = _DIGITS.sub("", value or "")
     if len(digits) == 10:
         return INDIA_CC + digits
