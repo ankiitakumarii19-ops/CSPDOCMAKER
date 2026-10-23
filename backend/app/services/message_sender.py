@@ -131,6 +131,27 @@ def choose_template(session: Session, purpose: str = PURPOSE_DATA_REQUEST
     return template
 
 
+def template_for(session: Session, record, verify: bool = False
+                 ) -> MessageTemplate:
+    """The wording for this ask.
+
+    A CSP who has already submitted a form and still left something blank
+    is told what is missing ("these details are still needed: …"), not sent
+    "please confirm your details" again (23 Oct 2026, No. 139). Before, the
+    new-CSP job sent the same verification wording minutes after the CSP
+    had answered it, and the WhatsApp platform refused it as a duplicate.
+    """
+    if verify or not drs.has_answered(session, record.csp_id):
+        return choose_template(session)
+    try:
+        return choose_template(session, PURPOSE_MISSING_DATA)
+    except NoTemplate as e:
+        logger.warning("message_sender.template_for: CSP %s — %s Using the "
+                       "confirm-your-details wording instead.",
+                       record.csp_id, e)
+        return choose_template(session)
+
+
 # ---- actually sending ----------------------------------------------------
 
 def _send_email(to: str, subject: str, body: str, *,
@@ -252,7 +273,7 @@ def ask_for_details(session: Session, record, *,
                               f"{int(RETRY_FAILED_AFTER.total_seconds() // 60)}"
                               " minutes after it"}
     channel = channel or choose_channel(session)
-    template = template or choose_template(session)
+    template = template or template_for(session, record, verify)
 
     if (channel.kind != WHATSAPP
             and not get_settings().csp_data_requests_by_email):

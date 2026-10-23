@@ -68,6 +68,15 @@ def open_request_for(session: Session, csp_id: str) -> Optional[DataRequest]:
     return request
 
 
+def has_answered(session: Session, csp_id: str) -> bool:
+    """Whether this CSP has submitted a form before (any request answered)."""
+    return session.execute(
+        select(DataRequest.id)
+        .where(DataRequest.csp_id == csp_id, DataRequest.status == ANSWERED)
+        .limit(1)
+    ).first() is not None
+
+
 def _is_expired(request: DataRequest) -> bool:
     expires = request.expires_at
     if expires.tzinfo is None:

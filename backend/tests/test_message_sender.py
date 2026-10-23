@@ -171,6 +171,61 @@ async def test_nobody_is_asked_twice_while_being_waited_on(db, sent):
     assert len(sent) == 1, "they were messaged twice"
 
 
+# ---- after they have answered once (No. 139) -----------------------------
+
+def _missing_wording(session):
+    from app.models.messaging import PURPOSE_MISSING_DATA
+    session.add(MessageTemplate(
+        purpose=PURPOSE_MISSING_DATA, name="Missing", channel_kind=EMAIL,
+        subject="Details still needed",
+        body="Namaste {name}, you have not filled: {fields}. Open {link}."))
+    session.commit()
+
+
+def _answered_once(session, record):
+    from app.services import data_request_service as drs
+    request, _ = drs.create(session, record.csp_id, ["gender"])
+    request.status = "answered"
+    session.commit()
+
+
+async def test_a_csp_who_left_blanks_is_told_what_is_missing(db, sent):
+    """Yogesh (1A851379), 22 Oct: verified at 07:32, then sent the same
+    "confirm your details" message again at 07:38 and 08:08."""
+    _missing_wording(db)
+    record = _csp(db, name="Yogesh")
+    _answered_once(db, record)
+
+    result = sender.ask_for_details(db, record)
+
+    assert result["sent"] is True
+    assert sent[0]["subject"] == "Details still needed"
+    assert "you have not filled" in sent[0]["body"]
+    assert "Gender" in sent[0]["body"], "the blank fields are not named"
+
+
+async def test_a_first_ask_still_uses_the_confirm_wording(db, sent):
+    _missing_wording(db)
+    sender.ask_for_details(db, _csp(db))
+    assert sent[0]["subject"] == "Please confirm your details"
+
+
+async def test_a_verification_ask_always_uses_the_confirm_wording(db, sent):
+    _missing_wording(db)
+    record = _csp(db)
+    _answered_once(db, record)
+    sender.ask_for_details(db, record, verify=True)
+    assert sent[0]["subject"] == "Please confirm your details"
+
+
+async def test_without_a_missing_wording_the_confirm_one_is_used(db, sent):
+    record = _csp(db)
+    _answered_once(db, record)
+    result = sender.ask_for_details(db, record)
+    assert result["sent"] is True
+    assert sent[0]["subject"] == "Please confirm your details"
+
+
 async def test_a_csp_missing_nothing_is_not_asked(db, sent, tmp_path):
     # Every field the CSP owns, including the branch name and code — and,
     # since 11 Oct 2026 (tracker No. 53), the bank/organisation details too,
