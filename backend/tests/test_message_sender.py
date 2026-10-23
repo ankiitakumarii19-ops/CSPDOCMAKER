@@ -230,8 +230,7 @@ def _all_but_ao(tmp_path, **override):
     photo = tmp_path / "p.png"
     photo.write_bytes(b"photo")
     fields = dict(gender="Female", address="A", district="D", state="S",
-                  branch_name="B", branch_code="BR01", photo_url=str(photo),
-                  rbo_name="RBO")
+                  branch_name="B", branch_code="BR01", photo_url=str(photo))
     fields.update(override)
     return fields
 
@@ -239,7 +238,8 @@ def _all_but_ao(tmp_path, **override):
 async def test_only_ao_left_after_answering_is_not_asked_again(
         db, sent, tmp_path):
     """23 Oct (No. 140): "don't WhatsApp twice if only AO is left" — and
-    since No. 141 a blank AO is mapped from INFO, never asked at all."""
+    since No. 141 / No. 142 a blank AO or RBO Name is mapped from INFO,
+    never asked at all."""
     _missing_wording(db)
     record = _csp(db, **_all_but_ao(tmp_path))
     _answered_once(db, record)

@@ -308,7 +308,38 @@ def test_an_ao_already_in_the_sheet_is_never_replaced(ao_info):
     assert "ao" not in filled
 
 
+# ---- RBO Name from the same block (No. 142) -------------------------------
+
+def test_a_blank_rbo_is_filled_as_rbo_and_its_code(ao_info):
+    """KOData writes "RBO 4"; all 462 such rows agree with INFO's code."""
+    filled = ao_info.fill_missing({"rbo_name": "", "branch_name": "Visarwadi",
+                                   "district": "Nandurbar",
+                                   "state": "Maharashtra"})
+    assert filled["rbo_name"] == "RBO 1"
+
+
+def test_the_rbo_comes_from_the_branch_row_not_the_district(ao_info):
+    assert ao_info.find_rbo("Laxmipur (DistJamui)", "Jamui", "Bihar") \
+        == "RBO 2"
+    assert ao_info.find_rbo("", "Madhepura", "Bihar") == "RBO 3"
+
+
+def test_a_row_without_a_code_gives_the_rbo_name():
+    rows = [["LHO", "State", "AO", "District", "RBO Name", "RBO Code",
+             "Branch Name"],
+            ["Patna", "Bihar", "AO GAYA", "Gaya", "Gaya RBO", "", "BODHGAYA"]]
+    assert InfoDirectory.from_rows(rows).find_rbo("Bodhgaya") == "Gaya RBO"
+
+
+def test_an_rbo_already_in_the_sheet_is_never_replaced(ao_info):
+    filled = ao_info.fill_missing({"rbo_name": "RBO 9",
+                                   "branch_name": "Visarwadi",
+                                   "state": "Maharashtra"})
+    assert "rbo_name" not in filled
+
+
 def test_without_the_ao_block_nothing_is_filled(info):
-    assert "ao" not in info.fill_missing({"ao": "", "branch_name": "Jamui",
-                                          "district": "Jamui",
-                                          "state": "Bihar"})
+    filled = info.fill_missing({"ao": "", "rbo_name": "",
+                                "branch_name": "Jamui", "district": "Jamui",
+                                "state": "Bihar"})
+    assert not {"ao", "rbo_name"} & set(filled)

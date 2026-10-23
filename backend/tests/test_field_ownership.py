@@ -61,25 +61,26 @@ async def test_every_field_is_a_real_column():
 # ---- what INFO can and cannot answer ------------------------------------
 
 async def test_the_bank_facts_are_always_manual():
-    """INFO maps no RBO. (AO left this list on 23 Oct 2026, No. 141, when
-    INFO gained its AO block.)
+    """Nothing is left: AO and RBO Name left this list on 23 Oct 2026
+    (No. 141, No. 142), when INFO gained its AO block.
 
     Two fields left this list for different reasons. The branch NAME and
     CODE went to the CSP, who knows them. The branch and RBO CONTACT
     numbers went nowhere: no document prints either, so nobody is asked.
     """
-    assert set(fo.ALWAYS_MANUAL) == {"rbo_name"}
+    assert set(fo.ALWAYS_MANUAL) == set()
 
 
 async def test_info_answers_the_people_fields():
     for field in ("dc", "dc_email", "dc_contact",
-                  "asm_name", "asm_email", "asm_contact", "rm_name", "ao"):
+                  "asm_name", "asm_email", "asm_contact", "rm_name", "ao",
+                  "rbo_name"):
         assert field in fo.INFO_CAN_FILL
 
 
 async def test_unfillable_by_info_keeps_only_what_a_human_must_supply():
     asked = fo.unfillable_by_info(["dc", "ao", "asm_name", "rbo_name"])
-    assert asked == ["rbo_name"]
+    assert asked == []
 
 
 async def test_nothing_is_asked_for_when_info_covers_it_all():

@@ -24,7 +24,9 @@ district:
     RBO Code | RBO Email ID | Branch Name
 
 Branch Name lists that district's branches, comma-separated. It fills a
-blank AO: by the CSP's branch first, then by their district.
+blank AO and RBO Name (No. 142): by the CSP's branch first, then by their
+district. RBO Name is written "RBO <RBO Code>", as KOData has it (all 462
+such KOData rows agree with the code); a row with no code gives its name.
 
 A lookup only answers when exactly one person matches. Two ASMs share the
 Chandigarh LHO (one for Haryana, one for Punjab), so an LHO alone is not
@@ -76,6 +78,8 @@ AO_COLUMNS: Dict[str, str] = {
     "state": "state",
     "ao": "ao",
     "district": "district",
+    "rbo name": "rbo_name",
+    "rbo code": "rbo_code",
     "branch name": "branches",
 }
 
@@ -143,8 +147,9 @@ AO_BLOCK = "ao_block"
 
 @dataclass
 class AOArea:
-    """One row of the AO block: a district, its AO and its branches."""
+    """One row of the AO block: a district, its AO, RBO and branches."""
     ao: str
+    rbo: str = ""
     state: str = ""                                      # normalize()d
     district: str = ""                                   # place_key()
     branches: List[str] = field(default_factory=list)    # place_key()s
@@ -186,9 +191,13 @@ class InfoDirectory:
                 values = {attribute: (cells[i] if i < len(cells) else "")
                           for i, attribute in columns.items()}
                 ao = " ".join(values.get("ao", "").split())
-                if ao:
+                code = values.get("rbo_code", "").strip()
+                rbo = (f"RBO {code}" if code else
+                       " ".join(values.get("rbo_name", "").split()))
+                if ao or rbo:
                     ao_areas.append(AOArea(
-                        ao=ao, state=normalize(values.get("state", "")),
+                        ao=ao, rbo=rbo,
+                        state=normalize(values.get("state", "")),
                         district=place_key(values.get("district", "")),
                         branches=[place_key(b) for b in
                                   values.get("branches", "").split(",")
@@ -284,15 +293,24 @@ class InfoDirectory:
 
     def find_ao(self, branch_name: str = "", district: str = "",
                 state: str = "") -> str:
-        """The CSP's AO, or '' when the AO block cannot say for certain.
+        """The CSP's AO, or '' when the AO block cannot say for certain."""
+        return self._from_ao_block("ao", branch_name, district, state)
 
-        The branch decides first (a branch has one AO); the district only
-        when the branch is not listed. Either answers only when every match
-        names the same AO — Lucknow district is split between two AOs, so it
-        alone answers nothing. Within the CSP's State when the block lists
-        that State, so a branch name used in two States cannot pick wrongly.
+    def find_rbo(self, branch_name: str = "", district: str = "",
+                 state: str = "") -> str:
+        """The CSP's RBO Name ("RBO 4"), or '' when not certain."""
+        return self._from_ao_block("rbo", branch_name, district, state)
+
+    def _from_ao_block(self, attribute: str, branch_name: str,
+                       district: str, state: str) -> str:
+        """The branch decides first (a branch has one AO and RBO); the
+        district only when the branch is not listed. Either answers only
+        when every match gives the same value — Lucknow district is split
+        between two AOs, so it alone answers nothing. Within the CSP's
+        State when the block lists that State, so a branch name used in
+        two States cannot pick wrongly.
         """
-        areas = self.ao_areas
+        areas = [a for a in self.ao_areas if getattr(a, attribute)]
         if normalize(state) and any(a.state == normalize(state) for a in areas):
             areas = [a for a in areas if a.state == normalize(state)]
 
@@ -301,7 +319,8 @@ class InfoDirectory:
                 (place_key(district), lambda a, k: a.district == k)):
             if not key:
                 continue
-            found = {normalize(a.ao): a.ao for a in areas if matches(a, key)}
+            found = {normalize(getattr(a, attribute)): getattr(a, attribute)
+                     for a in areas if matches(a, key)}
             if len(found) == 1:
                 return next(iter(found.values()))
         return ""
@@ -363,11 +382,17 @@ class InfoDirectory:
                 if blank("asm_contact") and person.mobile:
                     filled["asm_contact"] = person.mobile
 
-        # AO — from the AO block, by branch then district (No. 141).
+        # AO and RBO Name — from the AO block, by branch then district
+        # (No. 141, No. 142).
+        branch = mapped.get("branch_name", "")
         if blank("ao"):
-            ao = self.find_ao(mapped.get("branch_name", ""), district, state)
+            ao = self.find_ao(branch, district, state)
             if ao:
                 filled["ao"] = ao
+        if blank("rbo_name"):
+            rbo = self.find_rbo(branch, district, state)
+            if rbo:
+                filled["rbo_name"] = rbo
 
         # Circle Head — matched on territory. No document prints one; it is
         # stored so an admin can filter by it.

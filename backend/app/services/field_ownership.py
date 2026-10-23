@@ -83,15 +83,15 @@ ORG_OWNED: Tuple[str, ...] = (
 #   * lho/state               — every one of the 79 districts in the DC block
 #                               belongs to exactly one DC, and that row names
 #                               both, so the district implies them.
-#   * ao                      — INFO's AO block (23 Oct 2026, No. 141): the
-#                               branch, else the district, picks one AO.
-# rbo_name is a bank fact INFO does not map, so it is always asked for.
+#   * ao, rbo_name            — INFO's AO block (23 Oct 2026, No. 141 and
+#                               No. 142): the branch, else the district,
+#                               picks one.
 INFO_CAN_FILL: Tuple[str, ...] = (
     "dc", "dc_email", "dc_contact",
     "asm_name", "asm_email", "asm_contact",
     "rm_name",
     "lho", "state",
-    "ao",
+    "ao", "rbo_name",
 )
 
 ALWAYS_MANUAL: Tuple[str, ...] = tuple(
@@ -303,11 +303,11 @@ def form_fields() -> List[str]:
     return list(CSP_EDITABLE)
 
 
-# Organisation details the CSP knows and is asked for when nothing could
-# map them (decided 21 Oct 2026): their RBO. AO left this list on 23 Oct
-# 2026 (No. 141): it is mapped from INFO's AO block, and a blank one is the
-# RM's, never the CSP's.
-ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("rbo_name",)
+# Organisation details the CSP is asked for when nothing could map them.
+# Was AO and RBO Name (21 Oct 2026); both left on 23 Oct 2026 (No. 141,
+# No. 142): INFO's AO block maps them, and a blank one is the RM's, never
+# the CSP's.
+ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ()
 
 # Shown pre-filled on the verification form for the CSP to check (No. 130).
 ON_VERIFICATION_FORM: Tuple[str, ...] = ("ao", "rbo_name")
@@ -315,7 +315,7 @@ ON_VERIFICATION_FORM: Tuple[str, ...] = ("ao", "rbo_name")
 
 def request_fields(record, verify: bool = False) -> List[str]:
     """Everything a CSP's link asks: their OWN details (all of them, for
-    checking), plus RBO Name when nothing could map it.
+    checking).
 
     verify=True (the old CSPs' verification message, asked 21 Oct 2026):
     AO and RBO Name are always on the form, pre-filled when known, so the
@@ -328,8 +328,8 @@ def request_fields(record, verify: bool = False) -> List[str]:
     one, the RM is alerted and Eko's team fixes it in the INFO sheet or
     CSPDATA. (Before, No. 53, the CSP was asked for all of them.)
 
-    23 Oct 2026 (No. 141): AO only on the verification form; a blank AO is
-    mapped from INFO, never asked."""
+    23 Oct 2026 (No. 141, No. 142): AO and RBO Name only on the
+    verification form; a blank one is mapped from INFO, never asked."""
     if verify:
         return form_fields() + list(ON_VERIFICATION_FORM)
     return form_fields() + [f for f in ASKED_FROM_CSP_WHEN_BLANK
