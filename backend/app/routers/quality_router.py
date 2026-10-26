@@ -8,14 +8,22 @@ CSP DocMaker — data quality: auto-filled values and sheet freshness (No. 146)
     and source, how many auto-filled values people kept or corrected.
   * GET /api/admin/quality/corrections   — Admin + Super Admin: the
     corrections themselves, newest first.
+  * GET  /api/admin/quality/values           — the auto-filled values, and
+    POST /api/admin/quality/values/confirm   — "this one is right" (marks it
+                                               checked; writes nothing), or
+    POST /api/admin/quality/values/correct   — the right value: written to
+    the CSP sheet exactly as the sheet editor writes it, then recorded as a
+    correction by this person. Refused (409) when the value changed since
+    the page showed it. Admin + Super Admin; audited.
 
-Read-only. Everything is computed from field_provenance, field_corrections
-and sync_runs (services/field_quality.py).
+Computed from field_provenance, field_corrections and sync_runs
+(services/field_quality.py).
 """
 
 import logging
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -28,6 +36,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["quality"])
 
 ADMINS = ("admin", "super_admin")
+
+
+def _who(user) -> str:
+    return (user or {}).get("sub") or (user or {}).get("email") or "unknown"
+
+
+class ValueIn(BaseModel):
+    csp_id: str = Field(min_length=1, max_length=100)
+    field: str = Field(min_length=1, max_length=50)
+    # What the page showed: a value changed since is not overwritten.
+    current_value: str = Field(default="", max_length=5000)
+
+
+class CorrectionIn(ValueIn):
+    new_value: str = Field(min_length=1, max_length=5000)
 
 
 @router.get("/api/quality/freshness",
@@ -64,3 +87,128 @@ async def corrections(
 ):
     return await session.run_sync(field_quality.recent_corrections, limit,
                                   offset, field)
+
+
+@router.get("/api/admin/quality/values",
+            summary="The auto-filled values, unchecked first")
+async def values(
+    status_: str = Query("", alias="status",
+                         pattern="^(|auto|confirmed|corrected|withdrawn)$"),
+    field: str = Query("", max_length=50),
+    q: str = Query("", max_length=100),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    return await session.run_sync(field_quality.list_values, status_, field,
+                                  q, limit, offset)
+
+
+async def _checked(session: AsyncSession, body: ValueIn):
+    """The value as the page showed it, or a clear refusal."""
+    from sqlalchemy import select
+
+    from app.models.field_provenance import FieldProvenance
+    p = (await session.execute(select(FieldProvenance).where(
+        FieldProvenance.csp_id == body.csp_id,
+        FieldProvenance.field == body.field))).scalar_one_or_none()
+    if p is None or p.status == "withdrawn":
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            "The app has no filled value for that CSP and "
+                            "field.")
+    if field_quality.norm(body.current_value) != p.current_value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"This value changed since the page was opened (it is now "
+            f"{p.current_value!r}). Reload and check it again.")
+    return p
+
+
+async def _audit(session: AsyncSession, user, action: str, body: ValueIn,
+                 extra: dict) -> None:
+    from app.models.audit_log import AuditLog
+    session.add(AuditLog(
+        action=action, resource_type="csp", resource_id=body.csp_id,
+        csp_id=body.csp_id, result="success",
+        metadata_json={"by": _who(user), "field": body.field, **extra}))
+
+
+@router.post("/api/admin/quality/values/confirm",
+             summary="Mark an auto-filled value as checked and right")
+async def confirm_value(
+    body: ValueIn,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    p = await _checked(session, body)
+    if p.status == "auto":
+        await session.run_sync(field_quality.record_check, body.csp_id,
+                               {body.field: p.current_value}, "data_quality",
+                               _who(user))
+        await _audit(session, user, "data_quality_confirm", body,
+                     {"value": p.current_value})
+        await session.commit()
+        logger.info("quality_router: %s confirmed %s %s", _who(user),
+                    body.csp_id, body.field)
+    return await session.run_sync(field_quality.value_row, body.csp_id,
+                                  body.field)
+
+
+@router.post("/api/admin/quality/values/correct",
+             summary="Correct an auto-filled value in the CSP sheet")
+async def correct_value(
+    body: CorrectionIn,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    from sqlalchemy import select
+
+    from app.models.csp_record import CSPRecord
+    from app.services import csp_mapping
+    from app.services import sheet_writeback_service as wb
+
+    p = await _checked(session, body)
+    new = field_quality.norm(body.new_value)
+    if not new:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "A blank cannot replace a value.")
+    if new == p.current_value:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "That is the value already there — use Confirm.")
+    if body.field in field_quality.NOT_EDITABLE:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            field_quality.NOT_EDITABLE[body.field])
+    if body.field not in csp_mapping.FIELD_TO_SHEET_COLUMN:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "The CSP sheet has no column for this field.")
+
+    # The sheet is the source of truth: a value set only here would be
+    # put back by the next sync. Written exactly as the CSP's form writes.
+    try:
+        written, skipped = wb.write_values(body.csp_id, {body.field: new})
+    except wb.SheetWriteError as e:
+        logger.error("quality_router: %s could not correct %s %s in the "
+                     "sheet: %s", _who(user), body.csp_id, body.field, e)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"The CSP sheet could not be updated, so nothing "
+                            f"was changed: {e}")
+    if body.field not in written:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "The CSP sheet has no column for this field, so "
+                            "nothing was changed.")
+
+    record = (await session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == body.csp_id))).scalar_one_or_none()
+    if record is not None:
+        setattr(record, body.field, new)   # the sync agrees next run
+    before = p.current_value
+    await session.run_sync(field_quality.record_check, body.csp_id,
+                           {body.field: new}, "data_quality", _who(user))
+    await _audit(session, user, "data_quality_correct", body,
+                 {"from": before, "to": new})
+    await session.commit()
+    logger.info("quality_router: %s corrected %s %s in the sheet",
+                _who(user), body.csp_id, body.field)
+    return await session.run_sync(field_quality.value_row, body.csp_id,
+                                  body.field)

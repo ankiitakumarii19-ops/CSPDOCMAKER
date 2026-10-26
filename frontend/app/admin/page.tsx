@@ -278,17 +278,6 @@ export default function AdminDashboard() {
           >
             <i className="fas fa-envelope w-5 text-center"></i> Emails
           </button>
-          {/* What people kept or corrected of the app's own fills (No. 146). */}
-          <button
-            onClick={() => setAdminRoute("quality")}
-            className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
-              adminRoute === "quality"
-                ? "bg-navy-800 text-white border-l-4 border-eko"
-                : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
-            }`}
-          >
-            <i className="fas fa-clipboard-check w-5 text-center"></i> Data quality
-          </button>
           {canConfigure && (
             <button
               onClick={() => setAdminRoute("build")}
@@ -320,6 +309,19 @@ export default function AdminDashboard() {
                 <i className="fas fa-robot w-5 text-center"></i> Agents
               </button>
               )}
+              {/* Context and harness: what the app reads, what it filled in
+                  by itself, check or correct it (No. 146). In Setup since
+                  26 Oct (asked for). */}
+              <button
+                onClick={() => setAdminRoute("quality")}
+                className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                  adminRoute === "quality"
+                    ? "bg-navy-800 text-white border-l-4 border-eko"
+                    : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                }`}
+              >
+                <i className="fas fa-clipboard-check w-5 text-center"></i> Data quality
+              </button>
               <button
                 onClick={() => setAdminRoute("messaging")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -487,7 +489,7 @@ export default function AdminDashboard() {
             )}
             {adminRoute === "whatsapp" && <WhatsAppMessages />}
             {adminRoute === "emails" && <EmailMessages />}
-            {adminRoute === "quality" && <DataQuality />}
+            {canConfigure && adminRoute === "quality" && <DataQuality />}
             {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}

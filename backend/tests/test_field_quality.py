@@ -29,6 +29,7 @@ from tests.test_info_directory import AO_ROWS
 on_loop = pytest.mark.asyncio(loop_scope="session")
 
 TABLES = ("field_corrections, field_provenance, data_requests, sync_runs, "
+          "audit_logs, "
           "csp_records, authorization_records")
 
 
@@ -591,3 +592,149 @@ async def test_the_csp_panel_says_where_each_value_came_from(client, qdb):
     ao = r.json()["sources"]["ao"]
     assert (ao["source_label"], ao["detail"], ao["status"]) == (
         "INFO tab", "test info", "auto")
+
+
+# ---- checking and correcting from the Data quality page ------------------
+
+def _values_setup(db):
+    db.add(CSPRecord(csp_id="1A993001", csp_code="1A993001",
+                     name="Edit Me", ao="AO NASHIK", rm_name="Rm Info"))
+    db.commit()
+    _filled(db, "1A993001", ao=("AO NASHIK", "info"),
+            rm_name=("Rm Info", "info"), dc=("Dc Old", "info"))
+    p = _provenance(db, "1A993001", "dc")
+    p.status = "withdrawn"
+    db.commit()
+
+
+@on_loop
+async def test_the_values_are_listed_for_admins_only(client, qdb):
+    _values_setup(qdb)
+    r = await client.get("/api/admin/quality/values", headers=_auth("rm"))
+    assert r.status_code == 403
+    r = await client.get("/api/admin/quality/values", headers=_auth("admin"))
+    assert r.status_code == 200, r.text
+    rows = {v["field"]: v for v in r.json()["values"]}
+    assert set(rows) == {"ao", "rm_name"}, "withdrawn ones are not listed"
+    assert rows["ao"]["csp_name"] == "Edit Me" and rows["ao"]["editable"]
+    assert rows["rm_name"]["editable"] is False
+    assert "owns the CSP" in rows["rm_name"]["not_editable_reason"]
+    r = await client.get("/api/admin/quality/values?q=edit me&field=ao",
+                         headers=_auth("super_admin"))
+    assert [v["field"] for v in r.json()["values"]] == ["ao"]
+
+
+@on_loop
+async def test_confirming_marks_it_checked_and_writes_nothing(
+        client, qdb, monkeypatch):
+    from app.services import sheet_writeback_service as wb
+    _values_setup(qdb)
+    monkeypatch.setattr(wb, "write_values", lambda *a, **k: pytest.fail(
+        "confirming must not write to the sheet"))
+    r = await client.post("/api/admin/quality/values/confirm",
+                          headers=_auth("admin"), json={
+                              "csp_id": "1A993001", "field": "ao",
+                              "current_value": "AO NASHIK"})
+    assert r.status_code == 200, r.text
+    assert (r.json()["status"], r.json()["checked_via"],
+            r.json()["checked_by"]) == ("confirmed", "Data quality page",
+                                         "admin@eko.co.in")
+    assert _corrections(qdb) == []
+    qdb.expire_all()
+    from app.models.audit_log import AuditLog
+    assert qdb.execute(select(AuditLog.action).where(
+        AuditLog.csp_id == "1A993001")).scalars().all() == [
+        "data_quality_confirm"]
+
+
+@on_loop
+async def test_a_value_changed_since_the_page_opened_is_not_touched(
+        client, qdb):
+    _values_setup(qdb)
+    for path, extra in (("confirm", {}), ("correct", {"new_value": "AO X"})):
+        r = await client.post(f"/api/admin/quality/values/{path}",
+                              headers=_auth("admin"), json={
+                                  "csp_id": "1A993001", "field": "ao",
+                                  "current_value": "AO OLD", **extra})
+        assert r.status_code == 409, r.text
+    assert _provenance(qdb, "1A993001", "ao").status == "auto"
+
+
+@on_loop
+async def test_correcting_writes_the_sheet_and_records_who(
+        client, qdb, monkeypatch):
+    from app.services import sheet_writeback_service as wb
+    _values_setup(qdb)
+    written = []
+    monkeypatch.setattr(wb, "write_values", lambda code, values, *a, **k: (
+        written.append((code, dict(values))) or (dict(values), [])))
+    r = await client.post("/api/admin/quality/values/correct",
+                          headers=_auth("super_admin"), json={
+                              "csp_id": "1A993001", "field": "ao",
+                              "current_value": "AO NASHIK",
+                              "new_value": " AO  DHULE "})
+    assert r.status_code == 200, r.text
+    assert written == [("1A993001", {"ao": "AO DHULE"})]
+    assert (r.json()["status"], r.json()["current_value"]) == (
+        "corrected", "AO DHULE")
+    (fix,) = _corrections(qdb)
+    assert (fix.changed_via, fix.changed_by, fix.new_value) == (
+        "data_quality", "super_admin@eko.co.in", "AO DHULE")
+    qdb.expire_all()
+    assert qdb.execute(select(CSPRecord)).scalar_one().ao == "AO DHULE"
+
+    # The next sync sees the sheet agree: not counted again.
+    known = fq.load(qdb)
+    assert fq.observe_sync(qdb, known, "1A993001", {"ao": "AO DHULE"}, {}) == 0
+
+
+@on_loop
+async def test_nothing_changes_when_the_sheet_cannot_be_written(
+        client, qdb, monkeypatch):
+    from app.services import sheet_writeback_service as wb
+    _values_setup(qdb)
+
+    def down(*a, **k):
+        raise wb.SheetWriteError("Google Sheets unreachable")
+    monkeypatch.setattr(wb, "write_values", down)
+    r = await client.post("/api/admin/quality/values/correct",
+                          headers=_auth("admin"), json={
+                              "csp_id": "1A993001", "field": "ao",
+                              "current_value": "AO NASHIK",
+                              "new_value": "AO DHULE"})
+    assert r.status_code == 502
+    assert "nothing was changed" in r.json()["detail"]
+    assert _provenance(qdb, "1A993001", "ao").status == "auto"
+    qdb.expire_all()
+    assert qdb.execute(select(CSPRecord)).scalar_one().ao == "AO NASHIK"
+
+
+@on_loop
+async def test_what_cannot_be_corrected_here_is_refused(
+        client, qdb, monkeypatch):
+    from app.services import sheet_writeback_service as wb
+    _values_setup(qdb)
+    monkeypatch.setattr(wb, "write_values", lambda *a, **k: pytest.fail(
+        "nothing may be written"))
+    cases = [
+        ({"field": "rm_name", "current_value": "Rm Info",
+          "new_value": "Someone"}, 400),           # changes the owner
+        ({"field": "ao", "current_value": "AO NASHIK",
+          "new_value": "AO NASHIK"}, 400),         # unchanged: Confirm
+        ({"field": "ao", "current_value": "AO NASHIK",
+          "new_value": "   "}, 400),               # blank
+        ({"field": "dc", "current_value": "",
+          "new_value": "Dc New"}, 404),            # withdrawn
+    ]
+    for body, code in cases:
+        r = await client.post("/api/admin/quality/values/correct",
+                              headers=_auth("admin"),
+                              json={"csp_id": "1A993001", **body})
+        assert r.status_code == code, (body, r.text)
+    r = await client.post("/api/admin/quality/values/correct",
+                          headers=_auth("rm"), json={
+                              "csp_id": "1A993001", "field": "ao",
+                              "current_value": "AO NASHIK",
+                              "new_value": "AO DHULE"})
+    assert r.status_code == 403
+    assert _corrections(qdb) == []

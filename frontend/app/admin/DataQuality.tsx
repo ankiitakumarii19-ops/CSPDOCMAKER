@@ -7,12 +7,18 @@
  * ASM, LHO, State, RM…), from the Zoho Lead (email, address, state,
  * gender) and from the temporary Address tab. This screen shows how often
  * people kept those values and how often they corrected them — on the
- * CSP's own form, in the app's sheet editor or in the Google Sheet — so a
- * rule that guesses wrong shows up as a number, with the cases listed.
+ * CSP's own form, in the app's sheet editor, in the Google Sheet or here —
+ * so a rule that guesses wrong shows up as a number, with the cases listed.
+ *
+ * Context (the sheets the app reads, and how fresh) and the auto-filled
+ * values themselves (check or correct) are at the top; Setup section,
+ * Admins and Super Admins.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
+import AutoFilledValues from "./AutoFilledValues";
+import ContextSources from "./ContextSources";
 import { api } from "../lib/api";
 import type { ApiError, QualityCorrection, QualityScoreboard } from "../lib/api";
 
@@ -36,6 +42,8 @@ export default function DataQuality() {
   const [field, setField] = useState("");
   const [error, setError] = useState("");
   const [loadingMore, setLoadingMore] = useState(false);
+  // Bumped after a value is confirmed or corrected, to recount.
+  const [version, setVersion] = useState(0);
 
   const loadFixes = useCallback(
     (offset: number) =>
@@ -46,7 +54,8 @@ export default function DataQuality() {
           setFixes((old) => (offset ? [...old, ...r.corrections] : r.corrections));
         })
         .catch((e) => setError((e as ApiError).detail || "Could not load the corrections.")),
-    [field]
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version: reload after an edit
+    [field, version]
   );
 
   useEffect(() => {
@@ -54,7 +63,7 @@ export default function DataQuality() {
       .qualityScoreboard()
       .then(setBoard)
       .catch((e) => setError((e as ApiError).detail || "Could not load the scoreboard."));
-  }, []);
+  }, [version]);
   useEffect(() => {
     loadFixes(0);
   }, [loadFixes]);
@@ -74,12 +83,15 @@ export default function DataQuality() {
       <div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Data quality</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400 max-w-3xl">
-          Values the app filled in by itself — from INFO, the Zoho Lead or the Address tab — and
-          what people did with them. A correction is any change made on the CSP&apos;s form, in the
-          sheet editor or in the Google Sheet. Counted from 26 Oct 2026; earlier fills are not
-          known.
+          What the app reads, the values it filled in by itself — from INFO, the Zoho Lead or the
+          Address tab — and what people did with them. A correction is any change made on the
+          CSP&apos;s form, in the sheet editor, in the Google Sheet or here. Counted from 26 Oct
+          2026; earlier fills are not known.
         </p>
       </div>
+
+      <ContextSources />
+      <AutoFilledValues onChanged={() => setVersion((v) => v + 1)} />
 
       {error && (
         <div className="px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">

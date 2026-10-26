@@ -44,7 +44,15 @@ VIA = {
     "csp_form": "CSP's own form",
     "sheet_editor": "App sheet editor",
     "sheet": "Google Sheet",
+    "data_quality": "Data quality page",
 }
+
+# Not correctable from the Data quality page: an RM name written into the
+# sheet makes the sync match the owner BY NAME, and a spelling that differs
+# from the sign-in list leaves the CSP unresolved — visible to every RM. That
+# changes the flow, so the RM is changed in the sheet, deliberately.
+NOT_EDITABLE = {"rm_name": "The RM decides who owns the CSP; change it in "
+                           "the CSP sheet."}
 
 STATUS = ("auto", "confirmed", "corrected", "withdrawn")
 
@@ -215,6 +223,75 @@ def observe_sync(session, known: Known, csp_id: str, mapped: Dict[str, str],
 
 
 # ---- reading it back ----------------------------------------------------
+
+def _row(p: FieldProvenance, csp_name: Optional[str]) -> dict:
+    from app.services import csp_mapping
+    editable = (p.field in csp_mapping.FIELD_TO_SHEET_COLUMN
+                and p.field not in NOT_EDITABLE)
+    return {
+        "csp_id": p.csp_id,
+        "csp_name": csp_name or "",
+        "field": p.field,
+        "label": _label(p.field),
+        "source": p.source,
+        "source_label": SOURCES.get(p.source, p.source),
+        "detail": p.detail,
+        "status": p.status,
+        "auto_value": p.auto_value,
+        "current_value": p.current_value,
+        "edit_distance": p.edit_distance,
+        "checked_via": VIA.get(p.checked_via or "", p.checked_via),
+        "checked_by": p.checked_by,
+        "checked_at": p.checked_at.isoformat() if p.checked_at else None,
+        "filled_at": p.filled_at.isoformat() if p.filled_at else None,
+        "editable": editable,
+        "not_editable_reason": (NOT_EDITABLE.get(p.field)
+                                or ("" if editable else
+                                    "The CSP sheet has no column for it.")),
+    }
+
+
+def list_values(session, status: str = "", field: str = "", q: str = "",
+                limit: int = 50, offset: int = 0) -> dict:
+    """The auto-filled values themselves, for the Data quality page:
+    unchecked first, newest first. Withdrawn ones only when asked for."""
+    from sqlalchemy import case, or_
+
+    from app.models.csp_record import CSPRecord
+
+    query = (select(FieldProvenance, CSPRecord.name)
+             .outerjoin(CSPRecord, CSPRecord.csp_id == FieldProvenance.csp_id))
+    count = (select(func.count()).select_from(FieldProvenance)
+             .outerjoin(CSPRecord, CSPRecord.csp_id == FieldProvenance.csp_id))
+    filters = [FieldProvenance.status == status] if status else \
+        [FieldProvenance.status != "withdrawn"]
+    if field:
+        filters.append(FieldProvenance.field == field)
+    text = " ".join((q or "").split())
+    if text:
+        like = f"%{text}%"
+        filters.append(or_(FieldProvenance.csp_id.ilike(like),
+                           CSPRecord.name.ilike(like),
+                           FieldProvenance.current_value.ilike(like)))
+    query, count = query.where(*filters), count.where(*filters)
+    order = case((FieldProvenance.status == "auto", 0),
+                 (FieldProvenance.status == "corrected", 1), else_=2)
+    rows = session.execute(
+        query.order_by(order, FieldProvenance.filled_at.desc(),
+                       FieldProvenance.csp_id, FieldProvenance.field)
+        .offset(offset).limit(limit)).all()
+    return {"total": session.execute(count).scalar() or 0,
+            "values": [_row(p, name) for p, name in rows]}
+
+
+def value_row(session, csp_id: str, field: str) -> Optional[dict]:
+    from app.models.csp_record import CSPRecord
+    found = session.execute(
+        select(FieldProvenance, CSPRecord.name)
+        .outerjoin(CSPRecord, CSPRecord.csp_id == FieldProvenance.csp_id)
+        .where(FieldProvenance.csp_id == csp_id,
+               FieldProvenance.field == field)).first()
+    return _row(*found) if found else None
 
 def sources_for(session, csp_id: str) -> Dict[str, dict]:
     """{field: where its value came from} for one CSP's panel."""

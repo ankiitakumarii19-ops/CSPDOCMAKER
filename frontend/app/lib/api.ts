@@ -679,6 +679,27 @@ export interface QualityScoreboard {
   }>;
 }
 
+/** One value the app filled in by itself, as the Data quality page lists it. */
+export interface QualityValue {
+  csp_id: string;
+  csp_name: string;
+  field: string;
+  label: string;
+  source: string;
+  source_label: string;
+  detail: string;
+  status: "auto" | "confirmed" | "corrected" | "withdrawn";
+  auto_value: string;
+  current_value: string;
+  edit_distance: number | null;
+  checked_via: string | null;
+  checked_by: string | null;
+  checked_at: string | null;
+  filled_at: string | null;
+  editable: boolean;
+  not_editable_reason: string;
+}
+
 export interface QualityCorrection {
   csp_id: string;
   field: string;
@@ -1305,6 +1326,34 @@ class ApiClient {
     return this.request<{ total: number; corrections: QualityCorrection[] }>(
       `/admin/quality/corrections${qs ? `?${qs}` : ""}`
     );
+  }
+
+  async qualityValues(params: { status?: string; field?: string; q?: string; limit?: number; offset?: number } = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v !== undefined && v !== "" && query.set(k, String(v)));
+    const qs = query.toString();
+    return this.request<{ total: number; values: QualityValue[] }>(
+      `/admin/quality/values${qs ? `?${qs}` : ""}`
+    );
+  }
+
+  async confirmQualityValue(body: { csp_id: string; field: string; current_value: string }) {
+    return this.request<QualityValue>("/admin/quality/values/confirm", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async correctQualityValue(body: {
+    csp_id: string;
+    field: string;
+    current_value: string;
+    new_value: string;
+  }) {
+    return this.request<QualityValue>("/admin/quality/values/correct", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
   }
 
   async checkEmailBounces() {
