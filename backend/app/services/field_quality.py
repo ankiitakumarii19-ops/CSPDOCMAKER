@@ -483,3 +483,148 @@ def freshness(session, settings, now: Optional[datetime] = None,
             badge["error"] = (last_done.error_message or "")[:300]
         out.append(badge)
     return out
+
+
+# ---- the harness: how the app checks itself (No. 149) -------------------
+
+GOLDEN_FILE = "tests/golden/cases.json"
+
+
+def _golden_count() -> Optional[int]:
+    """How many golden cases this version carries (the file ships in the
+    server image), or None when it is not there."""
+    import json
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[2] / GOLDEN_FILE
+    try:
+        return len(json.loads(path.read_text(encoding="utf-8"))["cases"])
+    except FileNotFoundError:
+        return None
+
+
+def _ago(when: Optional[datetime], now: datetime) -> str:
+    if when is None:
+        return "never"
+    minutes = int((now - when).total_seconds() // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes} min ago"
+    if minutes < 48 * 60:
+        return f"{minutes // 60} h ago"
+    return f"{minutes // (24 * 60)} days ago"
+
+
+def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
+    """One row per way the app checks its own work, with where it stands.
+
+    state: ok (working), attention (needs a look), empty (no data yet) or
+    laptop (a check run on the laptop before each push, not on the server).
+    """
+    from app.models.email_message import EmailMessage
+    from app.models.email_message import FAILED as EMAIL_FAILED
+    from app.models.knowledge import KnowledgeMiss
+    from app.models.whatsapp_message import (DELIVERY_FAILED, SEND_FAILED,
+                                             SEND_REJECTED, WhatsAppMessage)
+
+    now = now or datetime.now(timezone.utc)
+    week = now - timedelta(days=7)
+    rows = []
+
+    def row(key, name, watches, how, status_now, state):
+        rows.append({"key": key, "name": name, "watches": watches,
+                     "how": how, "now": status_now, "state": state})
+
+    counts = dict(session.execute(
+        select(FieldProvenance.status, func.count())
+        .group_by(FieldProvenance.status)).all())
+    in_use = sum(counts.get(s, 0) for s in ("auto", "confirmed", "corrected"))
+    checked = counts.get("confirmed", 0) + counts.get("corrected", 0)
+    last_fill = session.execute(select(func.max(FieldProvenance.filled_at))).scalar()
+    row("auto_fill", "Auto-fill record",
+        "Every value the app fills in by itself — INFO tab, Zoho Lead, Address tab",
+        "Saved with the reason it was chosen; watched for later changes",
+        f"{in_use} values in use; last filled {_ago(last_fill, now)}",
+        "ok" if in_use else "empty")
+
+    total = session.execute(select(func.count()).select_from(FieldCorrection)).scalar() or 0
+    recent = session.execute(select(func.count()).select_from(FieldCorrection)
+                             .where(FieldCorrection.created_at >= week)).scalar() or 0
+    row("corrections", "Corrections log",
+        "Changes people make to those values — the CSP's form, the sheet "
+        "editor, the Google Sheet, the Data quality page",
+        "Logged with who, where and how many characters changed",
+        f"{total} corrections; {recent} in the last 7 days",
+        "ok" if in_use else "empty")
+
+    corrected = counts.get("corrected", 0)
+    rate = round(100 * (in_use - corrected) / in_use, 1) if in_use else None
+    row("kept_rate", "Kept rate",
+        "Share of filled values nobody had to correct",
+        "Target: above 75%",
+        f"{rate}%" if rate is not None else "no data yet",
+        "empty" if rate is None else "ok" if rate >= 75 else "attention")
+
+    row("checked", "Checked by a person",
+        "Filled values someone confirmed or corrected",
+        "Confirm / Correct on the Data quality page; the CSP's own form",
+        (f"{checked} of {in_use} ({round(100 * checked / in_use, 1)}%)"
+         if in_use else "no data yet"),
+        "ok" if checked else "empty")
+
+    badges = freshness(session, settings, now=now)
+    on_time = sum(1 for b in badges if b["status"] == "ok")
+    row("freshness", "Freshness watch",
+        "Every sheet the app reads",
+        "Late after 3 missed reads; stuck when runs start but never finish",
+        f"{on_time} of {len(badges)} sheets on time",
+        "ok" if badges and on_time == len(badges) else "attention")
+
+    wa_not_sent = session.execute(
+        select(func.count()).select_from(WhatsAppMessage).where(
+            WhatsAppMessage.sent_at >= week,
+            WhatsAppMessage.send_status.in_((SEND_FAILED, SEND_REJECTED)))
+    ).scalar() or 0
+    wa_not_received = session.execute(
+        select(func.count()).select_from(WhatsAppMessage).where(
+            WhatsAppMessage.sent_at >= week,
+            WhatsAppMessage.delivery_status == DELIVERY_FAILED)).scalar() or 0
+    em_failed = session.execute(
+        select(func.count()).select_from(EmailMessage).where(
+            EmailMessage.sent_at >= week,
+            EmailMessage.send_status == EMAIL_FAILED)).scalar() or 0
+    em_bounced = session.execute(
+        select(func.count()).select_from(EmailMessage).where(
+            EmailMessage.bounced_at >= week)).scalar() or 0
+    problems = wa_not_sent + wa_not_received + em_failed + em_bounced
+    row("sending", "Sending failures (last 7 days)",
+        "WhatsApp messages and emails to CSPs",
+        "Every failure saved with its reason; a failed WhatsApp is tried "
+        "again after 30 minutes",
+        f"WhatsApp: {wa_not_sent} not sent, {wa_not_received} not received · "
+        f"Email: {em_failed} failed, {em_bounced} bounced",
+        "attention" if problems else "ok")
+
+    misses = session.execute(select(func.count()).select_from(KnowledgeMiss)).scalar() or 0
+    last_miss = session.execute(select(func.max(KnowledgeMiss.last_asked_at))).scalar()
+    row("chat", "Unanswered chat questions",
+        "Questions the chat could not answer from the Knowledge Base",
+        "Counted so an Admin can add the answer (Admin → Knowledge Base)",
+        f"{misses} different questions; last asked {_ago(last_miss, now)}"
+        if misses else "none",
+        "attention" if misses else "ok")
+
+    cases = _golden_count()
+    row("golden", "Golden cases",
+        "Fixed CSP situations with their right answers: documents, mapping, "
+        "owner, holds, numbers, address, what is asked, old vs new",
+        "Run on the laptop before every push; a failure stops the deploy",
+        f"{cases} cases in this version" if cases is not None
+        else "case file not found",
+        "laptop")
+
+    row("tests", "Automatic tests",
+        "The whole app",
+        "Run on the laptop before every push; results in PROJECT-REGISTER.md",
+        "not run on the server", "laptop")
+    return rows

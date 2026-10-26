@@ -4,6 +4,8 @@ CSP DocMaker — data quality: auto-filled values and sheet freshness (No. 146)
   * GET /api/quality/freshness           — every signed-in role: when each
     sheet the app reads was last read fully, and whether that is on time.
     The reason a read failed is shown to Admins and Super Admins only.
+  * GET /api/admin/quality/harness       — Admin + Super Admin: how the app
+    checks itself (No. 149), one row per check with where it stands.
   * GET /api/admin/quality/scoreboard    — Admin + Super Admin: per field
     and source, how many auto-filled values people kept or corrected.
   * GET /api/admin/quality/corrections   — Admin + Super Admin: the
@@ -64,6 +66,17 @@ async def freshness(
         lambda s: field_quality.freshness(s, get_settings(),
                                           with_errors=with_errors))
     return {"sources": badges}
+
+
+@router.get("/api/admin/quality/harness",
+            summary="How the app checks itself, and where each check stands")
+async def harness(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    rows = await session.run_sync(
+        lambda s: field_quality.harness(s, get_settings()))
+    return {"checks": rows}
 
 
 @router.get("/api/admin/quality/scoreboard",

@@ -10,15 +10,17 @@
  * CSP's own form, in the app's sheet editor, in the Google Sheet or here —
  * so a rule that guesses wrong shows up as a number, with the cases listed.
  *
- * Context (the sheets the app reads, and how fresh) and the auto-filled
- * values themselves (check or correct) are at the top; Setup section,
- * Admins and Super Admins.
+ * Context (the sheets the app reads, and how fresh), the harness (how the
+ * app checks itself, No. 149) and the auto-filled values themselves (check
+ * or correct) are at the top; Setup section, Admins and Super Admins. The
+ * context and the harness are in the Knowledge Base too.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
 import AutoFilledValues from "./AutoFilledValues";
 import ContextSources from "./ContextSources";
+import HarnessChecks from "./HarnessChecks";
 import { api } from "../lib/api";
 import type { ApiError, QualityCorrection, QualityScoreboard } from "../lib/api";
 
@@ -91,6 +93,7 @@ export default function DataQuality() {
       </div>
 
       <ContextSources />
+      <HarnessChecks version={version} />
       <AutoFilledValues onChanged={() => setVersion((v) => v + 1)} />
 
       {error && (

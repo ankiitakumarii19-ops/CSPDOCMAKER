@@ -679,6 +679,16 @@ export interface QualityScoreboard {
   }>;
 }
 
+/** One way the app checks its own work (Data quality → Harness, No. 149). */
+export interface HarnessCheck {
+  key: string;
+  name: string;
+  watches: string;
+  how: string;
+  now: string;
+  state: "ok" | "attention" | "empty" | "laptop";
+}
+
 /** One value the app filled in by itself, as the Data quality page lists it. */
 export interface QualityValue {
   csp_id: string;
@@ -1311,6 +1321,10 @@ class ApiClient {
   // ---- Data quality (No. 146) ----
   async freshness() {
     return this.request<{ sources: FreshnessBadge[] }>("/quality/freshness");
+  }
+
+  async qualityHarness() {
+    return this.request<{ checks: HarnessCheck[] }>("/admin/quality/harness");
   }
 
   async qualityScoreboard(weeks = 8) {
