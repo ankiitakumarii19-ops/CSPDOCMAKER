@@ -189,8 +189,10 @@ the sheet.
 **Turn the laptop's copy off** once the server is live. Two copies reading
 the same sheet could both act on the same new CSP.
 
-**Before every push that will be deployed** (No. 146), on the laptop, with
-Docker's Postgres running: the golden cases — about 60 fixed CSP situations
+**Before every push that will be deployed** (No. 146), **on the laptop —
+not on the server** (the server has no test setup; this check is what stops
+a broken change from getting there), with Docker's Postgres running: the
+golden cases — about 60 fixed CSP situations
 with their known right answers (KO / Sub-KO documents, AO / RBO / DC mapping,
 who owns the CSP, old or new, on hold or not, what the CSP is asked, WhatsApp
 or email). Takes about 15 seconds. Do not deploy if any fails.
