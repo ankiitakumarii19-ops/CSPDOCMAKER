@@ -22,6 +22,10 @@ const TILES: { key: string; label: string; tone: string }[] = [
   { key: "opened", label: "Opened", tone: "text-eko-dark dark:text-eko" },
   { key: "not_opened", label: "Not opened", tone: "text-amber-600 dark:text-amber-400" },
 ];
+// The boxes shown at the top (asked 26 Oct 2026): documents and details
+// requests only. Chat and other emails are still recorded and listed below.
+const SHOWN_KINDS = ["documents", "details_request"];
+
 const STATUS: Record<string, { label: string; cls: string }> = {
   failed: { label: "Failed", cls: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
   bounced: { label: "Bounced", cls: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300" },
@@ -106,7 +110,9 @@ export default function EmailMessages() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         {data &&
-          Object.entries(data.counts).map(([kind, c]) => (
+          Object.entries(data.counts)
+            .filter(([kind]) => SHOWN_KINDS.includes(kind))
+            .map(([kind, c]) => (
             <section key={kind} className={`${card} p-5`}>
               <h3 className="font-semibold text-gray-900 dark:text-white mb-3">{c.title}</h3>
               <div className="grid grid-cols-5 gap-2">
