@@ -81,16 +81,46 @@ def test_the_answers_name_where_to_look_and_hold_no_contact_details():
         assert not re.search(r"\b\d{10}\b", e.answer), e.question
 
 
-@on_loop
-async def test_every_workspace_got_the_entries_once(migrated_db):
-    from app.database import async_session_factory
-    async with async_session_factory() as session:
-        rows = (await session.execute(text(
-            "SELECT question, count(*) FROM knowledge_entries WHERE "
-            "category = 'Data quality' GROUP BY question"))).all()
-    counts = dict(rows)
-    assert set(counts) >= {q for q, *_ in MIGRATION.START}
-    assert set(counts.values()) == {1}, "one per workspace, never twice"
+def test_every_workspace_gets_the_entries_once_and_keeps_its_own(qdb):
+    """Runs this migration's downgrade and upgrade on the test database:
+    every workspace gets each answer once, and an answer a workspace
+    already wrote itself (same question) is neither doubled nor replaced."""
+    import subprocess
+    import sys
+    from tests.conftest import BACKEND_DIR, DEFAULT_WORKSPACE_ID
+
+    def alembic(*args):
+        subprocess.run([sys.executable, "-m", "alembic", *args],
+                       cwd=BACKEND_DIR, check=True, capture_output=True)
+
+    alembic("downgrade", MIGRATION.down_revision)
+    try:
+        qdb.execute(text("DELETE FROM knowledge_entries WHERE question = :q"),
+                    {"q": "What are the golden cases?"})
+        qdb.execute(text(
+            "INSERT INTO knowledge_entries (id, workspace_id, question, "
+            "phrasings, keywords, answer, category, active, updated_by) "
+            "VALUES (gen_random_uuid(), :w, 'What are the golden cases?', "
+            "'', '', 'Our own answer', 'Mine', true, 'admin')"),
+            {"w": str(DEFAULT_WORKSPACE_ID)})
+        qdb.commit()
+    finally:
+        alembic("upgrade", "head")
+
+    rows = qdb.execute(text(
+        "SELECT workspace_id, question, count(*) FROM knowledge_entries "
+        "GROUP BY workspace_id, question")).all()
+    workspaces = {w for (w,) in qdb.execute(text("SELECT id FROM workspaces"))}
+    for question, *_ in MIGRATION.START:
+        have = {w for w, q, n in rows if q == question}
+        assert have == workspaces, question
+    assert all(n == 1 for w, q, n in rows
+               if q in {q for q, *_ in MIGRATION.START}), "never twice"
+    kept = qdb.execute(text(
+        "SELECT answer, updated_by FROM knowledge_entries WHERE workspace_id = "
+        ":w AND question = 'What are the golden cases?'"),
+        {"w": str(DEFAULT_WORKSPACE_ID)}).one()
+    assert tuple(kept) == ("Our own answer", "admin"), "not replaced"
 
 
 # ---- the harness rows ---------------------------------------------------
