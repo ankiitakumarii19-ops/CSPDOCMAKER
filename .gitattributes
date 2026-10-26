@@ -1,2 +1,4 @@
 # Shell scripts run on Linux: always LF, whatever the editor's OS.
 *.sh text eol=lf
+# The push check runs under sh: Windows line endings would break it (No. 150).
+backend/scripts/git-hooks/* text eol=lf
