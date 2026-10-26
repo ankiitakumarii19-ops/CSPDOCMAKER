@@ -856,7 +856,19 @@ async def csp_summary(
                          else "pending"),
         })
 
+    # Where each automatically filled value came from (No. 146). The panel
+    # still opens if this cannot be read; the failure is logged.
+    from app.services import field_quality
+    try:
+        sources = await session.run_sync(field_quality.sources_for, csp_id)
+    except Exception as e:
+        sources = None
+        logger.error("admin_router.csp_summary: %s — could not read where its "
+                     "values came from: %s: %s", csp_id, type(e).__name__, e,
+                     exc_info=True)
+
     return {
         "csp": CSPDetailResponse.model_validate(csp).model_dump(mode="json"),
         "documents": documents,
+        "sources": sources,
     }

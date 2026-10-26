@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
-import type { ApiError, CSPDetail } from "../lib/api";
+import type { ApiError, CSPDetail, FieldSource } from "../lib/api";
 
 type Summary = Awaited<ReturnType<typeof api.cspSummary>>;
 
@@ -26,6 +26,35 @@ const DELIVERY: Record<string, { text: string; className: string }> = {
     className: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
   },
 };
+
+const CHECKED: Record<FieldSource["status"], string> = {
+  auto: "not checked by anyone yet",
+  confirmed: "confirmed",
+  corrected: "corrected",
+};
+
+/** "From INFO tab · not checked by anyone yet", with the reason on hover. */
+function SourceNote({ source }: { source?: FieldSource }) {
+  if (!source) return null;
+  const tone =
+    source.status === "corrected"
+      ? "text-amber-600 dark:text-amber-400"
+      : source.status === "confirmed"
+      ? "text-green-700 dark:text-green-400"
+      : "text-gray-400";
+  const how = source.status === "auto" ? "" : source.checked_via ? ` on ${source.checked_via}` : "";
+  const title =
+    `${source.detail}` +
+    (source.status === "corrected" ? `\nThe app had filled: ${source.auto_value}` : "") +
+    (source.checked_at ? `\n${CHECKED[source.status]} ${new Date(source.checked_at).toLocaleString("en-IN")}` : "");
+  return (
+    <span className={`block text-[11px] leading-tight ${tone}`} title={title}>
+      <i className="fas fa-circle-info mr-1"></i>
+      From {source.source_label} · {CHECKED[source.status]}
+      {how}
+    </span>
+  );
+}
 
 function day(iso: string | null) {
   if (!iso) return "";
@@ -216,25 +245,37 @@ export default function CspSearch() {
                   </p>
                 </div>
                 <dl className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  {[
-                    ["Branch", [csp.branch_name, csp.branch_code].filter(Boolean).join(", ")],
-                    ["Location", [csp.district, csp.state].filter(Boolean).join(", ")],
-                    ["LHO", csp.lho],
-                    ["AO", csp.ao],
-                    ["Mobile", csp.mobile],
-                    ["Email", csp.email],
-                    ["DC", csp.dc],
-                    ["ASM", csp.asm_name],
-                    ["Assigned RM", csp.rm_name],
-                  ].map(([label, value]) => (
-                    <div key={label as string} className="flex justify-between gap-3">
+                  {(
+                    [
+                      ["Branch", [csp.branch_name, csp.branch_code].filter(Boolean).join(", "), []],
+                      ["Location", [csp.district, csp.state].filter(Boolean).join(", "), ["state"]],
+                      ["LHO", csp.lho, ["lho"]],
+                      ["AO", csp.ao, ["ao"]],
+                      ["RBO", csp.rbo_name, ["rbo_name"]],
+                      ["Mobile", csp.mobile, []],
+                      ["Email", csp.email, ["email"]],
+                      ["Address", csp.address, ["address"]],
+                      ["DC", csp.dc, ["dc"]],
+                      ["ASM", csp.asm_name, ["asm_name"]],
+                      ["Assigned RM", csp.rm_name, ["rm_name"]],
+                    ] as [string, string | null | undefined, string[]][]
+                  ).map(([label, value, fields]) => (
+                    <div key={label} className="flex justify-between gap-3">
                       <dt className="text-gray-500">{label}</dt>
                       <dd className="text-gray-900 dark:text-white text-right break-all">
                         {value || <span className="text-gray-400">—</span>}
+                        {fields.map((f) => (
+                          <SourceNote key={f} source={summary.sources?.[f]} />
+                        ))}
                       </dd>
                     </div>
                   ))}
                 </dl>
+                {summary.sources === null && (
+                  <p className="px-5 pb-3 text-xs text-amber-600 dark:text-amber-400">
+                    Where these values came from could not be read just now.
+                  </p>
+                )}
 
                 <table className="w-full text-left border-collapse border-t border-gray-200 dark:border-gray-700">
                   <thead>

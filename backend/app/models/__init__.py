@@ -32,8 +32,11 @@ from app.models.whatsapp_message import WhatsAppMessage
 from app.models.knowledge import KnowledgeEntry, KnowledgeMiss
 from app.models.source_sheet import SourceSheetState
 from app.models.email_message import EmailMessage
+from app.models.field_provenance import FieldCorrection, FieldProvenance
 
 __all__ = [
+    "FieldProvenance",
+    "FieldCorrection",
     "WhatsAppMessage",
     "KnowledgeEntry",
     "KnowledgeMiss",

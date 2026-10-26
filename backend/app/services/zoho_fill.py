@@ -89,4 +89,22 @@ def fill_from_zoho(session, record) -> Dict[str, str]:
     if filled:
         logger.info("zoho_fill: %s — filled %s from Zoho Lead %s",
                     record.csp_id, sorted(filled), lead.get("id"))
+        _record_provenance(session, record.csp_id, filled, lead)
     return filled
+
+
+def _record_provenance(session, csp_id: str, filled: Dict[str, str],
+                       lead: dict) -> None:
+    """Keep where each value came from (No. 146). The values are already
+    in the sheet; failing to note their source must not undo that."""
+    from app.services import field_quality
+    try:
+        with session.begin_nested():
+            for f, v in filled.items():
+                field_quality.record_fill(
+                    session, csp_id, f, v, "zoho",
+                    f"Zoho Lead {lead.get('id', '')}: {FROM_ZOHO[f][0]}")
+    except Exception as e:
+        logger.error("zoho_fill: %s — filled %s from Zoho but could not "
+                     "record where they came from: %s: %s", csp_id,
+                     sorted(filled), type(e).__name__, e, exc_info=True)

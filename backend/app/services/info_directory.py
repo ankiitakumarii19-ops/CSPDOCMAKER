@@ -40,7 +40,7 @@ that remains the authorization sheet's job alone.
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -271,25 +271,32 @@ class InfoDirectory:
         Two ASMs cover the Chandigarh LHO, so LHO alone cannot answer for them
         — but LHO plus State can.
         """
+        return self.territory_match(role, lho, state)[0]
+
+    def territory_match(
+        self, role: str, lho: str = "", state: str = ""
+    ) -> Tuple[Optional[Person], str]:
+        """find_by_territory, plus what decided it, in words (No. 146):
+        "LHO 'X' and State 'Y'", "LHO 'X'" or "State 'Y'"."""
         candidates = self._of_role(role)
 
         if lho and state:
             match = self._only([p for p in candidates
                                 if p.covers_lho(lho) and p.covers_state(state)])
             if match:
-                return match
+                return match, f"LHO '{lho}' and State '{state}'"
 
         if lho:
             match = self._only([p for p in candidates if p.covers_lho(lho)])
             if match:
-                return match
+                return match, f"LHO '{lho}'"
 
         if state:
             match = self._only([p for p in candidates if p.covers_state(state)])
             if match:
-                return match
+                return match, f"State '{state}'"
 
-        return None
+        return None, ""
 
     def find_ao(self, branch_name: str = "", district: str = "",
                 state: str = "") -> str:
@@ -303,6 +310,10 @@ class InfoDirectory:
 
     def _from_ao_block(self, attribute: str, branch_name: str,
                        district: str, state: str) -> str:
+        return self.ao_block_match(attribute, branch_name, district, state)[0]
+
+    def ao_block_match(self, attribute: str, branch_name: str,
+                       district: str, state: str) -> Tuple[str, str]:
         """The branch decides first (a branch has one AO and RBO); the
         district only when the branch is not listed. Either answers only
         when every match gives the same value — Lucknow district is split
@@ -322,18 +333,26 @@ class InfoDirectory:
             found = {normalize(getattr(a, attribute)): getattr(a, attribute)
                      for a in areas if matches(a, key)}
             if len(found) == 1:
-                return next(iter(found.values()))
-        return ""
+                by = (f"branch '{branch_name.strip()}'"
+                      if key == place_key(branch_name)
+                      else f"district '{district.strip()}'")
+                return next(iter(found.values())), by
+        return "", ""
 
     # ---- what a CSP row is missing --------------------------------------
 
-    def fill_missing(self, mapped: Dict[str, str]) -> Dict[str, str]:
+    def fill_missing(self, mapped: Dict[str, str],
+                     why: Optional[Dict[str, str]] = None) -> Dict[str, str]:
         """Return the values INFO can supply for blanks in one CSP row.
 
         Only genuinely empty fields are filled: the CSP sheet stays the source
         of truth wherever it has a value. Circle Head is not returned because
         no CSP column or document field holds one.
+
+        `why`, when given, receives {field: the reason in words} for every
+        value returned — shown on the CSP's panel (No. 146).
         """
+        why = {} if why is None else why
         district = mapped.get("district", "")
         lho = mapped.get("lho", "")
         state = mapped.get("state", "")
@@ -355,51 +374,66 @@ class InfoDirectory:
         if blank("lho") or blank("state"):
             coordinator = self.find_by_district(DC, district)
             if coordinator:
+                because = (f"INFO DC block: district '{district}' is in one "
+                           f"LHO and State")
                 if blank("lho") and coordinator.sole_lho():
                     lho = filled["lho"] = coordinator.sole_lho()
+                    why["lho"] = because
                 if blank("state") and coordinator.sole_state():
                     state = filled["state"] = coordinator.sole_state()
+                    why["state"] = because
 
         # District Coordinator — matched on the district they cover.
         if blank("dc") or blank("dc_email") or blank("dc_contact"):
             person = self.find_by_district(DC, district)
             if person:
+                because = f"INFO DC block, by district '{district}'"
                 if blank("dc") and person.name:
                     filled["dc"] = person.name
+                    why["dc"] = because
                 if blank("dc_email") and person.email:
                     filled["dc_email"] = person.email
+                    why["dc_email"] = because
                 if blank("dc_contact") and person.mobile:
                     filled["dc_contact"] = person.mobile
+                    why["dc_contact"] = because
 
         # ASM — matched on territory.
         if blank("asm_name") or blank("asm_email") or blank("asm_contact"):
-            person = self.find_by_territory(ASM, lho, state)
+            person, by = self.territory_match(ASM, lho, state)
             if person:
+                because = f"INFO ASM block, by {by}"
                 if blank("asm_name") and person.name:
                     filled["asm_name"] = person.name
+                    why["asm_name"] = because
                 if blank("asm_email") and person.email:
                     filled["asm_email"] = person.email
+                    why["asm_email"] = because
                 if blank("asm_contact") and person.mobile:
                     filled["asm_contact"] = person.mobile
+                    why["asm_contact"] = because
 
         # AO and RBO Name — from the AO block, by branch then district
         # (No. 141, No. 142).
         branch = mapped.get("branch_name", "")
         if blank("ao"):
-            ao = self.find_ao(branch, district, state)
+            ao, by = self.ao_block_match("ao", branch, district, state)
             if ao:
                 filled["ao"] = ao
+                why["ao"] = f"INFO AO block, by {by}"
         if blank("rbo_name"):
-            rbo = self.find_rbo(branch, district, state)
+            rbo, by = self.ao_block_match("rbo", branch, district, state)
             if rbo:
                 filled["rbo_name"] = rbo
+                why["rbo_name"] = f"INFO AO block, by {by}"
 
         # Circle Head — matched on territory. No document prints one; it is
         # stored so an admin can filter by it.
         if blank("circle_head"):
-            person = self.find_by_territory(CIRCLE_HEAD, lho, state)
+            person, by = self.territory_match(CIRCLE_HEAD, lho, state)
             if person and person.name:
                 filled["circle_head"] = person.name
+                why["circle_head"] = f"INFO Circle Head block, by {by}"
 
         # The RM is deliberately NOT filled here. rm_resolution decides the
         # owner, and it distinguishes "the CSP sheet named an RM" (matched by

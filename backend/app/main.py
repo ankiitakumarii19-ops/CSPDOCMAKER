@@ -299,4 +299,6 @@ app.include_router(public_photo_router)     # PUBLIC — signed 1-day photo link
 from app.routers.email_message_router import public_router as email_open_router, router as email_message_router
 app.include_router(email_open_router)       # PUBLIC — the 'opened' picture in each email (No. 127)
 app.include_router(email_message_router)    # /api/admin/email-messages — Admin + Super Admin (No. 127)
+from app.routers.quality_router import router as quality_router
+app.include_router(quality_router)          # /api/quality/freshness (all roles), /api/admin/quality/* — Admin + Super Admin (No. 146)
 

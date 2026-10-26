@@ -332,6 +332,23 @@ async def submit_form(
                 "the sheet was updated: %s: %s", request_row.csp_id,
                 type(e).__name__, e, exc_info=True)
 
+        # What the CSP kept or changed of the values the app had filled in
+        # by itself (No. 146) — only what reached the sheet, which is what
+        # the sync will see. Logged on failure; the CSP is not told.
+        if written:
+            from app.services import field_quality
+            try:
+                await session.run_sync(field_quality.record_check,
+                                       record.csp_id, written, "csp_form",
+                                       "CSP")
+                await session.commit()
+            except Exception as e:
+                await session.rollback()
+                logger.error(
+                    "csp_form_router.submit_form: CSP %s — could not record "
+                    "which auto-filled values they kept or corrected: %s: %s",
+                    request_row.csp_id, type(e).__name__, e, exc_info=True)
+
         if sheet_error is None:
             await _documents_after_verification(session, record)
 

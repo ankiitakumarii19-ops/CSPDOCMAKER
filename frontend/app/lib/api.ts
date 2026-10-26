@@ -622,6 +622,77 @@ export interface EmailReport {
   note: string;
 }
 
+// ---- Data quality (No. 146) ----
+
+export type FreshnessStatus = "ok" | "stale" | "stuck" | "failed" | "never";
+
+export interface FreshnessBadge {
+  source: string;
+  label: string;
+  status: FreshnessStatus;
+  last_success_at: string | null;
+  minutes_since_success: number | null;
+  expected_every_minutes: number;
+  unfinished_runs: number;
+  /** Admins and Super Admins only, when the newest read failed. */
+  error?: string;
+}
+
+/** Where one automatically filled value came from (CSP panel). */
+export interface FieldSource {
+  source: string;
+  source_label: string;
+  detail: string;
+  status: "auto" | "confirmed" | "corrected";
+  auto_value: string;
+  checked_via: string | null;
+  checked_at: string | null;
+  filled_at: string | null;
+}
+
+export interface QualityCounts {
+  auto: number;
+  confirmed: number;
+  corrected: number;
+  withdrawn: number;
+  filled: number;
+  acceptance_rate: number | null;
+  checked_kept_rate: number | null;
+  avg_edit_distance: number | null;
+}
+
+export interface QualityFieldRow extends QualityCounts {
+  field: string;
+  label: string;
+  source: string;
+  source_label: string;
+}
+
+export interface QualityScoreboard {
+  total: QualityCounts;
+  fields: QualityFieldRow[];
+  trend: Array<{
+    week: string;
+    filled: number;
+    corrections: number;
+    avg_edit_distance: number | null;
+  }>;
+}
+
+export interface QualityCorrection {
+  csp_id: string;
+  field: string;
+  label: string;
+  source_label: string;
+  auto_value: string;
+  old_value: string;
+  new_value: string;
+  edit_distance: number;
+  changed_via: string;
+  changed_by: string | null;
+  created_at: string | null;
+}
+
 // ---- Workspace Rules (No. 120) ----
 
 export interface WorkspaceRulesInput {
@@ -1064,6 +1135,8 @@ class ApiClient {
         generated_at: string | null;
         delivery: "mailed" | "failed" | "pending" | "not_for_this_csp";
       }>;
+      /** Where each auto-filled value came from (No. 146); null if unreadable. */
+      sources: Record<string, FieldSource> | null;
     }>(`/admin/csp/${encodeURIComponent(cspId)}/summary`);
   }
 
@@ -1212,6 +1285,26 @@ class ApiClient {
     Object.entries(filter).forEach(([k, v]) => v && params.set(k, v));
     const qs = params.toString();
     return this.request<EmailReport>(`/admin/email-messages${qs ? `?${qs}` : ""}`);
+  }
+
+  // ---- Data quality (No. 146) ----
+  async freshness() {
+    return this.request<{ sources: FreshnessBadge[] }>("/quality/freshness");
+  }
+
+  async qualityScoreboard(weeks = 8) {
+    return this.request<QualityScoreboard>(
+      `/admin/quality/scoreboard?weeks=${weeks}`
+    );
+  }
+
+  async qualityCorrections(params: { limit?: number; offset?: number; field?: string } = {}) {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => v !== undefined && v !== "" && query.set(k, String(v)));
+    const qs = query.toString();
+    return this.request<{ total: number; corrections: QualityCorrection[] }>(
+      `/admin/quality/corrections${qs ? `?${qs}` : ""}`
+    );
   }
 
   async checkEmailBounces() {

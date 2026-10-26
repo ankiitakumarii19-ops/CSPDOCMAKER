@@ -189,6 +189,21 @@ the sheet.
 **Turn the laptop's copy off** once the server is live. Two copies reading
 the same sheet could both act on the same new CSP.
 
+**Before every push that will be deployed** (No. 146), on the laptop, with
+Docker's Postgres running: the golden cases — about 60 fixed CSP situations
+with their known right answers (KO / Sub-KO documents, AO / RBO / DC mapping,
+who owns the CSP, old or new, on hold or not, what the CSP is asked, WhatsApp
+or email). Takes about 15 seconds. Do not deploy if any fails.
+
+```bash
+cd backend
+PYTHONPATH=. .venv/Scripts/python.exe -m pytest -q tests/test_golden_cases.py
+```
+
+The cases are in `backend/tests/golden/cases.json` (made-up people, real
+situations). If a rule is changed on purpose, its case is changed in the same
+commit.
+
 **Updating the server** after a `git push` from the laptop:
 
 ```bash

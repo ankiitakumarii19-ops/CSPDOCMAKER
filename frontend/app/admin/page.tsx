@@ -16,6 +16,8 @@ import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
 import WorkspaceRules from "./WorkspaceRules";
 import EmailMessages from "./EmailMessages";
+import DataQuality from "./DataQuality";
+import FreshnessBadges from "../components/FreshnessBadges";
 import DashboardView from "./DashboardView";
 import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
@@ -276,6 +278,17 @@ export default function AdminDashboard() {
           >
             <i className="fas fa-envelope w-5 text-center"></i> Emails
           </button>
+          {/* What people kept or corrected of the app's own fills (No. 146). */}
+          <button
+            onClick={() => setAdminRoute("quality")}
+            className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+              adminRoute === "quality"
+                ? "bg-navy-800 text-white border-l-4 border-eko"
+                : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+            }`}
+          >
+            <i className="fas fa-clipboard-check w-5 text-center"></i> Data quality
+          </button>
           {canConfigure && (
             <button
               onClick={() => setAdminRoute("build")}
@@ -412,6 +425,7 @@ export default function AdminDashboard() {
             <CspSearch />
           </div>
           <div className="flex items-center gap-4">
+            <FreshnessBadges />
             <button
               onClick={toggleTheme}
               className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -473,6 +487,7 @@ export default function AdminDashboard() {
             )}
             {adminRoute === "whatsapp" && <WhatsAppMessages />}
             {adminRoute === "emails" && <EmailMessages />}
+            {adminRoute === "quality" && <DataQuality />}
             {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
             {canConfigure && adminRoute === "messaging" && <Messaging />}
             {canConfigure && adminRoute === "templates" && <DocumentTemplates />}

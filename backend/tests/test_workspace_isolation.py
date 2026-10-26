@@ -192,7 +192,7 @@ async def test_every_table_holding_customer_data_is_scoped():
         "AgentFinding", "AgentRun", "AgentState", "AuditLog",
         "AuthorizationRecord", "CSPPhoto", "CSPRecord", "Dashboard", "DataRequest",
         "KnowledgeEntry", "KnowledgeMiss", "SourceSheetState",
-        "EmailMessage",
+        "EmailMessage", "FieldProvenance", "FieldCorrection",
         "DataSource", "DocumentTemplate", "EmailJob", "MessageCampaign",
         "MessageChannel", "MessageTemplate", "ProcessingJob", "RMAlert",
         "StoredDocument", "SyncRun", "User", "WhatsAppMessage", "WorkspaceMember",

@@ -55,7 +55,7 @@ def sync_csp_data(self):
     from app.models.csp_record import CSPRecord
     from app.models.enums import UserRole
     from app.models.sync_run import SyncRun
-    from app.services import csp_mapping, rm_resolution
+    from app.services import csp_mapping, field_quality, rm_resolution
     from app.services.csp_gsheet_service import read_csp_sheet
     from app.services.info_directory import InfoDirectory
 
@@ -107,12 +107,22 @@ def sync_csp_data(self):
             )
 
         enriched = 0
+        # {CSP code: {field: why}} for every blank INFO filled this run —
+        # kept as each value's provenance (No. 146).
+        info_why = {}
         if info is not None:
             for mapped in mapped_rows:
-                supplied = info.fill_missing(mapped)
+                why = {}
+                supplied = info.fill_missing(mapped, why=why)
                 if supplied:
                     mapped.update(supplied)
                     enriched += 1
+                    code = csp_mapping.csp_id_from_row(mapped)
+                    if code:
+                        info_why[code] = why
+
+        # Rows saved this run, measured after the loop (No. 146).
+        saved_rows = []
 
         # RM resolution inputs: authorized RM names, and the LHO → RM map
         # learned from rows that do name an RM.
@@ -145,9 +155,13 @@ def sync_csp_data(self):
             # reads a populated rm_name as "the sheet named this person" and
             # matches it by name, which the two sheets spell differently.
             if not (mapped.get("rm_name") or "").strip():
-                person, _ = rm_resolution.info_rm(mapped, info)
+                person, by = rm_resolution.info_rm(mapped, info)
                 if person is not None and person.name:
                     mapped["rm_name"] = person.name
+                    info_why.setdefault(csp_id, {})["rm_name"] = (
+                        "INFO RM block, by LHO"
+                        if by == rm_resolution.BY_INFO_LHO
+                        else "INFO RM block, by State")
 
             # Each row is saved on its own (No. 144): one cell the database
             # refuses — a mobile cell holding two numbers was too long —
@@ -209,12 +223,38 @@ def sync_csp_data(self):
                     str(e).splitlines()[0][:300], exc_info=True)
                 continue
 
+            saved_rows.append((csp_id, mapped))
+
             if is_new:
                 created += 1
                 if record.origin == "new":
                     logger.info("csp_sync_worker: new CSP detected: %s", csp_id)
             elif changed:
                 updated += 1
+
+        # Where each auto-filled value came from, and whether someone has
+        # since changed it in the sheet (No. 146). Measured once, after
+        # every row is saved, in its own savepoint: it adds no work to a
+        # row's save, and if it fails it is logged and undone on its own —
+        # the sync's rows are kept.
+        quality_errors = sheet_corrections = 0
+        quality = session.begin_nested()
+        try:
+            known = field_quality.load(session)
+            for csp_id, mapped in saved_rows:
+                sheet_corrections += field_quality.observe_sync(
+                    session, known, csp_id, mapped,
+                    info_why.get(csp_id, {}), now=now)
+            session.flush()
+            quality.commit()
+        except Exception as e:
+            quality.rollback()
+            quality_errors, sheet_corrections = 1, 0
+            logger.error(
+                "csp_sync_worker: the CSPs were synced, but where their "
+                "auto-filled values came from could not be recorded this "
+                "run: %s: %s", type(e).__name__,
+                str(e).splitlines()[0][:300], exc_info=True)
 
         run.status = "completed"
         run.rows_read = len(rows)
@@ -250,6 +290,8 @@ def sync_csp_data(self):
         "updated_csps": updated,
         "skipped_rows": skipped,
         "rows_enriched_from_info": enriched,
+        "sheet_corrections_found": sheet_corrections,
+        "quality_errors": quality_errors,
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     logger.info(

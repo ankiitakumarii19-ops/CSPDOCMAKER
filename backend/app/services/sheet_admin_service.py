@@ -174,6 +174,24 @@ def _header(spreadsheet_id: str, tab: str) -> List[str]:
     return [str(h).strip() for h in (values[0] if values else [])]
 
 
+def read_row(spreadsheet_id: str, tab: str, row_number: int) -> Dict[str, str]:
+    """One row as {header: value}. Two small reads, not the whole tab."""
+    header = _header(spreadsheet_id, tab)
+    try:
+        values = _service().spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f"{_quote_tab(tab)}!{row_number}:{row_number}",
+        ).execute().get("values", [[]])
+    except Exception as e:
+        _reset()
+        raise SheetAdminError(
+            f"Could not read {tab!r} row {row_number}: "
+            f"{type(e).__name__}: {e}") from e
+    row = values[0] if values else []
+    return {h: (str(row[i]).strip() if i < len(row) else "")
+            for i, h in enumerate(header) if h}
+
+
 def update_row(spreadsheet_id: str, tab: str, row_number: int,
                cells: Dict[str, str]) -> Tuple[Dict[str, str], List[str]]:
     """Write these columns onto this row. Returns (written, unknown columns).

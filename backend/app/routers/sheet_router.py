@@ -388,8 +388,44 @@ async def update_row(
 
     logger.info("sheet_router.update_row: %s row %d changed by %s (%s)",
                 tab, row_number, _who(user), ", ".join(sorted(written)))
+    await _note_corrections(session, user, _spreadsheet(source), tab,
+                            row_number, written)
     return {"row_number": row_number, "written": written,
             "unknown_columns": unknown}
+
+
+async def _note_corrections(session: AsyncSession, user, spreadsheet: str,
+                            tab: str, row_number: int,
+                            written: Dict[str, str]) -> None:
+    """An edit to a CSP row that changes a value the app filled in by
+    itself is a correction by this person (No. 146). The edit is already in
+    the sheet; failing to note it is logged — the next sync still notices
+    the change, only without knowing who made it."""
+    from app.services import csp_mapping, field_quality
+
+    settings = get_settings()
+    if (not written or spreadsheet != settings.google_sheets_csp_sheet_id
+            or tab not in (settings.google_sheets_csp_sheet_name,
+                           settings.google_sheets_subko_sheet_name)):
+        return
+    try:
+        values = csp_mapping.map_sheet_row(written)
+        code = values.get(csp_mapping.IDENTITY_FIELD) or \
+            csp_mapping.map_sheet_row(sheets.read_row(
+                spreadsheet, tab, row_number)).get(csp_mapping.IDENTITY_FIELD)
+        if not code:
+            return
+        # The editor sends the whole row back, so an unchanged cell is not
+        # a confirmation — only a changed one counts.
+        await session.run_sync(field_quality.record_check, code, values,
+                               "sheet_editor", _who(user), False)
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logger.error("sheet_router.update_row: %s row %d was saved, but "
+                     "whether it corrected an auto-filled value could not be "
+                     "recorded: %s: %s", tab, row_number, type(e).__name__,
+                     e, exc_info=True)
 
 
 @router.post("/{source_id}/tabs/{tab}/rows",

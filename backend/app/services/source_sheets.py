@@ -382,17 +382,24 @@ def run(session) -> Summary:
     # Rows to add to CSPDATA, grouped by tab.
     to_add: Dict[str, List[dict]] = {}
     added: List[tuple] = []
+    planned: Dict[str, Dict[str, str]] = {}
+    from_address_tab = set()
 
     def plan(c: str, cells: Dict[str, str], origin: str):
         rbo_name(cells, by_lead.get(c))
+        tab_address = False
         if (origin == "baseline" and addresses and addresses.get(c)
                 and not cells.get("Address")):
             cells["Address"] = addresses[c]
+            tab_address = True
         if not cells.get("CSP Name"):
             summary.skipped.append(f"{c}: no CSP Name — not added to CSPDATA")
             return
         to_add.setdefault(s.csp_tab_for(c), []).append(cells)
         added.append((c, origin))
+        planned[c] = cells
+        if tab_address:
+            from_address_tab.add(c)
 
     for c in summary.went_live:
         st = states[c]
@@ -435,6 +442,7 @@ def run(session) -> Summary:
             summary.imported_new.append(c)
         else:
             summary.imported_old += 1
+    _record_import_fills(session, added, planned, from_address_tab, states)
 
     # Old CSPs copied in earlier: their EMPTY Address cells from the tab.
     # CSPs that were in CSPDATA before this job never are (21 Oct 2026).
@@ -448,6 +456,8 @@ def run(session) -> Summary:
                             updated_count=len(filled),
                             finished_at=now))
         fill = {c: addresses[c] for c in filled}
+        _record_fills(session, fill, "address_tab",
+                      f"Address tab ({s.address_sheet_tab}), by CSP code")
     else:
         fill = {}
 
@@ -471,6 +481,61 @@ def run(session) -> Summary:
         logger.warning("source_sheets: skipped — %s", line)
     logger.info("source_sheets: %s", summary.text())
     return summary
+
+
+def _record_import_fills(session, added, planned, from_address_tab,
+                         states) -> None:
+    """Note which cells of the rows just copied into CSPDATA were filled
+    automatically — from the Zoho Lead or the Address tab — and why
+    (No. 146). Logged, never raised: the rows are in the sheet already."""
+    from app.services import csp_mapping, field_quality
+    if not added:
+        return
+    s = get_settings()
+    try:
+        with session.begin_nested():
+            known = field_quality.load(session, [c for c, _ in added])
+            for c, origin in added:
+                cells = planned.get(c, {})
+                zoho = (states[c].zoho_filled or {}) if origin == "new" else {}
+                for column, key in zoho.items():
+                    if column.startswith("_"):
+                        continue        # _lead_id: bookkeeping, not a cell
+                    for field, value in csp_mapping.map_sheet_row(
+                            {column: cells.get(column, "")}).items():
+                        field_quality.record_fill(
+                            session, c, field, value, "zoho",
+                            f"Zoho Lead {zoho.get('_lead_id', '')}: {key}",
+                            known=known)
+                if c in from_address_tab:
+                    field_quality.record_fill(
+                        session, c, "address", cells.get("Address", ""),
+                        "address_tab",
+                        f"Address tab ({s.address_sheet_tab}), by CSP code",
+                        known=known)
+    except Exception as e:
+        logger.error("source_sheets: copied %d CSP(s) into CSPDATA but could "
+                     "not record which cells were filled automatically: "
+                     "%s: %s", len(added), type(e).__name__, e, exc_info=True)
+
+
+def _record_fills(session, addresses: Dict[str, str], source: str,
+                  detail: str) -> None:
+    """Note where these just-written addresses came from (No. 146). They
+    are in the sheet already; failing to note it is logged, not raised."""
+    from app.services import field_quality
+    if not addresses:
+        return
+    try:
+        with session.begin_nested():
+            known = field_quality.load(session, addresses)
+            for code, value in addresses.items():
+                field_quality.record_fill(session, code, "address", value,
+                                          source, detail, known=known)
+    except Exception as e:
+        logger.error("source_sheets: wrote %d address(es) but could not "
+                     "record where they came from: %s: %s", len(addresses),
+                     type(e).__name__, e, exc_info=True)
 
 
 def state_for_new_record(session, code: str):

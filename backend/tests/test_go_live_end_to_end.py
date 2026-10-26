@@ -85,7 +85,7 @@ def world(migrated_db, monkeypatch):
 
     class FakeInfo:
         """The INFO tab: DC by district, ASM by territory."""
-        def fill_missing(self, mapped):
+        def fill_missing(self, mapped, why=None):
             out = {}
             for field, value in (("dc", "Anish Kumar"),
                                  ("dc_email", "anish@example.com"),
@@ -95,6 +95,8 @@ def world(migrated_db, monkeypatch):
                                  ("asm_name", "Munna Pathak")):
                 if not mapped.get(field):
                     out[field] = value
+                    if why is not None:
+                        why[field] = "INFO (test stand-in)"
             return out
 
         def find_by_territory(self, *a, **k):

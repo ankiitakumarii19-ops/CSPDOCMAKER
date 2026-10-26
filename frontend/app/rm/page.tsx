@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../components/BrandLogo";
+import FreshnessBadges from "../components/FreshnessBadges";
 import AssistantChat from "../components/AssistantChat";
 import CspPhoto from "../components/CspPhoto";
 import Database from "../admin/Database";
@@ -350,6 +351,8 @@ export default function RMDashboard() {
           </nav>
         </div>
         <div className="flex items-center gap-4">
+          {/* When the sheets were last read (No. 146). */}
+          <FreshnessBadges />
           {/* Notifications Dropdown */}
           <div className="relative">
             <button
