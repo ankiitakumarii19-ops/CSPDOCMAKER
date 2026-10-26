@@ -605,11 +605,35 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
         f"Email: {em_failed} failed, {em_bounced} bounced",
         "attention" if problems else "ok")
 
+    from app.models.feedback_loop import ContactFix, QualitySuggestion
+    sug = dict(session.execute(select(QualitySuggestion.status, func.count())
+                               .group_by(QualitySuggestion.status)).all())
+    row("mapping_loop", "Suggested INFO fixes (loop 1)",
+        "The same correction to an INFO value seen on several CSPs",
+        "Shown on this page; an Admin accepts (the team fixes INFO) or "
+        "dismisses; marked fixed once INFO gives the right value",
+        f"{sug.get('open', 0)} waiting for a decision · "
+        f"{sug.get('accepted', 0)} accepted, INFO not fixed yet · "
+        f"{sug.get('fixed', 0)} fixed",
+        "attention" if sug.get("open") or sug.get("accepted") else
+        "ok" if sug else "empty")
+
+    fixes = dict(session.execute(select(ContactFix.status, func.count())
+                                 .group_by(ContactFix.status)).all())
+    waiting = sum(fixes.get(k, 0) for k in ("open", "asked", "corrected"))
+    row("contact_loop", "Contact fixes (loop 2)",
+        "WhatsApp numbers that did not work and emails that bounced",
+        "The CSP is asked for the right one on the other channel, once; "
+        "what failed is sent again when it is corrected",
+        f"{waiting} in progress · {fixes.get('resent', 0) + fixes.get('done', 0)}"
+        f" fixed · {fixes.get('stopped', 0)} stopped",
+        "attention" if fixes.get("stopped") else "ok" if fixes else "empty")
+
     misses = session.execute(select(func.count()).select_from(KnowledgeMiss)).scalar() or 0
     last_miss = session.execute(select(func.max(KnowledgeMiss.last_asked_at))).scalar()
     row("chat", "Unanswered chat questions",
         "Questions the chat could not answer from the Knowledge Base",
-        "Counted so an Admin can add the answer (Admin → Knowledge Base)",
+        "Answer them below (loop 3); the chat then answers everyone who asks",
         f"{misses} different questions; last asked {_ago(last_miss, now)}"
         if misses else "none",
         "attention" if misses else "ok")
@@ -618,7 +642,8 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
     row("golden", "Golden cases",
         "Fixed CSP situations with their right answers: documents, mapping, "
         "owner, holds, numbers, address, what is asked, old vs new",
-        "Run on the laptop before every push; a failure stops the deploy",
+        "Run on the laptop before every push — a failure stops the push "
+        "(loop 4); every mistake fixed adds a case",
         f"{cases} cases in this version" if cases is not None
         else "case file not found",
         "laptop")

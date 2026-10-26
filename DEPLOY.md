@@ -189,6 +189,15 @@ the sheet.
 **Turn the laptop's copy off** once the server is live. Two copies reading
 the same sheet could both act on the same new CSP.
 
+**Once on each computer that pushes** (No. 150, loop 4): install the check
+that runs the golden cases on every `git push` and stops the push if one fails
+(or if they could not run because Docker's Postgres is not started):
+
+```bash
+cd backend
+.venv/Scripts/python.exe scripts/install_git_hooks.py
+```
+
 **Before every push that will be deployed** (No. 146), **on the laptop —
 not on the server** (the server has no test setup; this check is what stops
 a broken change from getting there), with Docker's Postgres running: the

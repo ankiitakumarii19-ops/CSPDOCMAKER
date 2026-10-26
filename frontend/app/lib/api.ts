@@ -679,6 +679,40 @@ export interface QualityScoreboard {
   }>;
 }
 
+/** Loop 1 (No. 150): a suggested fix to INFO from repeated corrections. */
+export interface InfoSuggestion {
+  id: string;
+  field: string;
+  label: string;
+  rule: string;
+  from_value: string;
+  to_value: string;
+  csps: { csp_id: string; name: string }[];
+  still_wrong: number;
+  status: "open" | "accepted" | "fixed" | "dismissed";
+  decided_by: string | null;
+  decided_at: string | null;
+  fixed_at: string | null;
+}
+
+/** Loop 2 (No. 150): a bad WhatsApp number or a bounced email, and what was done. */
+export interface ContactFixRow {
+  csp_id: string;
+  csp_name: string;
+  problem: string;
+  problem_label: string;
+  bad_value: string;
+  failed_kind: string;
+  status: "open" | "asked" | "corrected" | "resent" | "done" | "stopped";
+  asked_via: string | null;
+  asked_at: string | null;
+  corrected_value: string | null;
+  resent_at: string | null;
+  tries: number;
+  note: string;
+  updated_at: string | null;
+}
+
 /** One way the app checks its own work (Data quality → Harness, No. 149). */
 export interface HarnessCheck {
   key: string;
@@ -1321,6 +1355,25 @@ class ApiClient {
   // ---- Data quality (No. 146) ----
   async freshness() {
     return this.request<{ sources: FreshnessBadge[] }>("/quality/freshness");
+  }
+
+  async qualitySuggestions(status = "") {
+    return this.request<{ suggestions: InfoSuggestion[]; min_csps: number }>(
+      `/admin/quality/suggestions${status ? `?status=${status}` : ""}`
+    );
+  }
+
+  async decideSuggestion(id: string, action: "accept" | "dismiss") {
+    return this.request<{ id: string; status: InfoSuggestion["status"] }>(
+      `/admin/quality/suggestions/${encodeURIComponent(id)}/${action}`,
+      { method: "POST" }
+    );
+  }
+
+  async contactFixes(status = "") {
+    return this.request<{ totals: Record<string, number>; fixes: ContactFixRow[] }>(
+      `/admin/quality/contact-fixes${status ? `?status=${status}` : ""}`
+    );
   }
 
   async qualityHarness() {

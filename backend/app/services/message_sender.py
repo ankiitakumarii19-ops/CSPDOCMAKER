@@ -253,8 +253,13 @@ def ask_for_details(session: Session, record, *,
                     template: Optional[MessageTemplate] = None,
                     verify: bool = False,
                     manual: bool = False,
+                    allow_email: bool = False,
                     ) -> dict:
     """Send one CSP a link to confirm their own details.
+
+    allow_email (No. 150): the contact loop asks by email a CSP whose
+    WhatsApp number did not work, even while CSPs are otherwise asked on
+    WhatsApp only (CSP_DATA_REQUESTS_BY_EMAIL off).
 
     Reuses an open request rather than issuing a second link: being asked
     twice with two different links is confusing, and the first one would
@@ -275,7 +280,7 @@ def ask_for_details(session: Session, record, *,
     channel = channel or choose_channel(session)
     template = template or template_for(session, record, verify)
 
-    if (channel.kind != WHATSAPP
+    if (channel.kind != WHATSAPP and not allow_email
             and not get_settings().csp_data_requests_by_email):
         # Decided 11 Oct 2026 (tracker No. 53): CSPs are asked on WhatsApp
         # only. Until WhatsApp sending works, nobody is asked by email; the

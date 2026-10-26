@@ -189,6 +189,19 @@ class Settings(BaseSettings):
     source_sheets_interval_minutes: int = Field(
         default=5, alias="SOURCE_SHEETS_INTERVAL_MINUTES")
 
+    # ---- the feedback loops (No. 150) --------------------------------
+    # Loop 1: a correction to an INFO-filled value seen on this many CSPs
+    # becomes a suggestion to fix INFO.
+    quality_suggest_min_csps: int = Field(
+        default=2, alias="QUALITY_SUGGEST_MIN_CSPS")
+    # Loop 2: a WhatsApp that did not reach the phone / an email that
+    # bounced — ask the CSP for the right one on the other channel, once,
+    # and send again when it is corrected. Off: CONTACT_LOOP_ENABLED=false.
+    contact_loop_enabled: bool = Field(default=True,
+                                       alias="CONTACT_LOOP_ENABLED")
+    contact_loop_minutes: int = Field(default=30, alias="CONTACT_LOOP_MINUTES")
+    contact_loop_batch: int = Field(default=10, alias="CONTACT_LOOP_BATCH")
+
 
     # WhatsApp every old CSP to verify their details (No. 126), gently: a
     # batch every few minutes, in the day only. Only where the Calling sheet

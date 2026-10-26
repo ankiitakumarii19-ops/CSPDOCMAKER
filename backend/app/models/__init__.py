@@ -33,8 +33,11 @@ from app.models.knowledge import KnowledgeEntry, KnowledgeMiss
 from app.models.source_sheet import SourceSheetState
 from app.models.email_message import EmailMessage
 from app.models.field_provenance import FieldCorrection, FieldProvenance
+from app.models.feedback_loop import ContactFix, QualitySuggestion
 
 __all__ = [
+    "QualitySuggestion",
+    "ContactFix",
     "FieldProvenance",
     "FieldCorrection",
     "WhatsAppMessage",

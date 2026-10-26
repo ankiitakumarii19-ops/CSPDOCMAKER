@@ -1,0 +1,39 @@
+#!/bin/sh
+# Loop 4 (PROJECT-REGISTER No. 150): no push while a golden case fails.
+#
+# Runs backend/tests/test_golden_cases.py before every `git push` from this
+# laptop. A failed case, or cases that could not run (Docker's Postgres not
+# started), stops the push with the reason. Installed by
+# backend/scripts/install_git_hooks.py.
+
+root="$(git rev-parse --show-toplevel)" || exit 1
+cd "$root/backend" || { echo "golden check: no backend folder — push stopped"; exit 1; }
+
+py=".venv/Scripts/python.exe"
+[ -x "$py" ] || py=".venv/bin/python"
+if [ ! -x "$py" ]; then
+  echo "golden check: backend/.venv not found — push stopped."
+  exit 1
+fi
+
+echo "golden check: running the golden cases before the push..."
+out=$(PYTHONPATH=. "$py" -m pytest -q -p no:cacheprovider tests/test_golden_cases.py 2>&1)
+status=$?
+summary=$(echo "$out" | tail -1)
+
+if [ $status -ne 0 ]; then
+  echo "$out" | grep -E "^FAILED" | head -20
+  echo "$summary"
+  echo "golden check: a golden case FAILED — push stopped."
+  echo "Either the change broke a business rule (fix the code), or the rule"
+  echo "changed on purpose (update backend/tests/golden/cases.json in the same commit)."
+  exit 1
+fi
+if echo "$summary" | grep -q "skipped"; then
+  echo "$summary"
+  echo "golden check: the cases could not run — start Docker's Postgres"
+  echo "(docker compose up -d) and push again. Push stopped."
+  exit 1
+fi
+echo "golden check: $summary — pushing."
+exit 0

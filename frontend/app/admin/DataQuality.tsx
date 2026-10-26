@@ -21,6 +21,9 @@ import { useCallback, useEffect, useState } from "react";
 import AutoFilledValues from "./AutoFilledValues";
 import ContextSources from "./ContextSources";
 import HarnessChecks from "./HarnessChecks";
+import InfoSuggestions from "./InfoSuggestions";
+import ContactFixes from "./ContactFixes";
+import UnansweredQuestions from "./UnansweredQuestions";
 import { api } from "../lib/api";
 import type { ApiError, QualityCorrection, QualityScoreboard } from "../lib/api";
 
@@ -94,6 +97,11 @@ export default function DataQuality() {
 
       <ContextSources />
       <HarnessChecks version={version} />
+      {/* The feedback loops (No. 150). Loop 4 (golden cases) runs on the
+          laptop before every push; its row is in the Harness table. */}
+      <InfoSuggestions onChanged={() => setVersion((v) => v + 1)} />
+      <ContactFixes version={version} />
+      <UnansweredQuestions onChanged={() => setVersion((v) => v + 1)} />
       <AutoFilledValues onChanged={() => setVersion((v) => v + 1)} />
 
       {error && (

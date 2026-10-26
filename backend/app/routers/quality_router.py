@@ -225,3 +225,72 @@ async def correct_value(
                 _who(user), body.csp_id, body.field)
     return await session.run_sync(field_quality.value_row, body.csp_id,
                                   body.field)
+
+
+# ---- the feedback loops (No. 150) ---------------------------------------
+
+@router.get("/api/admin/quality/suggestions",
+            summary="Loop 1: suggested INFO fixes from repeated corrections")
+async def suggestions(
+    status_: str = Query("", alias="status",
+                         pattern="^(|open|accepted|fixed|dismissed)$"),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    from app.services import feedback_loops
+
+    def work(s):
+        feedback_loops.refresh_suggestions(
+            s, get_settings().quality_suggest_min_csps)
+        return feedback_loops.list_suggestions(s, status_)
+    rows = await session.run_sync(work)
+    await session.commit()
+    return {"suggestions": rows,
+            "min_csps": get_settings().quality_suggest_min_csps}
+
+
+@router.post("/api/admin/quality/suggestions/{suggestion_id}/{action}",
+             summary="Accept (the team fixes INFO) or dismiss a suggestion")
+async def decide_suggestion(
+    suggestion_id: str,
+    action: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    import uuid as _uuid
+
+    from app.models.audit_log import AuditLog
+    from app.services import feedback_loops
+
+    if action not in ("accept", "dismiss"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "The action is accept or dismiss.")
+    try:
+        key = _uuid.UUID(suggestion_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such suggestion.")
+    s = await session.run_sync(feedback_loops.decide, key, action, _who(user))
+    if s is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such suggestion.")
+    session.add(AuditLog(
+        action=f"info_suggestion_{action}", resource_type="quality_suggestion",
+        resource_id=suggestion_id, result="success",
+        metadata_json={"by": _who(user), "field": s.field, "rule": s.rule,
+                       "from": s.from_value, "to": s.to_value}))
+    await session.commit()
+    logger.info("quality_router: %s %sed INFO suggestion %s (%s %r -> %r)",
+                _who(user), action, suggestion_id, s.field, s.from_value,
+                s.to_value)
+    return {"id": suggestion_id, "status": s.status}
+
+
+@router.get("/api/admin/quality/contact-fixes",
+            summary="Loop 2: bad numbers / bounced emails and what was done")
+async def contact_fixes(
+    status_: str = Query("", alias="status",
+                         pattern="^(|open|asked|corrected|resent|done|stopped)$"),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    from app.services import feedback_loops
+    return await session.run_sync(feedback_loops.list_contact_fixes, status_)

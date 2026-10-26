@@ -81,6 +81,12 @@ celery_app.conf.update(
             "schedule": settings.verify_interval_minutes * 60,
             "options": {"expires": settings.verify_interval_minutes * 60 - 5},
         },
+        # The contact loop (No. 150): bad numbers / bounced emails.
+        "contact-loop": {
+            "task": "workers.contact_loop",
+            "schedule": settings.contact_loop_minutes * 60,
+            "options": {"expires": settings.contact_loop_minutes * 60 - 5},
+        },
         # Emails that bounced (No. 127).
         "check-email-bounces": {
             "task": "workers.check_email_bounces",
@@ -155,6 +161,7 @@ celery_app.conf.include = [
     "app.workers.csp_sync_worker",
     "app.workers.source_sheets_worker",
     "app.workers.verify_old_csps_worker",
+    "app.workers.contact_loop_worker",
     "app.workers.email_bounce_worker",
     "app.workers.new_csp_worker",
     "app.workers.pending_request_worker",

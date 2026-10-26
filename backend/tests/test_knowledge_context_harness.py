@@ -134,7 +134,8 @@ SETTINGS = SimpleNamespace(csp_sync_interval_minutes=1,
 
 def _rows(db):
     db.execute(text("TRUNCATE whatsapp_messages, email_messages, "
-                    "knowledge_misses RESTART IDENTITY CASCADE"))
+                    "knowledge_misses, quality_suggestions, contact_fixes "
+                    "RESTART IDENTITY CASCADE"))
     db.commit()
     return {r["key"]: r for r in fq.harness(db, SETTINGS, now=NOW)}
 
@@ -142,7 +143,9 @@ def _rows(db):
 def test_with_nothing_recorded_the_harness_says_so(qdb):
     rows = _rows(qdb)
     assert list(rows) == ["auto_fill", "corrections", "kept_rate", "checked",
-                          "freshness", "sending", "chat", "golden", "tests"]
+                          "freshness", "sending", "mapping_loop",
+                          "contact_loop", "chat", "golden", "tests"]
+    assert rows["mapping_loop"]["state"] == rows["contact_loop"]["state"] == "empty"
     assert rows["auto_fill"]["state"] == "empty"
     assert rows["kept_rate"]["now"] == "no data yet"
     assert rows["sending"]["state"] == "ok"
