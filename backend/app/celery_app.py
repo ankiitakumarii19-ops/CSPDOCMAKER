@@ -81,6 +81,12 @@ celery_app.conf.update(
             "schedule": settings.verify_interval_minutes * 60,
             "options": {"expires": settings.verify_interval_minutes * 60 - 5},
         },
+        # Replies to what CSPs write on WhatsApp (No. 151).
+        "answer-csp-replies": {
+            "task": "workers.answer_csp_replies",
+            "schedule": settings.whatsapp_status_minutes * 60,
+            "options": {"expires": settings.whatsapp_status_minutes * 60 - 5},
+        },
         # The contact loop (No. 150): bad numbers / bounced emails.
         "contact-loop": {
             "task": "workers.contact_loop",
@@ -162,6 +168,7 @@ celery_app.conf.include = [
     "app.workers.source_sheets_worker",
     "app.workers.verify_old_csps_worker",
     "app.workers.contact_loop_worker",
+    "app.workers.csp_reply_worker",
     "app.workers.email_bounce_worker",
     "app.workers.new_csp_worker",
     "app.workers.pending_request_worker",

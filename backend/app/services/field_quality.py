@@ -629,6 +629,21 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
         f" fixed · {fixes.get('stopped', 0)} stopped",
         "attention" if fixes.get("stopped") else "ok" if fixes else "empty")
 
+    from app.models.csp_reply import CspReply
+    replies = dict(session.execute(
+        select(CspReply.status, func.count()).where(CspReply.last_in_at >= week)
+        .group_by(CspReply.status)).all())
+    to_rm = session.execute(select(func.count()).select_from(CspReply).where(
+        CspReply.last_in_at >= week,
+        CspReply.intents.contains(["else"]))).scalar() or 0
+    row("csp_replies", "Replies to CSPs (last 7 days)",
+        "What CSPs write back on WhatsApp",
+        "Fixed rules + Knowledge Base ('CSP replies'); not understood -> "
+        "'contact your RM'. WhatsApp messages screen: send, edit or skip",
+        f"{replies.get('draft', 0)} waiting · {replies.get('sent', 0)} sent · "
+        f"{to_rm} sent to their RM (not understood)",
+        "attention" if replies.get("draft") else "ok" if replies else "empty")
+
     misses = session.execute(select(func.count()).select_from(KnowledgeMiss)).scalar() or 0
     last_miss = session.execute(select(func.max(KnowledgeMiss.last_asked_at))).scalar()
     row("chat", "Unanswered chat questions",

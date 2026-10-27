@@ -679,6 +679,22 @@ export interface QualityScoreboard {
   }>;
 }
 
+/** A reply to what a CSP wrote on WhatsApp (No. 151). */
+export interface CspReplyRow {
+  id: string;
+  csp_id: string;
+  csp_name: string;
+  messages: { at: string; text: string; type: string }[];
+  last_in_at: string | null;
+  intents: { key: string; label: string }[];
+  reply_text: string;
+  action: string | null;
+  status: "draft" | "sent" | "skipped" | "failed" | "expired";
+  note: string;
+  decided_by: string | null;
+  sent_at: string | null;
+}
+
 /** Loop 1 (No. 150): a suggested fix to INFO from repeated corrections. */
 export interface InfoSuggestion {
   id: string;
@@ -1355,6 +1371,33 @@ class ApiClient {
   // ---- Data quality (No. 146) ----
   async freshness() {
     return this.request<{ sources: FreshnessBadge[] }>("/quality/freshness");
+  }
+
+  // ---- Replies to CSPs (No. 151) ----
+  async cspReplies(status = "") {
+    return this.request<{ mode: "off" | "draft" | "auto"; waiting: number; replies: CspReplyRow[] }>(
+      `/admin/csp-replies${status ? `?status=${status}` : ""}`
+    );
+  }
+
+  async sendCspReply(id: string, text: string) {
+    return this.request<CspReplyRow>(`/admin/csp-replies/${encodeURIComponent(id)}/send`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  async skipCspReply(id: string) {
+    return this.request<CspReplyRow>(`/admin/csp-replies/${encodeURIComponent(id)}/skip`, {
+      method: "POST",
+    });
+  }
+
+  async setCspReplyMode(mode: "off" | "draft" | "auto") {
+    return this.request<{ mode: "off" | "draft" | "auto" }>("/admin/csp-replies/mode", {
+      method: "PUT",
+      body: JSON.stringify({ mode }),
+    });
   }
 
   async qualitySuggestions(status = "") {

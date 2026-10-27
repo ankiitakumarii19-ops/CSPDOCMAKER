@@ -34,8 +34,10 @@ from app.models.source_sheet import SourceSheetState
 from app.models.email_message import EmailMessage
 from app.models.field_provenance import FieldCorrection, FieldProvenance
 from app.models.feedback_loop import ContactFix, QualitySuggestion
+from app.models.csp_reply import CspReply
 
 __all__ = [
+    "CspReply",
     "QualitySuggestion",
     "ContactFix",
     "FieldProvenance",

@@ -121,9 +121,16 @@ def rank(question: str, entries: List[KnowledgeEntry]) -> List[Match]:
     return matches
 
 
+# Wordings of the replies to CSPs on WhatsApp (No. 151): kept in the
+# Knowledge Base so Admins can change them, but they are written to CSPs,
+# not answers for staff — the chat never answers from them.
+CSP_REPLIES = "CSP replies"
+
+
 async def active_entries(session: AsyncSession) -> List[KnowledgeEntry]:
     return list((await session.execute(
-        select(KnowledgeEntry).where(KnowledgeEntry.active.is_(True))
+        select(KnowledgeEntry).where(KnowledgeEntry.active.is_(True),
+                                     KnowledgeEntry.category != CSP_REPLIES)
         .order_by(KnowledgeEntry.question))).scalars().all())
 
 

@@ -300,5 +300,7 @@ from app.routers.email_message_router import public_router as email_open_router,
 app.include_router(email_open_router)       # PUBLIC — the 'opened' picture in each email (No. 127)
 app.include_router(email_message_router)    # /api/admin/email-messages — Admin + Super Admin (No. 127)
 from app.routers.quality_router import router as quality_router
+from app.routers.csp_reply_router import router as csp_reply_router
+app.include_router(csp_reply_router)        # /api/admin/csp-replies — replies to CSPs' WhatsApp messages (No. 151)
 app.include_router(quality_router)          # /api/quality/freshness (all roles), /api/admin/quality/* — Admin + Super Admin (No. 146)
 

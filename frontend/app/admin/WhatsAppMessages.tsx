@@ -17,7 +17,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import CspReplies from "./CspReplies";
 import { api } from "../lib/api";
+import { useSessionUser } from "../lib/useSessionUser";
 import WhatsAppMessageDetails from "./WhatsAppMessageDetails";
 import type {
   ApiError, WhatsAppCounts, WhatsAppMessageRow, WhatsAppRefreshResult,
@@ -107,6 +109,7 @@ function matches(row: WhatsAppMessageRow, tile: Tile): boolean {
 }
 
 export default function WhatsAppMessages() {
+  const user = useSessionUser();
   const [data, setData] = useState<WhatsAppReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -194,6 +197,9 @@ export default function WhatsAppMessages() {
           </button>
         </div>
       </div>
+
+      {/* What CSPs wrote back, and the replies to them (No. 151). */}
+      <CspReplies canSwitch={user?.role === "super_admin"} />
 
       {error && (
         <div className="px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
