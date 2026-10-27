@@ -348,3 +348,19 @@ def test_only_the_csps_own_number_columns_are_used():
     assert fl.calling_phone_columns(heads) == [
         "CSP Mobile number", "Alternate Mobile No.", "WhatsApp Number",
         "Other Contact"]
+
+
+# ---- the feedback card on the WhatsApp messages page (No. 160) ----------
+
+@on_loop
+async def test_the_whatsapp_page_counts_the_feedback_question(client, fdb):
+    _asked(fdb)
+    cr.collect(fdb, FakeWhatsApp([_in("2", 30)]))
+    fdb.commit()
+    r = await client.get("/api/admin/whatsapp-messages?days=0",
+                         headers=_auth("admin"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["summary"]["feedback"]["total"] == 1
+    assert body["feedback_answers"] == {
+        "answers": {"1": 0, "2": 1, "3": 0}, "no_answer": 0}

@@ -41,7 +41,7 @@ from app import telemetry
 from app.models.whatsapp_message import (
     DELIVERY_DELIVERED, DELIVERY_FAILED, DELIVERY_READ, DELIVERY_SENT,
     KIND_DATA_REQUEST, KIND_DOCUMENTS_READY, KIND_MISSING_DATA, KIND_OTHER,
-    KINDS, RESPONSE_FORM, RESPONSE_WHATSAPP, SEND_FAILED, SEND_PENDING,
+    KIND_FEEDBACK, KINDS, RESPONSE_FORM, RESPONSE_WHATSAPP, SEND_FAILED, SEND_PENDING,
     SEND_REJECTED, SEND_SENT, WhatsAppMessage,
 )
 
@@ -478,7 +478,7 @@ def summarise(messages: Iterable[WhatsAppMessage],
     out = {k: {"total": 0, **{s: 0 for s in STAGES},
                "responded": 0, "not_responded": 0}
            for k in (KIND_DATA_REQUEST, KIND_MISSING_DATA,
-                     KIND_DOCUMENTS_READY)}
+                     KIND_DOCUMENTS_READY, KIND_FEEDBACK)}
     for m in messages:
         if m.kind not in out:
             continue

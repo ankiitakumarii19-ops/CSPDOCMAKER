@@ -129,7 +129,9 @@ export interface SentBecause {
 }
 
 export interface WhatsAppReport {
-  summary: Record<"data_request" | "missing_data" | "documents_ready", WhatsAppCounts>;
+  summary: Record<"data_request" | "missing_data" | "documents_ready" | "feedback", WhatsAppCounts>;
+  /** No. 160: how CSPs answered the feedback question. */
+  feedback_answers: { answers: { "1": number; "2": number; "3": number }; no_answer: number };
   rows: WhatsAppMessageRow[];
   total_rows: number;
   truncated: boolean;

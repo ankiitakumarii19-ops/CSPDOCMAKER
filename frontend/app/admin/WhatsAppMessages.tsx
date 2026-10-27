@@ -25,7 +25,7 @@ import type {
   WhatsAppReport,
 } from "../lib/api";
 
-type Kind = "data_request" | "missing_data" | "documents_ready";
+type Kind = "data_request" | "missing_data" | "documents_ready" | "feedback";
 type Tile =
   | "left" | "not_sent" | "not_received" | "delivered" | "read"
   | "responded" | "not_responded";
@@ -48,6 +48,12 @@ const KINDS: Array<{ key: Kind; title: string; icon: string; note: string }> = [
     title: "Documents sent",
     icon: "fa-file-pdf",
     note: "“Your documents are ready”, PDF attached — answered by a WhatsApp reply.",
+  },
+  {
+    key: "feedback",
+    title: "Feedback question",
+    icon: "fa-comment-dots",
+    note: "“Did you get your documents? Reply 1 / 2 / 3” — 15 minutes after the documents message.",
   },
 ];
 
@@ -341,6 +347,23 @@ export default function WhatsAppMessages() {
                     );
                   })}
                 </div>
+                {k.key === "feedback" && data.feedback_answers && (
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                    <span className="text-gray-500">Answers:</span>
+                    <span className="px-2 py-1 rounded bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300">
+                      1 · got them, all correct <b className="ml-1">{data.feedback_answers.answers["1"]}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                      2 · did not get them <b className="ml-1">{data.feedback_answers.answers["2"]}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300">
+                      3 · something is wrong <b className="ml-1">{data.feedback_answers.answers["3"]}</b>
+                    </span>
+                    <span className="px-2 py-1 rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                      no answer yet <b className="ml-1">{data.feedback_answers.no_answer}</b>
+                    </span>
+                  </div>
+                )}
               </section>
             );
           })}

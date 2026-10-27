@@ -97,6 +97,8 @@ async def report(
         "sent_because": [{"key": k, "label": send_reason.label(k), "count": n}
                          for k, n in sorted(reasons.items(), key=lambda kv: -kv[1])],
         "contact_fixes": await session.run_sync(_contact_status),
+        # The feedback question's answers: 1 / 2 / 3 (No. 160).
+        "feedback_answers": await session.run_sync(_feedback_answers),
         "rows": rows[:MAX_ROWS],
         "total_rows": len(rows),
         "truncated": len(rows) > MAX_ROWS,
@@ -201,3 +203,9 @@ def _settings():
 def _contact_status(sync_session):
     from app.services import feedback_loops
     return feedback_loops.contact_status(sync_session)
+
+
+def _feedback_answers(sync_session):
+    from app.services import documents_feedback
+    out = documents_feedback.summary(sync_session, limit=0)
+    return {"answers": out["answers"], "no_answer": out["no_answer"]}
