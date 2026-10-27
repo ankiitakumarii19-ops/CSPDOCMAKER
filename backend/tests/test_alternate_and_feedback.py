@@ -158,10 +158,10 @@ def _documents_message(db, hours_ago=30, delivery="read", code="1A997001"):
                hours_ago=hours_ago, code=code)
 
 
-def test_the_question_goes_the_next_day_once(fdb):
+def test_the_question_goes_15_minutes_after_the_documents_once(fdb):
     from tests.test_csp_replies import _csp as reply_csp
     reply_csp(fdb)
-    _documents_message(fdb, hours_ago=30)
+    _documents_message(fdb, hours_ago=20 / 60)       # 20 minutes ago
     wa = FakeWhatsApp()
     assert dfb.run(fdb, wa=wa)["asked"] == 1
     assert "Reply karein: 1" in dfb.WORDING
@@ -173,7 +173,7 @@ def test_the_question_goes_the_next_day_once(fdb):
 
 
 @pytest.mark.parametrize("hours_ago,delivery,hold", [
-    (5, "read", None),                 # not a day yet
+    (10 / 60, "read", None),           # only 10 minutes yet
     (24 * 8, "read", None),            # too late
     (30, "failed", None),              # never reached the phone
     (30, "read", "Not live yet"),      # on hold

@@ -3,7 +3,7 @@
 /**
  * Data quality → Loop 5: feedback after the documents (tracker No. 152).
  *
- * The day after a CSP's documents WhatsApp they are asked: "did you get
+ * 15 minutes after a CSP's documents WhatsApp they are asked (No. 159): "did you get
  * them? 1 = got them, all correct · 2 = did not get them · 3 = something
  * is wrong". 2 → the documents email again; 3 → the data verification
  * message. The reply goes through "Replies to CSPs" on the WhatsApp page.
@@ -49,7 +49,7 @@ export default function FeedbackAnswers({ version }: { version: number }) {
           <span className="text-sm font-normal text-gray-500">({data?.asked ?? 0} asked)</span>
         </h3>
         <p className="text-xs text-gray-500">
-          The day after the documents message, each CSP is asked to reply 1 (got them, all correct),
+          15 minutes after the documents message, each CSP is asked to reply 1 (got them, all correct),
           2 (did not get them — the documents email is sent again) or 3 (something is wrong — the
           data verification message is sent). The reply to them waits in &quot;Replies to CSPs&quot;
           on the WhatsApp messages page.

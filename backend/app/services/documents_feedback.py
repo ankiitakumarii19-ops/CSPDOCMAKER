@@ -2,15 +2,16 @@
 CSP DocMaker — "did you get your documents?" (No. 152)
 
 Asked 27 Oct 2026: after the documents message, ask the CSP whether they got
-their documents and whether they like them. Decided: the next day, reply
-1 / 2 / 3:
+their documents and whether they like them. Decided: reply 1 / 2 / 3 —
+15 minutes after the documents message (No. 159; it was the next day,
+DOCUMENTS_FEEDBACK_AFTER_MINUTES):
 
   1 — got them and everything is correct  -> "thank you"
   2 — did not get them                    -> the documents email again
   3 — something is wrong in them          -> the data verification message
 
-The question goes the day after the "documents ready" WhatsApp (not before
-24 hours, not after 7 days), once per documents message and at most once a
+The question goes DOCUMENTS_FEEDBACK_AFTER_MINUTES (15) after the
+"documents ready" WhatsApp (not after 7 days), once per documents message and at most once a
 week per CSP, 8 am - 8 pm, never to a CSP on hold or whose documents
 message did not reach the phone (the contact loop deals with that). The
 answer is read by the reply agent (services/csp_replies.py), which writes
@@ -31,15 +32,19 @@ from app.models.feedback_loop import CspFeedback
 logger = logging.getLogger(__name__)
 
 KIND = "feedback"
-WAIT = timedelta(hours=24)
+def _wait() -> timedelta:
+    """How long after the documents message the question goes (No. 159:
+    15 minutes — was the next day)."""
+    from app.config import get_settings
+    return timedelta(minutes=max(get_settings().documents_feedback_after_minutes, 1))
 TOO_LATE = timedelta(days=7)
 ONCE_PER = timedelta(days=7)
 MAX_TRIES = 3
 BATCH = 20
 
 # The WhatsApp wording (Meta approves it once; keep it stable).
-WORDING = ("Namaste {name}, kal humne aapke CSP documents aapke email par "
-           "bheje the. Kya aapko mil gaye? Reply karein: 1 - mil gaye aur sab "
+WORDING = ("Namaste {name}, humne abhi aapke CSP documents aapke email par "
+           "bheje hain. Kya aapko mil gaye? Reply karein: 1 - mil gaye aur sab "
            "sahi hai, 2 - nahi mile, 3 - kuch galat hai. Dhanyavaad, Eko "
            "Bharat Ventures.")
 
@@ -94,7 +99,7 @@ def _due(session, now: datetime):
             WhatsAppMessage.send_status == SEND_SENT,
             WhatsAppMessage.is_test.is_(False),
             WhatsAppMessage.csp_id.isnot(None),
-            WhatsAppMessage.sent_at <= now - WAIT,
+            WhatsAppMessage.sent_at <= now - _wait(),
             WhatsAppMessage.sent_at >= now - TOO_LATE)
         .order_by(WhatsAppMessage.sent_at)).scalars().all()
     for m in messages:

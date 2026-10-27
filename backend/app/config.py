@@ -208,6 +208,9 @@ class Settings(BaseSettings):
     # No. 152: the day after the documents, "did you get them? 1 / 2 / 3".
     documents_feedback_enabled: bool = Field(
         default=True, alias="DOCUMENTS_FEEDBACK_ENABLED")
+    # No. 159: asked this long after the documents message (was the next day).
+    documents_feedback_after_minutes: int = Field(
+        default=15, alias="DOCUMENTS_FEEDBACK_AFTER_MINUTES")
 
 
     # WhatsApp every old CSP to verify their details (No. 126), gently: a
