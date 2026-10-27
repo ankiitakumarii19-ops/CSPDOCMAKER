@@ -24,6 +24,7 @@ import HarnessChecks from "./HarnessChecks";
 import InfoSuggestions from "./InfoSuggestions";
 import ContactFixes from "./ContactFixes";
 import UnansweredQuestions from "./UnansweredQuestions";
+import FeedbackAnswers from "./FeedbackAnswers";
 import { api } from "../lib/api";
 import type { ApiError, QualityCorrection, QualityScoreboard } from "../lib/api";
 
@@ -102,6 +103,7 @@ export default function DataQuality() {
       <InfoSuggestions onChanged={() => setVersion((v) => v + 1)} />
       <ContactFixes version={version} />
       <UnansweredQuestions onChanged={() => setVersion((v) => v + 1)} />
+      <FeedbackAnswers version={version} />
       <AutoFilledValues onChanged={() => setVersion((v) => v + 1)} />
 
       {error && (

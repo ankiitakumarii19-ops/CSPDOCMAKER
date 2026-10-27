@@ -679,6 +679,24 @@ export interface QualityScoreboard {
   }>;
 }
 
+/** Loop 5 (No. 152): did CSPs get their documents? */
+export interface FeedbackSummary {
+  asked: number;
+  answers: { "1": number; "2": number; "3": number };
+  no_answer: number;
+  rows: {
+    csp_id: string;
+    csp_name: string;
+    ask_status: string;
+    asked_at: string | null;
+    answer: string | null;
+    answer_label: string;
+    answer_text: string | null;
+    answered_at: string | null;
+    note: string;
+  }[];
+}
+
 /** A reply to what a CSP wrote on WhatsApp (No. 151). */
 export interface CspReplyRow {
   id: string;
@@ -719,7 +737,8 @@ export interface ContactFixRow {
   problem_label: string;
   bad_value: string;
   failed_kind: string;
-  status: "open" | "asked" | "corrected" | "resent" | "done" | "stopped";
+  status: "open" | "trying_alternate" | "asked" | "corrected" | "resent" | "done" | "stopped";
+  alternate: string | null;
   asked_via: string | null;
   asked_at: string | null;
   corrected_value: string | null;
@@ -1371,6 +1390,10 @@ class ApiClient {
   // ---- Data quality (No. 146) ----
   async freshness() {
     return this.request<{ sources: FreshnessBadge[] }>("/quality/freshness");
+  }
+
+  async documentsFeedback() {
+    return this.request<FeedbackSummary>("/admin/quality/feedback");
   }
 
   // ---- Replies to CSPs (No. 151) ----

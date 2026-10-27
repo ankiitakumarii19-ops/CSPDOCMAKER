@@ -58,6 +58,9 @@ DOCS_NOT_YET = "CSP reply: documents not made yet"
 UPLOAD = "CSP reply: uploads and other papers"
 WRONG = "CSP reply: wrong details"
 ELSE = "CSP reply: anything else"
+FEEDBACK = {"1": "CSP reply: feedback — got the documents",
+            "2": "CSP reply: feedback — did not get them",
+            "3": "CSP reply: feedback — something is wrong"}
 
 # Used when an Admin has deleted or switched off the entry, so a reply can
 # always be written. Same wording as the migration's starting set.
@@ -75,7 +78,16 @@ DEFAULTS = {
     WRONG: ("Details sudharne ke liye hum aapko naya link bhej rahe hain - "
             "usme sahi details bharein."),
     ELSE: "Is baare mein kripya apne RM{rm} se sampark karein.",
+    FEEDBACK["1"]: ("Dhanyavaad! Humein khushi hai ki aapko aapke documents "
+                    "mil gaye."),
+    FEEDBACK["2"]: ("Khed hai. Hum aapke documents dobara {email} par bhej "
+                    "rahe hain - kripya inbox aur spam folder dekhein."),
+    FEEDBACK["3"]: ("Khed hai. Hum aapko data verification ka link bhej rahe "
+                    "hain - usme jo galat hai use sudharein, phir aapke "
+                    "documents dobara banenge."),
 }
+# What each feedback answer does when the reply is sent (No. 152).
+FEEDBACK_ACTION = {"1": None, "2": "resend_documents", "3": "fresh_link"}
 
 INTENT_LABEL = {
     "link": "Link does not open",
@@ -85,6 +97,9 @@ INTENT_LABEL = {
     "thanks": "Thanks / ok — no reply needed",
     "knowledge": "Answered from the Knowledge Base",
     "else": "Not understood — sent to their RM",
+    "feedback_1": "Feedback: got the documents, all correct",
+    "feedback_2": "Feedback: did not get the documents",
+    "feedback_3": "Feedback: something is wrong in them",
 }
 
 
@@ -210,8 +225,12 @@ def _documents_emailed(session, csp_id: str) -> Optional[Tuple[datetime, str]]:
 
 # ---- writing the reply --------------------------------------------------
 
-def compose(session, record, texts: List[str]) -> Tuple[List[str], str, Optional[str]]:
-    """(intents, reply text, action) for these messages from this CSP."""
+def compose(session, record, texts: List[str],
+            feedback: Optional[str] = None) -> Tuple[List[str], str, Optional[str]]:
+    """(intents, reply text, action) for these messages from this CSP.
+    `feedback`: their answer to "did you get your documents?" (No. 152)
+    when one of these messages was it — answered first. `action` is one or
+    more of fresh_link / resend_documents, comma-separated."""
     from app.services import data_request_service as drs
     from app.services import knowledge_service
 
@@ -234,6 +253,8 @@ def compose(session, record, texts: List[str]) -> Tuple[List[str], str, Optional
                 intents.append("knowledge")
         elif norm(text):
             not_understood.append(norm(text))
+    if feedback:
+        intents.insert(0, f"feedback_{feedback}")
     if intents and all(i == "thanks" for i in intents) and not not_understood:
         return ["thanks"], "", None
     intents = [i for i in intents if i != "thanks"]
@@ -247,8 +268,19 @@ def compose(session, record, texts: List[str]) -> Tuple[List[str], str, Optional
     rm = rm_contact(session, record)
     parts: List[str] = []
     action = None
+    actions: List[str] = []
     for intent in intents:
-        if intent == "link":
+        if intent.startswith("feedback_"):
+            answer = intent[-1]
+            wording = _wording(entries, FEEDBACK[answer])
+            if "{email}" in wording:
+                wording = wording.replace("{email}", record.email or "aapke email")
+            parts.append(wording)
+            if FEEDBACK_ACTION[answer]:
+                actions.append(FEEDBACK_ACTION[answer])
+                if FEEDBACK_ACTION[answer] == "fresh_link":
+                    action = "fresh_link"
+        elif intent == "link":
             answered = _answered(session, record.csp_id)
             if answered is not None and drs.open_request_for(
                     session, record.csp_id) is None:
@@ -275,7 +307,9 @@ def compose(session, record, texts: List[str]) -> Tuple[List[str], str, Optional
         elif intent == "else":
             parts.append(_wording(entries, ELSE))
     text = " ".join(p.replace("{rm}", rm) for p in parts)
-    return intents, clean(text), action
+    if action == "fresh_link" and "fresh_link" not in actions:
+        actions.append("fresh_link")
+    return intents, clean(text), ",".join(actions) or None
 
 
 def clean(text: str) -> str:
@@ -309,7 +343,7 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
     """New messages from CSPs, into drafts (one waiting draft per CSP)."""
     from app.models.csp_record import CSPRecord
     from app.models.whatsapp_message import SEND_SENT, WhatsAppMessage
-    from app.services import message_log
+    from app.services import documents_feedback, message_log
 
     now = now or datetime.now(timezone.utc)
     ours = session.execute(
@@ -338,8 +372,10 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
             continue
         if seen.get(phone) and at <= seen[phone]:
             continue
-        if any(message_log.is_automatic(t, at) for t in sent_times[phone]):
-            continue      # the phone's automatic greeting, not the CSP
+        if (any(message_log.is_automatic(t, at) for t in sent_times[phone])
+                and not documents_feedback.parse_answer(str(r.get("body") or ""))):
+            continue      # the phone's automatic greeting, not the CSP —
+            # but a quick "1" / "2" / "3" is an answer (No. 152)
         fresh.setdefault(phone, []).append({
             "at": at.isoformat(),
             "text": str(r.get("body") or "")[:1000],
@@ -364,8 +400,36 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
         draft.messages = list(draft.messages or []) + items
         draft.last_in_at = message_log._parse_time(items[-1]["at"])
         texts = [i["text"] or f"({i['type']})" for i in draft.messages]
+
+        # An answer to "did you get your documents?" (No. 152): recorded
+        # now; the reply (and what it does) waits like any other.
+        first_at = message_log._parse_time(draft.messages[0]["at"])
+        answered = session.execute(
+            select(documents_feedback.CspFeedback).where(
+                documents_feedback.CspFeedback.csp_id == record.csp_id,
+                documents_feedback.CspFeedback.answered_at >= first_at)
+        ).scalars().first()
+        # Only an answer written in THIS conversation belongs to it.
+        if answered is not None and (answered.answer_text or "") not in [
+                (i["text"] or "")[:500] for i in draft.messages]:
+            answered = None
+        feedback = answered.answer if answered else None
+        question = (None if answered
+                    else documents_feedback.open_question(session, record.csp_id, now))
+        for item in draft.messages:
+            if feedback is None and question is not None:
+                at = message_log._parse_time(item["at"])
+                answer = documents_feedback.parse_answer(item["text"])
+                if answer and at and at >= question.asked_at:
+                    question.answer, question.answered_at = answer, at
+                    question.answer_text = item["text"][:500]
+                    feedback = answer
+                    texts.remove(item["text"] or f"({item['type']})")
+            elif feedback and documents_feedback.parse_answer(item["text"]) == feedback:
+                if (item["text"] or "") in texts:
+                    texts.remove(item["text"])
         draft.intents, draft.reply_text, draft.action = compose(
-            session, record, texts)
+            session, record, texts, feedback=feedback)
         draft.status, draft.note = "draft", ""
         if draft.intents == ["thanks"]:
             draft.status, draft.note = "skipped", "no reply needed"
@@ -419,15 +483,23 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
         return reply
 
     reply.status, reply.sent_at = "sent", datetime.now(timezone.utc)
-    reply.note = ""
-    if reply.action == "fresh_link":
-        # The old link is closed so the new one is the only one.
+    notes = []
+    actions = [a for a in (reply.action or "").split(",") if a]
+    if "fresh_link" in actions:
+        # The data verification message (asked 27 Oct 2026, No. 152), with
+        # a new link; the old one is closed so the new one is the only one.
         drs.cancel(session, record.csp_id,
-                   "the CSP said the link does not work — a new one was sent")
-        out = message_sender.ask_for_details(
-            session, record, verify=(record.origin == "baseline"), manual=True)
-        reply.note = ("new link sent" if out.get("sent")
-                      else f"new link NOT sent: {out.get('reason', '')}")[:500]
+                   "the CSP asked to change their details / the link did "
+                   "not work — a new one was sent")
+        out = message_sender.ask_for_details(session, record, verify=True,
+                                             manual=True)
+        notes.append("new link sent" if out.get("sent")
+                     else f"new link NOT sent: {out.get('reason', '')}")
+    if "resend_documents" in actions:
+        from app.services import feedback_loops
+        ok, why, _ = feedback_loops.resend_documents_email(session, record)
+        notes.append(why if ok is not False else f"documents NOT resent: {why}")
+    reply.note = "; ".join(notes)[:500]
     logger.info("csp_replies: reply sent to CSP %s by %s (%s)", record.csp_id,
                 by, ", ".join(reply.intents or []))
     return reply

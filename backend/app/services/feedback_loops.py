@@ -10,9 +10,12 @@ sheet) or dismisses it. The app never writes INFO itself; it marks an
 accepted suggestion FIXED once INFO is seen giving the corrected value.
 
 Loop 2 — contact. A WhatsApp that did not reach the phone, or an email that
-bounced, is a bad number / address for that CSP. The CSP is asked for the
-right one through the OTHER channel (the details form shows their mobile and
-email), once per bad value. When the record has a different number /
+bounced, is a bad number / address for that CSP. A bad WhatsApp number is
+first tried on the CSP's ALTERNATE number (No. 152: the second number in
+their mobile cell, else their Zoho Lead's alternate / WhatsApp number); if
+that reaches the phone, it replaces the old number in CSPDATA. With no
+alternate, or none that works, the CSP is asked through the OTHER channel
+(the details form shows their mobile and email), once per bad value. When the record has a different number /
 address — from that form, or typed into the sheet — what failed is sent
 again: the documents email to the new address, the "documents ready"
 WhatsApp to the new number. Anything else that failed (a details request)
@@ -172,10 +175,14 @@ def find_problems(session) -> int:
     that later reached the phone, or an address whose later email was
     opened, is not a problem."""
     from app.models.email_message import EmailMessage
-    from app.models.whatsapp_message import DELIVERY_FAILED, WhatsAppMessage
+    from app.models.whatsapp_message import WhatsAppMessage
+    from app.services import message_log
 
-    have = {(f.csp_id, f.problem, f.bad_value)
-            for f in session.execute(select(ContactFix)).scalars()}
+    fixes = session.execute(select(ContactFix)).scalars().all()
+    have = {(f.csp_id, f.problem, f.bad_value) for f in fixes}
+    # An alternate number tried for a fix is that fix's business, not a
+    # problem of its own.
+    tried = {(f.csp_id, n) for f in fixes for n in (f.alternates_tried or [])}
     found = []
 
     messages = session.execute(
@@ -188,7 +195,9 @@ def find_problems(session) -> int:
     for m in messages:
         latest[(m.csp_id, _phone(m.phone))] = m
     for (csp_id, phone), m in latest.items():
-        if phone and m.delivery_status == DELIVERY_FAILED:
+        # "Did not reach the phone", or no delivery after 24 hours.
+        if (phone and (csp_id, phone) not in tried
+                and message_log.stage(m) == message_log.NOT_RECEIVED):
             found.append((csp_id, WHATSAPP_UNDELIVERED, phone, m.kind))
 
     emails = session.execute(
@@ -231,7 +240,9 @@ def _documents(session, csp_id: str):
     return [(document_label(t), r) for t, r in newest.items()]
 
 
-def _resend_documents_email(session, fix: ContactFix, record) -> tuple:
+def resend_documents_email(session, record) -> tuple:
+    """The CSP's stored documents, emailed again to the address on their
+    record. (ok, note, sent): ok None = waiting (emails paused)."""
     from app.services import email_service
     if email_service.paused():
         return None, "waiting: emails are paused (EMAILS_PAUSED)", False
@@ -265,7 +276,8 @@ def _resend_documents_email(session, fix: ContactFix, record) -> tuple:
     return False, "the documents email failed again — see the Emails page", False
 
 
-def _resend_documents_whatsapp(session, fix: ContactFix, record) -> tuple:
+def _resend_documents_whatsapp(session, fix: ContactFix, record,
+                               mobile: Optional[str] = None) -> tuple:
     from app.models.processing_job import ProcessingJob
     from app.services import documents_whatsapp
     job = session.execute(
@@ -275,12 +287,126 @@ def _resend_documents_whatsapp(session, fix: ContactFix, record) -> tuple:
     if job is None or not docs:
         return True, "nothing to send again (no documents on record)", False
     outcome = documents_whatsapp.notify(session, record, job,
-                                        [label for label, _ in docs])
+                                        [label for label, _ in docs],
+                                        mobile=mobile)
     if outcome.get("status") == "sent":
         return True, "documents WhatsApp sent again to the new number", True
     if outcome.get("status") == "skipped":
         return None, f"waiting: {outcome.get('reason', '')}", False
     return False, f"the WhatsApp failed again: {outcome.get('reason', '')}", False
+
+
+def _numbers(cell) -> List[str]:
+    """Every usable mobile number in a sheet cell, in order."""
+    from app.services.alert_composer import _SEPARATORS, normalize_mobile
+    out = []
+    for part in _SEPARATORS.split(cell or ""):
+        n = normalize_mobile(part)
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def _zoho_numbers(session, record) -> List[str]:
+    """The Zoho Lead's mobile / alternate / WhatsApp numbers (Eko only).
+    Never raises: a Zoho failure means no Zoho alternates, and is logged."""
+    from app.services import zoho_client, zoho_fill
+    if not zoho_client.is_configured() or not zoho_fill._is_eko(session):
+        return []
+    try:
+        lead = zoho_client.find_lead(record.mobile or "", record.name or "",
+                                     record.branch_code or "")
+    except Exception as e:
+        logger.error("feedback_loops: Zoho search for %s's alternate number "
+                     "failed: %s: %s", record.csp_id, type(e).__name__, e,
+                     exc_info=True)
+        return []
+    out = []
+    # A Lead names them Phone / Mobile / Secondary_Phone; an sbi_kiosk
+    # record Mobile_Number / Alternate_Mobile_Number / WhasApp_Number.
+    for key in zoho_client.LEAD_PHONE_FIELDS + zoho_client.PHONE_FIELDS:
+        n = _phone((lead or {}).get(key))
+        if n and n not in out:
+            out.append(n)
+    return out
+
+
+def next_alternate(session, fix: ContactFix, record) -> Optional[str]:
+    """The next number to try for this CSP, or None: the other numbers in
+    their mobile cell first, then their Zoho Lead's. Never the bad one, one
+    already tried, or one with a problem of its own."""
+    bad_numbers = {f.bad_value for f in session.execute(select(ContactFix).where(
+        ContactFix.csp_id == record.csp_id,
+        ContactFix.problem == WHATSAPP_UNDELIVERED)).scalars()}
+    skip = bad_numbers | set(fix.alternates_tried or []) | {fix.bad_value}
+    for n in _numbers(record.mobile) + _zoho_numbers(session, record):
+        if n not in skip:
+            return n
+    return None
+
+
+def _try_alternate(session, fix: ContactFix, record, number: str) -> tuple:
+    """Send what did not arrive to the alternate number. (ok, note)."""
+    from app.services import data_request_service as drs
+    from app.services import message_sender
+
+    if fix.failed_kind == "documents_ready":
+        ok, note, _ = _resend_documents_whatsapp(session, fix, record,
+                                                 mobile=number)
+        return ok, note.replace("the new number", f"alternate {number}")
+    try:
+        channel = message_sender.choose_channel(session, kind="whatsapp")
+    except message_sender.NoChannel:
+        return None, "no active whatsapp channel"
+    open_request = drs.open_request_for(session, record.csp_id)
+    if (open_request is not None and open_request.sent_to
+            and _phone(open_request.sent_to) == fix.bad_value):
+        drs.cancel(session, record.csp_id,
+                   "WhatsApp did not reach the phone — tried the alternate number")
+    out = message_sender.ask_for_details(session, record, channel=channel,
+                                         verify=True, manual=True,
+                                         mobile=number)
+    if out.get("sent"):
+        return True, f"data verification sent to alternate number {number}"
+    reason = out.get("reason") or "not sent"
+    return (False, reason) if "via" in out else (None, f"waiting: {reason}")
+
+
+def _alternate_result(session, fix: ContactFix, now: datetime) -> Optional[str]:
+    """What became of the message to the alternate: 'works', 'failed', or
+    None while it is not known yet."""
+    from app.models.whatsapp_message import WhatsAppMessage
+    from app.services import message_log
+    sent = [m for m in session.execute(
+        select(WhatsAppMessage).where(WhatsAppMessage.csp_id == fix.csp_id,
+                                      WhatsAppMessage.sent_at >= fix.asked_at)
+        .order_by(WhatsAppMessage.sent_at)).scalars()
+        if _phone(m.phone) == fix.alternate]
+    if not sent:
+        return None
+    stage = message_log.stage(sent[-1], now)
+    if stage in (message_log.DELIVERED, message_log.READ):
+        return "works"
+    if stage in (message_log.NOT_RECEIVED, message_log.NOT_SENT):
+        return "failed"
+    return None
+
+
+def _use_alternate(session, fix: ContactFix, record) -> tuple:
+    """The alternate reached the phone: it replaces the old number in
+    CSPDATA (the sheet is the source of truth) and on the record."""
+    from app.services import sheet_writeback_service as wb
+    ten = fix.alternate[2:] if fix.alternate.startswith("91") else fix.alternate
+    try:
+        written, _ = wb.write_values(record.csp_id, {"mobile": ten})
+    except wb.SheetWriteError as e:
+        return False, f"the alternate works, but CSPDATA could not be updated: {e}"
+    if "mobile" not in written:
+        return False, "the alternate works, but CSPDATA has no mobile column"
+    record.mobile = ten
+    logger.info("feedback_loops: %s — alternate number works; CSPDATA mobile "
+                "updated", record.csp_id)
+    return True, f"alternate number {ten} works — CSPDATA updated"
 
 
 def _ask(session, fix: ContactFix, record) -> tuple:
@@ -338,7 +464,8 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
 
     fixes = session.execute(
         select(ContactFix).where(
-            ContactFix.status.in_(("open", "asked", "corrected")))
+            ContactFix.status.in_(("open", "asked", "corrected",
+                                   "trying_alternate")))
         .order_by(ContactFix.created_at)).scalars().all()
     for fix in fixes:
         record = session.execute(select(CSPRecord).where(
@@ -347,6 +474,21 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
             fix.status, fix.note = "stopped", "the CSP is not in the records"
             counts["stopped"] += 1
             continue
+        if fix.status == "trying_alternate":
+            result = _alternate_result(session, fix, now)
+            if result == "works":
+                ok, note = _use_alternate(session, fix, record)
+                if ok:
+                    fix.status, fix.corrected_value = "done", fix.alternate
+                    counts["corrected"] += 1
+                fix.note = note
+            elif result == "failed":
+                fix.status = "open"
+                fix.note = f"alternate {fix.alternate} is unreachable too"
+                fix.alternate = None
+            session.commit()
+            if fix.status == "trying_alternate" or fix.status == "done":
+                continue
         current = (_phone(record.mobile) if fix.problem == WHATSAPP_UNDELIVERED
                    else _email(record.email))
         if fix.status in ("open", "asked") and current and current != fix.bad_value:
@@ -360,7 +502,22 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
             continue
 
         try:
-            if fix.status == "open":
+            alternate = (next_alternate(session, fix, record)
+                         if fix.status == "open"
+                         and fix.problem == WHATSAPP_UNDELIVERED else None)
+            if alternate:
+                ok, note = _try_alternate(session, fix, record, alternate)
+                if ok:
+                    fix.status, fix.asked_at = "trying_alternate", now
+                    fix.alternate = alternate
+                    fix.alternates_tried = list(fix.alternates_tried or []) + [alternate]
+                    fix.asked_via = "whatsapp (alternate)"
+                    counts["asked"] += 1
+                elif ok is False:
+                    # This alternate could not be sent to: next time, the
+                    # next one (or email).
+                    fix.alternates_tried = list(fix.alternates_tried or []) + [alternate]
+            elif fix.status == "open":
                 ok, note = _ask(session, fix, record)
                 if ok:
                     fix.status, fix.asked_at = "asked", now
@@ -371,7 +528,7 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
                 if record.send_hold:
                     ok, note, resent = None, f"waiting: {record.send_hold}", False
                 elif fix.problem == EMAIL_BOUNCED and fix.failed_kind == "documents":
-                    ok, note, resent = _resend_documents_email(session, fix, record)
+                    ok, note, resent = resend_documents_email(session, record)
                 elif (fix.problem == WHATSAPP_UNDELIVERED
                       and fix.failed_kind == "documents_ready"):
                     ok, note, resent = _resend_documents_whatsapp(
@@ -429,6 +586,7 @@ def list_contact_fixes(session, status: str = "", limit: int = 100) -> dict:
             "asked_via": f.asked_via,
             "asked_at": f.asked_at.isoformat() if f.asked_at else None,
             "corrected_value": f.corrected_value,
+            "alternate": f.alternate,
             "resent_at": f.resent_at.isoformat() if f.resent_at else None,
             "tries": f.tries,
             "note": f.note,

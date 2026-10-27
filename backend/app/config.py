@@ -201,6 +201,9 @@ class Settings(BaseSettings):
                                        alias="CONTACT_LOOP_ENABLED")
     contact_loop_minutes: int = Field(default=30, alias="CONTACT_LOOP_MINUTES")
     contact_loop_batch: int = Field(default=10, alias="CONTACT_LOOP_BATCH")
+    # No. 152: the day after the documents, "did you get them? 1 / 2 / 3".
+    documents_feedback_enabled: bool = Field(
+        default=True, alias="DOCUMENTS_FEEDBACK_ENABLED")
 
 
     # WhatsApp every old CSP to verify their details (No. 126), gently: a

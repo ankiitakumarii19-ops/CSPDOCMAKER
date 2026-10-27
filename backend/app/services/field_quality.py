@@ -644,6 +644,18 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
         f"{to_rm} sent to their RM (not understood)",
         "attention" if replies.get("draft") else "ok" if replies else "empty")
 
+    from app.services import documents_feedback
+    fb = documents_feedback.summary(session, limit=0)
+    row("feedback", "Feedback after documents (loop 5)",
+        "Whether CSPs got their documents, asked the day after",
+        "Reply 1 got them / 2 did not (emailed again) / 3 something wrong "
+        "(data verification sent)",
+        (f"{fb['asked']} asked · {fb['answers']['1']} got them · "
+         f"{fb['answers']['2']} did not · {fb['answers']['3']} something "
+         f"wrong · {fb['no_answer']} no answer yet") if fb["asked"] else "none asked yet",
+        "attention" if fb["answers"]["2"] or fb["answers"]["3"] else
+        "ok" if fb["asked"] else "empty")
+
     misses = session.execute(select(func.count()).select_from(KnowledgeMiss)).scalar() or 0
     last_miss = session.execute(select(func.max(KnowledgeMiss.last_asked_at))).scalar()
     row("chat", "Unanswered chat questions",

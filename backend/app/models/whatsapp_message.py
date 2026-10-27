@@ -37,7 +37,9 @@ KIND_DATA_REQUEST = "data_request"        # please confirm your details
 KIND_MISSING_DATA = "missing_data"        # these details are still needed
 KIND_DOCUMENTS_READY = "documents_ready"  # your documents were emailed
 KIND_OTHER = "other"                      # e.g. the plain WhatsApp test
+KIND_FEEDBACK = "feedback"                # did you get your documents? (No. 152)
 KINDS = (KIND_DATA_REQUEST, KIND_MISSING_DATA, KIND_DOCUMENTS_READY,
+         KIND_FEEDBACK,
          KIND_OTHER)
 
 # What the platform said when it was asked to send (whatsapp_platform).

@@ -628,6 +628,7 @@ KIND_LABEL = {
     KIND_DATA_REQUEST: "Data verification message",
     KIND_MISSING_DATA: "Data missing message",
     KIND_DOCUMENTS_READY: "Documents sent message",
+    "feedback": "Feedback message (did you get your documents?)",
     KIND_OTHER: "Message",
 }
 

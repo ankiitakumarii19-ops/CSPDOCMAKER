@@ -254,12 +254,16 @@ def ask_for_details(session: Session, record, *,
                     verify: bool = False,
                     manual: bool = False,
                     allow_email: bool = False,
+                    mobile: Optional[str] = None,
                     ) -> dict:
     """Send one CSP a link to confirm their own details.
 
     allow_email (No. 150): the contact loop asks by email a CSP whose
     WhatsApp number did not work, even while CSPs are otherwise asked on
     WhatsApp only (CSP_DATA_REQUESTS_BY_EMAIL off).
+    mobile (No. 152): send on WhatsApp to this number instead of the one on
+    the record — the CSP's alternate number, when the main one is
+    unreachable.
 
     Reuses an open request rather than issuing a second link: being asked
     twice with two different links is confusing, and the first one would
@@ -320,7 +324,11 @@ def ask_for_details(session: Session, record, *,
                           "CSP was asked for it — not asked again; their "
                           "RM is alerted to fill it"}
 
-    to, via = address_for(record, channel.kind)
+    if mobile and channel.kind == WHATSAPP:
+        from app.services.alert_composer import normalize_mobile
+        to, via = normalize_mobile(mobile), VIA_WHATSAPP
+    else:
+        to, via = address_for(record, channel.kind)
     if not to:
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": "no usable mobile number and no email address"}

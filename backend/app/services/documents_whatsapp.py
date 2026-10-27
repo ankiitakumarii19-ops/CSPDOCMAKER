@@ -103,9 +103,11 @@ def whatsapp_channel(session):
 
 
 @telemetry.traced("whatsapp_documents_ready", "documents_whatsapp")
-def notify(session, csp, job, document_names: List[str]) -> dict:
+def notify(session, csp, job, document_names: List[str],
+           mobile: str = None) -> dict:
     """Tell the CSP on WhatsApp that their documents were emailed (no
-    PDF on WhatsApp — No. 135)."""
+    PDF on WhatsApp — No. 135). `mobile`: a number other than the record's
+    — the CSP's alternate, when the main one is unreachable (No. 152)."""
     from app.services import message_log, message_sender
     from app.services import whatsapp_platform as wa
 
@@ -121,11 +123,12 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
             return _skip(csp, "the app is not on a public address "
                               "(PUBLIC_APP_URL) — a laptop copy never "
                               "messages a CSP")
-        if not wa.phone_for_whatsapp(csp.mobile or ""):
+        number = mobile or csp.mobile or ""
+        if not wa.phone_for_whatsapp(number):
             return _skip(csp, "no usable mobile number")
 
         outcome = wa.send(
-            csp.mobile, BODY,
+            number, BODY,
             {"name": csp.name or csp.csp_id,
              "documents": ", ".join(document_names),
              "email": csp.email or "your email"},
@@ -134,7 +137,7 @@ def notify(session, csp, job, document_names: List[str]) -> dict:
         # For the WhatsApp messages screen (No. 110).
         message_log.record(
             session, kind=message_log.KIND_DOCUMENTS_READY,
-            mobile=csp.mobile, outcome=outcome, csp_id=csp.csp_id,
+            mobile=number, outcome=outcome, csp_id=csp.csp_id,
             csp_name=csp.name, processing_job_id=job.id)
         channel.last_used_at = datetime.now(timezone.utc)
         channel.last_error = (None if outcome["status"] == wa.SENT

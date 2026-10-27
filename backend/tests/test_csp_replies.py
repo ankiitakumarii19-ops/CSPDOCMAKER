@@ -44,8 +44,9 @@ def rdb(qdb):
     """The reply wordings exactly as the migration writes them — put back
     here, because other tests empty the Knowledge Base."""
     from app.models.knowledge import KnowledgeEntry
-    qdb.execute(text("TRUNCATE csp_replies, whatsapp_messages, email_messages, "
-                     "authorization_records RESTART IDENTITY CASCADE"))
+    qdb.execute(text("TRUNCATE csp_replies, csp_feedback, whatsapp_messages, "
+                     "email_messages, authorization_records "
+                     "RESTART IDENTITY CASCADE"))
     qdb.execute(text("DELETE FROM knowledge_entries WHERE category = 'CSP replies'"))
     m = _migration()
     for q, p, k, a in m.START:
@@ -203,7 +204,7 @@ class FakeWhatsApp:
         return {"messages": self.inbox}
 
     def send(self, phone, body, values, source_name=None):
-        self.sent.append((phone, values["message"]))
+        self.sent.append((phone, values.get("message", body)))
         return {"status": self.result, "reason": "test", "job_id": None,
                 "template_name": "t"}
 
@@ -283,7 +284,7 @@ def test_sending_sends_the_reply_then_the_new_link(rdb, monkeypatch):
     assert (reply.status, reply.decided_by, reply.note) == (
         "sent", "admin@eko.co.in", "new link sent")
     assert asked == [{"verify": True, "manual": True}]
-    assert cancelled and "link does not work" in cancelled[0]
+    assert cancelled and "link did not work" in cancelled[0]
     from app.models.whatsapp_message import WhatsAppMessage
     assert rdb.execute(select(WhatsAppMessage).where(
         WhatsAppMessage.kind == "other")).scalars().first() is not None, \

@@ -38,10 +38,15 @@ def run_once(session, now: datetime = None, wa=None) -> dict:
                             {"k": LOCK_KEY}).scalar():
             return {"skipped": "another reply run is still going"}
         try:
-            return csp_replies.run(
-                session, now=now, wa=wa,
-                sending_hours=in_hours(now, s.verify_start_hour,
-                                       s.verify_end_hour))
+            hours = in_hours(now, s.verify_start_hour, s.verify_end_hour)
+            result = csp_replies.run(session, now=now, wa=wa,
+                                     sending_hours=hours)
+            # The day after the documents: "did you get them?" (No. 152).
+            if hours:
+                from app.services import documents_feedback
+                result["feedback"] = documents_feedback.run(session, now=now,
+                                                            wa=wa)
+            return result
         finally:
             lock.execute(text("SELECT pg_advisory_unlock(:k)"), {"k": LOCK_KEY})
             lock.commit()

@@ -159,8 +159,10 @@ def senders(monkeypatch):
     monkeypatch.setattr(email_service, "paused", lambda: calls["paused"])
     monkeypatch.setattr(email_service, "send_documents_email",
                         lambda **kw: calls["email"].append(kw) or True)
-    monkeypatch.setattr(documents_whatsapp, "notify", lambda s, csp, job, names: (
-        calls["whatsapp"].append((csp.mobile, names)) or {"status": "sent"}))
+    monkeypatch.setattr(documents_whatsapp, "notify",
+                        lambda s, csp, job, names, mobile=None: (
+                            calls["whatsapp"].append((mobile or csp.mobile, names))
+                            or {"status": "sent"}))
     monkeypatch.setattr(fl, "_documents", lambda session, csp_id: [
         ("CSP ID Card", SimpleNamespace(filename="id.pdf", file_data=b"%PDF-1.4"))])
     return calls

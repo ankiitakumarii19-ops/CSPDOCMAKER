@@ -288,9 +288,19 @@ async def decide_suggestion(
             summary="Loop 2: bad numbers / bounced emails and what was done")
 async def contact_fixes(
     status_: str = Query("", alias="status",
-                         pattern="^(|open|asked|corrected|resent|done|stopped)$"),
+                         pattern="^(|open|asked|trying_alternate|corrected|resent|done|stopped)$"),
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role(*ADMINS)),
 ):
     from app.services import feedback_loops
     return await session.run_sync(feedback_loops.list_contact_fixes, status_)
+
+
+@router.get("/api/admin/quality/feedback",
+            summary="Loop 5: did CSPs get their documents? (No. 152)")
+async def documents_feedback_summary(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    from app.services import documents_feedback
+    return await session.run_sync(documents_feedback.summary)

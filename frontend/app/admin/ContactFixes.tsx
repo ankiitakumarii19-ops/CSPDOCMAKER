@@ -16,6 +16,7 @@ import type { ApiError, ContactFixRow } from "../lib/api";
 
 const STATUS: Record<ContactFixRow["status"], { label: string; cls: string }> = {
   open: { label: "Not asked yet", cls: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300" },
+  trying_alternate: { label: "Trying alternate number", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
   asked: { label: "Asked — waiting", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
   corrected: { label: "Corrected — sending again", cls: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300" },
   resent: { label: "Fixed and sent again", cls: "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300" },
@@ -60,9 +61,10 @@ export default function ContactFixes({ version }: { version: number }) {
           <span className="text-sm font-normal text-gray-500">({rows?.length ?? 0})</span>
         </h3>
         <p className="text-xs text-gray-500">
-          A WhatsApp that did not reach the phone, or an email that bounced. The CSP is asked for
-          the right number or email on the other channel — once — and what failed is sent again when
-          it is corrected. Checked every 30 minutes, 8 am – 8 pm; nothing goes to a CSP on hold, and
+          A WhatsApp that did not reach the phone, or an email that bounced. An unreachable number
+          is first tried on the CSP&apos;s alternate number — if that works it replaces the old one in
+          CSPDATA; otherwise the CSP is asked for the right number or email on the other channel —
+          once — and what failed is sent again when it is corrected. Checked every 30 minutes, 8 am – 8 pm; nothing goes to a CSP on hold, and
           emails wait while they are paused.
         </p>
       </div>
@@ -103,6 +105,7 @@ export default function ContactFixes({ version }: { version: number }) {
                       Asked by {f.asked_via} {when(f.asked_at)}
                     </div>
                   )}
+                  {f.alternate && <div>Trying alternate {f.alternate}</div>}
                   {f.corrected_value && <div>Corrected to {f.corrected_value}</div>}
                   {f.resent_at && <div>Sent again {when(f.resent_at)}</div>}
                   {f.note && <div>{f.note}</div>}

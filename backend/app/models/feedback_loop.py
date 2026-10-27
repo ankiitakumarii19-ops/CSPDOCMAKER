@@ -80,14 +80,55 @@ class ContactFix(Base):
         comment="What did not arrive: documents, documents_ready, data_request…")
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default="open",
-        comment="open, asked, corrected, resent, done or stopped")
+        comment="open, trying_alternate, asked, corrected, resent, done or stopped")
     asked_via: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     asked_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
     tries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     corrected_value: Mapped[Optional[str]] = mapped_column(String(320),
                                                            nullable=True)
+    # No. 152: an unreachable WhatsApp number is first tried on the CSP's
+    # alternate number(s) — the one being tried now, and every one tried.
+    alternate: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    alternates_tried: Mapped[list] = mapped_column(JSONB, nullable=False,
+                                                   default=list)
     resent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(),
+        onupdate=func.now(), nullable=False)
+
+
+class CspFeedback(Base):
+    """No. 152: the day after a CSP's documents, "did you get them?" —
+    reply 1 (got them, all correct), 2 (did not get them) or 3 (something
+    is wrong) — and what was done about the answer."""
+    __tablename__ = "csp_feedback"
+    __table_args__ = (UniqueConstraint("workspace_id", "documents_message_id",
+                                       name="uq_csp_feedback_message"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"),
+        nullable=False, index=True, default=default_workspace_id)
+    csp_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    phone: Mapped[str] = mapped_column(String(20), nullable=False)
+    documents_message_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False,
+        comment="The 'documents ready' WhatsApp this asks about")
+    ask_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="sent",
+        comment="sent, pending (wording awaiting Meta) or failed")
+    tries: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    asked_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True)
+    answer: Mapped[Optional[str]] = mapped_column(String(5), nullable=True)
+    answer_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    answered_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
     note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
