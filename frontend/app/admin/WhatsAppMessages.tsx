@@ -17,6 +17,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import ContactStatusLine from "../components/ContactStatusLine";
 import { api } from "../lib/api";
 import WhatsAppMessageDetails from "./WhatsAppMessageDetails";
 import type {
@@ -292,6 +293,7 @@ export default function WhatsAppMessages() {
               ))}
             </div>
           )}
+          <ContactStatusLine status={data.contact_fixes} />
         </div>
       )}
 

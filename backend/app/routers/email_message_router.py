@@ -122,6 +122,7 @@ async def report(kind: Optional[str] = Query(None),
              and (not because or m.sent_because == because)]
     return {"counts": counts, "total": len(shown),
             "sent_because": _because(rows),
+            "contact_fixes": await session.run_sync(_contact_status),
             "messages": [_row(m) for m in shown[:500]],
             "note": ("Opened is reliable; not opened is not proof the email "
                      "was unread — many mail apps block pictures.")}
@@ -133,3 +134,9 @@ async def refresh(session: AsyncSession = Depends(get_session),
     """Read bounce notices from the sending inbox now."""
     from app.workers.email_bounce_worker import check_now
     return await asyncio.to_thread(check_now)
+
+
+def _contact_status(sync_session):
+    """Contact fixes in one line (No. 158)."""
+    from app.services import feedback_loops
+    return feedback_loops.contact_status(sync_session)

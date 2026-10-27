@@ -283,3 +283,68 @@ async def test_the_feedback_summary_is_for_admins(client, fdb):
     assert r.status_code == 200, r.text
     body = r.json()
     assert (body["asked"], body["no_answer"]) == (1, 1)
+
+
+# ---- the Calling sheet's alternate number (No. 157) ----------------------
+
+@pytest.fixture
+def calling(monkeypatch):
+    from app.config import get_settings
+    from app.services import source_sheets
+    state = {"rows": [], "fail": False}
+    monkeypatch.setattr(get_settings(), "calling_sheet_id", "calling-0001")
+
+    def read(sheet, tab, header_row):
+        if state["fail"]:
+            raise RuntimeError("Google is down")
+        return state["rows"]
+    monkeypatch.setattr(source_sheets, "read_rows", read)
+    return state
+
+
+def _calling_row(code="1A996001", main="9812345601", alt="9812345603",
+                 dc="9000000999"):
+    return {"CSP ID": code, "CSP Name": "Csp", "CSP Mobile number": main,
+            "Alternate Mobile No.": alt, "Mobile Number DC": dc,
+            "Relationship Manager": "Rm"}
+
+
+def test_the_calling_sheets_alternate_number_is_tried(ldb, senders, calling,
+                                                      monkeypatch):
+    calling["rows"] = [_calling_row()]
+    asked = []
+    from app.services import message_sender
+    monkeypatch.setattr(message_sender, "ask_for_details", lambda s, r, **kw: (
+        asked.append(kw.get("mobile")) or {"sent": True, "via": "whatsapp"}))
+    _csp(ldb)                               # one number in CSPDATA
+    _wa(ldb)
+    fl.run(ldb, SETTINGS)
+    assert asked == ["919812345603"], "the Calling sheet's alternate, not the DC's"
+    assert _fix(ldb).alternate == "919812345603"
+
+
+def test_the_second_number_in_cspdata_comes_before_the_calling_sheet(
+        ldb, senders, calling):
+    calling["rows"] = [_calling_row()]
+    _csp(ldb, mobile="9812345601/ 9812345602")
+    _wa(ldb)
+    fl.run(ldb, SETTINGS)
+    assert _fix(ldb).alternate == ALT
+
+
+def test_an_unreadable_calling_sheet_falls_back_to_email(ldb, senders, calling):
+    calling["fail"] = True
+    _csp(ldb)
+    _wa(ldb)
+    fl.run(ldb, SETTINGS)
+    assert senders["ask"] == [("1A996001", "email", True, True)]
+
+
+def test_only_the_csps_own_number_columns_are_used():
+    heads = ["CSP ID", "CSP Mobile number", "Alternate Mobile No.",
+             "WhatsApp Number", "Mobile Number DC", "Branch Contact No.",
+             "RM Mobile", "ASM Contact", "Aadhaar Number", "Account Number",
+             "Pin Code", "Other Contact"]
+    assert fl.calling_phone_columns(heads) == [
+        "CSP Mobile number", "Alternate Mobile No.", "WhatsApp Number",
+        "Other Contact"]

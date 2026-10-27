@@ -96,6 +96,7 @@ async def report(
         "summary": summary,
         "sent_because": [{"key": k, "label": send_reason.label(k), "count": n}
                          for k, n in sorted(reasons.items(), key=lambda kv: -kv[1])],
+        "contact_fixes": await session.run_sync(_contact_status),
         "rows": rows[:MAX_ROWS],
         "total_rows": len(rows),
         "truncated": len(rows) > MAX_ROWS,
@@ -195,3 +196,8 @@ def _refresh_now() -> dict:
 def _settings():
     from app.config import get_settings
     return get_settings()
+
+
+def _contact_status(sync_session):
+    from app.services import feedback_loops
+    return feedback_loops.contact_status(sync_session)

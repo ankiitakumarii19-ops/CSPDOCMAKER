@@ -334,15 +334,85 @@ def _zoho_numbers(session, record) -> List[str]:
     return out
 
 
+# ---- the Calling sheet's numbers (No. 157) ------------------------------
+
+# A Calling-sheet column is a number of the CSP's own when its heading names
+# a phone and none of the other people the sheet also lists.
+_PHONE_HEADING = ("mobile", "phone", "contact", "number", "whatsapp", "alternate",
+                  "alt no", "alt.", "mob")
+_NOT_THE_CSP = ("dc", "district coordinator", "rm", "relationship", "asm",
+                "branch", "manager", "lho", "ao ", "rbo", "circle", "id",
+                "code", "account", "aadhaar", "aadhar", "pan", "ifsc", "pin")
+
+_calling_cache: Dict[str, object] = {}
+
+
+def calling_phone_columns(headings: List[str]) -> List[str]:
+    """The headings of the CSP's own number columns, main number first."""
+    import re as _re
+
+    def norm(h: str) -> str:
+        return " " + " ".join(_re.sub(r"[^a-z0-9.]+", " ", (h or "").lower()).split()) + " "
+
+    found = []
+    for h in headings:
+        n = norm(h)
+        if not any(w in n for w in _PHONE_HEADING):
+            continue
+        if any(f" {w.strip()} " in n or n.strip().startswith(w.strip() + " ")
+               for w in _NOT_THE_CSP):
+            continue
+        found.append(h)
+    found.sort(key=lambda h: 0 if norm(h).strip() == "csp mobile number" else 1)
+    return found
+
+
+def _calling_numbers(record) -> List[str]:
+    """The CSP's numbers in the Calling sheet (No. 157: "for the alternate
+    number look in the Calling sheet"): every number in their row's own
+    phone columns. Read once per run; only where CALLING_SHEET_ID is set
+    (the server). Never raises: a sheet that cannot be read is logged."""
+    from app.config import get_settings
+    from app.services import source_sheets
+
+    s = get_settings()
+    if not s.calling_sheet_id:
+        return []
+    if "rows" not in _calling_cache:
+        try:
+            rows = source_sheets.read_rows(s.calling_sheet_id, s.calling_sheet_tab,
+                                           s.calling_header_row)
+        except Exception as e:
+            logger.error("feedback_loops: the Calling sheet could not be read "
+                         "for alternate numbers: %s: %s", type(e).__name__, e)
+            rows = []
+        columns = calling_phone_columns(list(rows[0].keys())) if rows else []
+        _calling_cache["rows"] = {
+            source_sheets.code_of(r.get("CSP ID")): [r.get(c, "") for c in columns]
+            for r in rows if source_sheets.code_of(r.get("CSP ID"))}
+        if rows:
+            logger.info("feedback_loops: Calling sheet number columns: %s", columns)
+    out = []
+    for cell in _calling_cache["rows"].get(source_sheets.code_of(record.csp_id), []):
+        for n in _numbers(cell):
+            if n not in out:
+                out.append(n)
+    return out
+
+
 def next_alternate(session, fix: ContactFix, record) -> Optional[str]:
     """The next number to try for this CSP, or None: the other numbers in
-    their mobile cell first, then their Zoho Lead's. Never the bad one, one
-    already tried, or one with a problem of its own."""
+    their mobile cell first, then their Calling-sheet row's (No. 157), then
+    their Zoho Lead's. Never the bad one, one already tried, or one with a
+    problem of its own."""
     bad_numbers = {f.bad_value for f in session.execute(select(ContactFix).where(
         ContactFix.csp_id == record.csp_id,
         ContactFix.problem == WHATSAPP_UNDELIVERED)).scalars()}
     skip = bad_numbers | set(fix.alternates_tried or []) | {fix.bad_value}
-    for n in _numbers(record.mobile) + _zoho_numbers(session, record):
+    for n in _numbers(record.mobile) + _calling_numbers(record):
+        if n not in skip:
+            return n
+    for n in _zoho_numbers(session, record):
         if n not in skip:
             return n
     return None
@@ -467,6 +537,7 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
     from app.models.csp_record import CSPRecord
 
     now = now or datetime.now(timezone.utc)
+    _calling_cache.clear()        # the Calling sheet is read afresh each run
     counts = {"found": find_problems(session), "asked": 0, "corrected": 0,
               "resent": 0, "stopped": 0}
     session.commit()
@@ -671,3 +742,24 @@ def auto_fix_info(session, settings, writer=None) -> Dict[str, int]:
         rows = csp_gsheet_service.read_info_sheet()   # read again after a change
     session.commit()
     return counts
+
+
+def contact_status(session) -> dict:
+    """In one line for the WhatsApp and Emails pages (No. 158): how many
+    contact fixes are in progress / fixed / stopped, and what the ones in
+    progress are waiting for (their notes, most common first)."""
+    from collections import Counter
+    fixes = session.execute(select(ContactFix)).scalars().all()
+    busy = [f for f in fixes if f.status in
+            ("open", "trying_alternate", "asked", "corrected")]
+    waiting = Counter((f.note or "").split(" — ")[0][:120] for f in busy
+                      if (f.note or "").startswith("waiting") or
+                      f.note in ("no email address to ask on",
+                                 "no usable mobile number to ask on"))
+    return {
+        "in_progress": len(busy),
+        "fixed": sum(1 for f in fixes if f.status in ("resent", "done")),
+        "stopped": sum(1 for f in fixes if f.status == "stopped"),
+        "waiting": [{"note": n, "count": c} for n, c in waiting.most_common(3)],
+        "found": len(fixes),
+    }

@@ -112,6 +112,15 @@ export interface WhatsAppMessageRow {
   sent_because_label: string;
 }
 
+/** Contact fixes (bounced emails / unreachable WhatsApp) in one line (No. 158). */
+export interface ContactStatus {
+  found: number;
+  in_progress: number;
+  fixed: number;
+  stopped: number;
+  waiting: { note: string; count: number }[];
+}
+
 /** How many messages were sent for each reason other than the usual flow. */
 export interface SentBecause {
   key: string;
@@ -127,6 +136,7 @@ export interface WhatsAppReport {
   last_checked_at: string | null;
   status_days: number;
   sent_because: SentBecause[];
+  contact_fixes: ContactStatus;
 }
 
 export interface WhatsAppFieldChange {
@@ -631,6 +641,7 @@ export interface EmailRow {
 export interface EmailReport {
   counts: Record<string, EmailCounts>;
   sent_because: SentBecause[];
+  contact_fixes: ContactStatus;
   total: number;
   messages: EmailRow[];
   note: string;

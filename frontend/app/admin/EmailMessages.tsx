@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import ContactStatusLine from "../components/ContactStatusLine";
 import { api } from "../lib/api";
 import type { ApiError, EmailReport } from "../lib/api";
 
@@ -136,6 +137,7 @@ export default function EmailMessages() {
               ))}
             </div>
           )}
+          <ContactStatusLine status={data.contact_fixes} />
         </section>
       )}
 
