@@ -43,7 +43,7 @@ function when(iso: string | null): string {
 export default function EmailMessages() {
   const [data, setData] = useState<EmailReport | null>(null);
   const [error, setError] = useState("");
-  const [focus, setFocus] = useState<{ kind?: string; status?: string }>({});
+  const [focus, setFocus] = useState<{ kind?: string; status?: string; because?: string }>({});
   const [q, setQ] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
@@ -108,6 +108,37 @@ export default function EmailMessages() {
         </div>
       )}
 
+      {/* Why emails were sent, besides the usual flow (No. 156). */}
+      {data && (
+        <section className={`${card} px-5 py-3`}>
+          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+            Why emails were sent (besides the usual flow)
+          </div>
+          {data.sent_because.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              None yet — emails sent because WhatsApp could not reach the CSP, or sent again after
+              a correction or a &quot;did not get them&quot; answer, will show here.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {data.sent_because.map((b) => (
+                <button
+                  key={b.key}
+                  onClick={() => setFocus(focus.because === b.key ? {} : { because: b.key })}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                    focus.because === b.key
+                      ? "bg-eko/10 text-eko border-eko"
+                      : "border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {b.label} <span className="font-bold tabular-nums ml-1">{b.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       <div className="grid gap-4 lg:grid-cols-2">
         {data &&
           Object.entries(data.counts)
@@ -138,14 +169,16 @@ export default function EmailMessages() {
       <section className={card}>
         <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex flex-wrap items-center gap-3">
           <h3 className="font-semibold text-gray-900 dark:text-white flex-1">
-            {focus.kind
+            {focus.because
+              ? `Sent because: ${data?.sent_because.find((b) => b.key === focus.because)?.label ?? focus.because}`
+              : focus.kind
               ? `${data?.counts[focus.kind]?.title ?? focus.kind} — ${
                   TILES.find((t) => t.key === focus.status)?.label ?? "all"
                 }`
               : "All emails"}{" "}
             <span className="text-sm font-normal text-gray-500">({data?.total ?? 0})</span>
           </h3>
-          {(focus.kind || focus.status) && (
+          {(focus.kind || focus.status || focus.because) && (
             <button onClick={() => setFocus({})} className="text-sm text-eko hover:underline">
               Show all
             </button>
@@ -179,6 +212,11 @@ export default function EmailMessages() {
                   <td className="px-5 py-2 text-gray-700 dark:text-gray-300">
                     <div>{m.subject}</div>
                     <div className="text-xs text-gray-500">{data.counts[m.kind]?.title ?? m.kind}</div>
+                    {m.sent_because && (
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                        {m.sent_because_label}
+                      </span>
+                    )}
                   </td>
                   <td className="px-5 py-2 text-gray-500 whitespace-nowrap">{when(m.sent_at)}</td>
                   <td className="px-5 py-2">

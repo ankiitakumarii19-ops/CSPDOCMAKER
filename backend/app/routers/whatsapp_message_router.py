@@ -40,6 +40,7 @@ async def report(
                       description="0 = every message ever recorded"),
     include_tests: bool = Query(True),
     q: Optional[str] = Query(None, max_length=100),
+    because: Optional[str] = Query(None, max_length=40),
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("admin", "super_admin")),
 ):
@@ -70,6 +71,8 @@ async def report(
     def wanted(m) -> bool:
         if kind and m.kind != kind:
             return False
+        if because and m.sent_because != because:
+            return False
         s = message_log.stage(m, now)
         if stage and s != stage:
             return False
@@ -83,8 +86,16 @@ async def report(
     rows = [message_log.as_row(m, now) for m in messages if wanted(m)]
     last_checked = (await session.execute(
         select(func.max(WhatsAppMessage.checked_at)))).scalar()
+    # Why messages were sent, other than the usual flow (No. 156).
+    from app.services import send_reason
+    reasons = {}
+    for m in messages:
+        if m.sent_because:
+            reasons[m.sent_because] = reasons.get(m.sent_because, 0) + 1
     return {
         "summary": summary,
+        "sent_because": [{"key": k, "label": send_reason.label(k), "count": n}
+                         for k, n in sorted(reasons.items(), key=lambda kv: -kv[1])],
         "rows": rows[:MAX_ROWS],
         "total_rows": len(rows),
         "truncated": len(rows) > MAX_ROWS,

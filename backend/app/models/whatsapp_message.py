@@ -106,6 +106,9 @@ class WhatsAppMessage(Base):
         comment="The platform's job id; looks up delivery status")
     template_name: Mapped[Optional[str]] = mapped_column(
         String(200), nullable=True)
+    sent_because: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+        comment="Why it was sent (send_reason, No. 156); NULL = usual flow")
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="app", server_default="app",
         comment="app = recorded when sent; history = found in the platform's "

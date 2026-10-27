@@ -21,6 +21,7 @@ from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import send_reason
 from app.database import get_session
 from app.dependencies import require_role
 from app.models.email_message import (FAILED, KIND_CHAT, KIND_DETAILS,
@@ -79,13 +80,27 @@ def _row(m: EmailMessage) -> dict:
             "open_count": m.open_count,
             "bounced_at": (m.bounced_at.isoformat() if m.bounced_at
                            else None),
-            "bounce_reason": m.bounce_reason}
+            "bounce_reason": m.bounce_reason,
+            # Why it was sent (No. 156); None = the usual flow.
+            "sent_because": m.sent_because,
+            "sent_because_label": send_reason.label(m.sent_because)}
+
+
+def _because(rows) -> list:
+    """How many emails were sent for each reason other than the usual flow."""
+    out = {}
+    for m in rows:
+        if m.sent_because:
+            out[m.sent_because] = out.get(m.sent_because, 0) + 1
+    return [{"key": k, "label": send_reason.label(k), "count": n}
+            for k, n in sorted(out.items(), key=lambda kv: -kv[1])]
 
 
 @router.get("")
 async def report(kind: Optional[str] = Query(None),
                  status: Optional[str] = Query(None),
                  q: Optional[str] = Query(None, max_length=100),
+                 because: Optional[str] = Query(None, max_length=40),
                  session: AsyncSession = Depends(get_session),
                  user=Depends(require_role("admin", "super_admin"))):
     rows = (await session.execute(select(EmailMessage).order_by(
@@ -103,8 +118,10 @@ async def report(kind: Optional[str] = Query(None),
              and (not status or (status == "sent" and m.send_status == SENT)
                   or _bucket(m) == status)
              and (not q or q.lower() in " ".join(
-                 filter(None, [m.csp_id, m.csp_name, m.to_email])).lower())]
+                 filter(None, [m.csp_id, m.csp_name, m.to_email])).lower())
+             and (not because or m.sent_because == because)]
     return {"counts": counts, "total": len(shown),
+            "sent_because": _because(rows),
             "messages": [_row(m) for m in shown[:500]],
             "note": ("Opened is reliable; not opened is not proof the email "
                      "was unread — many mail apps block pictures.")}

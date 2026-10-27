@@ -492,12 +492,14 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     if not body:
         raise ValueError("The reply is empty.")
 
+    from app.services import send_reason
     outcome = wa.send(reply.phone, assistant_tools.WHATSAPP_WORDING,
                       {"name": record.name or "CSP", "message": body},
                       source_name=message_log.source_name("chat", record.csp_id))
-    message_log.record(session, kind=KIND_OTHER, mobile=reply.phone,
-                       outcome=outcome, csp_id=record.csp_id,
-                       csp_name=record.name or "")
+    with send_reason.because(send_reason.REPLY):
+        message_log.record(session, kind=KIND_OTHER, mobile=reply.phone,
+                           outcome=outcome, csp_id=record.csp_id,
+                           csp_name=record.name or "")
     reply.reply_text, reply.decided_by = body, by
     # What the person did with the agent's draft (No. 154): kept as it was,
     # or changed — and by how much.
@@ -523,13 +525,15 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
         drs.cancel(session, record.csp_id,
                    "the CSP asked to change their details / the link did "
                    "not work — a new one was sent")
-        out = message_sender.ask_for_details(session, record, verify=True,
-                                             manual=True)
+        with send_reason.because(send_reason.CSP_ASKED):
+            out = message_sender.ask_for_details(session, record, verify=True,
+                                                 manual=True)
         notes.append("new link sent" if out.get("sent")
                      else f"new link NOT sent: {out.get('reason', '')}")
     if "resend_documents" in actions:
         from app.services import feedback_loops
-        ok, why, _ = feedback_loops.resend_documents_email(session, record)
+        with send_reason.because(send_reason.NOT_RECEIVED):
+            ok, why, _ = feedback_loops.resend_documents_email(session, record)
         notes.append(why if ok is not False else f"documents NOT resent: {why}")
     reply.note = "; ".join(notes)[:500]
     logger.info("csp_replies: reply sent to CSP %s by %s (%s)", record.csp_id,

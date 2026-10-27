@@ -55,6 +55,7 @@ const KIND_TITLE: Record<string, string> = {
   missing_data: "Data missing",
   documents_ready: "Documents sent",
   other: "Other",
+  feedback: "Feedback question",
 };
 
 // The tiles, in the order a message travels.
@@ -115,6 +116,8 @@ export default function WhatsAppMessages() {
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [focus, setFocus] = useState<{ kind: Kind; tile: Tile } | null>(null);
+  // Why it was sent (No. 156): shows only the messages sent for that reason.
+  const [because, setBecause] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshed, setRefreshed] = useState<WhatsAppRefreshResult | null>(null);
 
@@ -160,11 +163,14 @@ export default function WhatsAppMessages() {
 
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
+    if (because) return all.filter((r) => r.sent_because === because);
     if (!focus) return all.filter((r) => r.kind !== "other");
     return all.filter((r) => r.kind === focus.kind && matches(r, focus.tile));
-  }, [data, focus]);
+  }, [data, focus, because]);
 
-  const focusLabel = focus
+  const focusLabel = because
+    ? `Sent because: ${data?.sent_because.find((b) => b.key === because)?.label ?? because}`
+    : focus
     ? `${KIND_TITLE[focus.kind]} — ${TILES.find((t) => t.key === focus.tile)?.label}`
     : "All messages";
 
@@ -255,6 +261,40 @@ export default function WhatsAppMessages() {
 
       {loading && !data && <p className="text-sm text-gray-500 py-8">Loading…</p>}
 
+      {/* Why messages were sent, besides the usual flow (No. 156). */}
+      {data && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-3">
+          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+            Why messages were sent (besides the usual flow)
+          </div>
+          {data.sent_because.length === 0 ? (
+            <p className="text-xs text-gray-500">
+              None yet in this period — messages sent because an email bounced, the CSP asked, an
+              alternate number, or a reply will show here.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {data.sent_because.map((b) => (
+                <button
+                  key={b.key}
+                  onClick={() => {
+                    setFocus(null);
+                    setBecause(because === b.key ? "" : b.key);
+                  }}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                    because === b.key
+                      ? "bg-eko/10 text-eko border-eko"
+                      : "border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  {b.label} <span className="font-bold tabular-nums ml-1">{b.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* One card per message */}
       {data && (
         <div className="space-y-4">
@@ -281,7 +321,10 @@ export default function WhatsAppMessages() {
                     return (
                       <button
                         key={t.key}
-                        onClick={() => setFocus(active ? null : { kind: k.key, tile: t.key })}
+                        onClick={() => {
+                          setBecause("");
+                          setFocus(active ? null : { kind: k.key, tile: t.key });
+                        }}
                         className={`text-left rounded-lg border px-3 py-2 transition-colors ${
                           active
                             ? "border-eko bg-gray-50 dark:bg-gray-700"
@@ -313,9 +356,12 @@ export default function WhatsAppMessages() {
                 Click a message to see what the CSP changed
               </span>
             </h3>
-            {focus && (
+            {(focus || because) && (
               <button
-                onClick={() => setFocus(null)}
+                onClick={() => {
+                  setFocus(null);
+                  setBecause("");
+                }}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
                 Show all
@@ -370,7 +416,14 @@ export default function WhatsAppMessages() {
                           {r.phone || "—"}
                         </td>
                         <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
-                          {KIND_TITLE[r.kind]}
+                          {KIND_TITLE[r.kind] ?? "Message"}
+                          {r.sent_because && (
+                            <div className="mt-1">
+                              <span className="px-1.5 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                                {r.sent_because_label}
+                              </span>
+                            </div>
+                          )}
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
                           {when(r.sent_at)}

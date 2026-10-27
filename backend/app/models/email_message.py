@@ -59,6 +59,9 @@ class EmailMessage(Base):
     # The secret in the "opened" picture's address.
     track_token: Mapped[str] = mapped_column(String(64), nullable=False)
     send_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    sent_because: Mapped[Optional[str]] = mapped_column(
+        String(40), nullable=True,
+        comment="Why it was sent (send_reason, No. 156); NULL = usual flow")
     send_error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)

@@ -318,18 +318,18 @@ def test_draft_mode_never_sends_auto_mode_sends_when_quiet(rdb, monkeypatch):
     _ours(rdb)
     wa = FakeWhatsApp([_in("certificate kab milega", 30)])
     assert cr.get_mode(rdb) == "draft"
-    assert cr.run(rdb, wa=wa)["sent"] == 0 and wa.sent == []
+    assert cr.run(rdb, now=NOW, wa=wa)["sent"] == 0 and wa.sent == []
     cr.set_mode(rdb, "auto")
     rdb.commit()
     try:
-        assert cr.run(rdb, wa=wa, sending_hours=False)["sent"] == 0
-        assert cr.run(rdb, wa=wa)["sent"] == 1
+        assert cr.run(rdb, now=NOW, wa=wa, sending_hours=False)["sent"] == 0
+        assert cr.run(rdb, now=NOW, wa=wa)["sent"] == 1
         assert rdb.execute(select(CspReply.decided_by)).scalar_one() == "automatic"
         wa.inbox.append(_in("ID card kab aayega", 1))   # not quiet yet
-        assert cr.run(rdb, wa=wa)["sent"] == 0
+        assert cr.run(rdb, now=NOW, wa=wa)["sent"] == 0
         cr.set_mode(rdb, "off")
         rdb.commit()
-        assert cr.run(rdb, wa=wa) == {"mode": "off"}
+        assert cr.run(rdb, now=NOW, wa=wa) == {"mode": "off"}
     finally:
         cr.set_mode(rdb, "draft")
         rdb.commit()

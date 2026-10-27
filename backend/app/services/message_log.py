@@ -30,6 +30,7 @@ kept on the message (check_error) and listed in what it returns.
 import json
 import logging
 import re
+from app.services import send_reason
 from datetime import datetime, timedelta, timezone
 from typing import Dict, Iterable, List, Optional
 
@@ -161,6 +162,7 @@ def record(session: Session, *, kind: str, mobile: str, outcome: dict,
                 job_id=outcome.get("job_id") or None,
                 template_name=outcome.get("template_name"),
                 sent_at=_now(),
+                sent_because=send_reason.current(),
             )
             session.add(row)
             session.flush()
@@ -512,6 +514,8 @@ def as_row(m: WhatsAppMessage, now: Optional[datetime] = None) -> dict:
         "job_id": m.job_id,
         "check_error": m.check_error,
         "source": m.source,
+        "sent_because": m.sent_because,
+        "sent_because_label": send_reason.label(m.sent_because),
     }
 
 

@@ -353,9 +353,11 @@ def _try_alternate(session, fix: ContactFix, record, number: str) -> tuple:
     from app.services import data_request_service as drs
     from app.services import message_sender
 
+    from app.services import send_reason
     if fix.failed_kind == "documents_ready":
-        ok, note, _ = _resend_documents_whatsapp(session, fix, record,
-                                                 mobile=number)
+        with send_reason.because(send_reason.ALTERNATE_NUMBER):
+            ok, note, _ = _resend_documents_whatsapp(session, fix, record,
+                                                     mobile=number)
         return ok, note.replace("the new number", f"alternate {number}")
     try:
         channel = message_sender.choose_channel(session, kind="whatsapp")
@@ -366,9 +368,10 @@ def _try_alternate(session, fix: ContactFix, record, number: str) -> tuple:
             and _phone(open_request.sent_to) == fix.bad_value):
         drs.cancel(session, record.csp_id,
                    "WhatsApp did not reach the phone — tried the alternate number")
-    out = message_sender.ask_for_details(session, record, channel=channel,
-                                         verify=True, manual=True,
-                                         mobile=number)
+    with send_reason.because(send_reason.ALTERNATE_NUMBER):
+        out = message_sender.ask_for_details(session, record, channel=channel,
+                                             verify=True, manual=True,
+                                             mobile=number)
     if out.get("sent"):
         return True, f"data verification sent to alternate number {number}"
     reason = out.get("reason") or "not sent"
@@ -443,8 +446,12 @@ def _ask(session, fix: ContactFix, record) -> tuple:
             drs.cancel(session, record.csp_id,
                        f"{PROBLEM_LABEL[fix.problem]} — asked again by {via}")
 
-    out = message_sender.ask_for_details(session, record, channel=channel,
-                                         verify=True, allow_email=True)
+    from app.services import send_reason
+    with send_reason.because(send_reason.WHATSAPP_UNREACHABLE
+                             if fix.problem == WHATSAPP_UNDELIVERED
+                             else send_reason.EMAIL_BOUNCED):
+        out = message_sender.ask_for_details(session, record, channel=channel,
+                                             verify=True, allow_email=True)
     if out.get("sent"):
         return True, f"asked by {via} for the right " + (
             "mobile number" if fix.problem == WHATSAPP_UNDELIVERED
@@ -531,11 +538,15 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
                 if record.send_hold:
                     ok, note, resent = None, f"waiting: {record.send_hold}", False
                 elif fix.problem == EMAIL_BOUNCED and fix.failed_kind == "documents":
-                    ok, note, resent = resend_documents_email(session, record)
+                    from app.services import send_reason
+                    with send_reason.because(send_reason.CORRECTED):
+                        ok, note, resent = resend_documents_email(session, record)
                 elif (fix.problem == WHATSAPP_UNDELIVERED
                       and fix.failed_kind == "documents_ready"):
-                    ok, note, resent = _resend_documents_whatsapp(
-                        session, fix, record)
+                    from app.services import send_reason
+                    with send_reason.because(send_reason.CORRECTED):
+                        ok, note, resent = _resend_documents_whatsapp(
+                            session, fix, record)
                 else:
                     ok, note, resent = True, (
                         "nothing to send again — the ask on the other "

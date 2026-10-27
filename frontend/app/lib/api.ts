@@ -107,6 +107,16 @@ export interface WhatsAppMessageRow {
   job_id: string | null;
   check_error: string | null;
   source: string;
+  /** Why it was sent (No. 156); null = the usual flow. */
+  sent_because: string | null;
+  sent_because_label: string;
+}
+
+/** How many messages were sent for each reason other than the usual flow. */
+export interface SentBecause {
+  key: string;
+  label: string;
+  count: number;
 }
 
 export interface WhatsAppReport {
@@ -116,6 +126,7 @@ export interface WhatsAppReport {
   truncated: boolean;
   last_checked_at: string | null;
   status_days: number;
+  sent_because: SentBecause[];
 }
 
 export interface WhatsAppFieldChange {
@@ -613,10 +624,13 @@ export interface EmailRow {
   open_count: number;
   bounced_at: string | null;
   bounce_reason: string | null;
+  sent_because: string | null;
+  sent_because_label: string;
 }
 
 export interface EmailReport {
   counts: Record<string, EmailCounts>;
+  sent_because: SentBecause[];
   total: number;
   messages: EmailRow[];
   note: string;
@@ -1414,7 +1428,7 @@ class ApiClient {
   }
 
   // ---- Emails (No. 127; Admin + Super Admin) ----
-  async emailMessages(filter: { kind?: string; status?: string; q?: string }) {
+  async emailMessages(filter: { kind?: string; status?: string; q?: string; because?: string }) {
     const params = new URLSearchParams();
     Object.entries(filter).forEach(([k, v]) => v && params.set(k, v));
     const qs = params.toString();

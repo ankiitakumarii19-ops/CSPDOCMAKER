@@ -70,6 +70,7 @@ def record(*, kind: str, to_email: str, subject: str, ok: bool,
            ) -> None:
     """One row for one email. Never raises."""
     from app.models.email_message import FAILED, SENT, EmailMessage
+    from app.services import send_reason
     track = track or tracker()
     try:
         with _session() as s:
@@ -78,7 +79,8 @@ def record(*, kind: str, to_email: str, subject: str, ok: bool,
                 to_email=(to_email or "")[:320], kind=kind,
                 subject=(subject or "")[:500], message_id=track.message_id,
                 track_token=track.token, send_status=SENT if ok else FAILED,
-                send_error=None if ok else (error or "not sent")[:2000]))
+                send_error=None if ok else (error or "not sent")[:2000],
+                sent_because=send_reason.current()))
             s.commit()
     except Exception as e:
         logger.error("email_log.record: could not record the %s email to "
