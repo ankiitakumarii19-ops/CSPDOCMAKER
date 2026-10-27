@@ -92,7 +92,7 @@ def test_a_csp_matched_by_district_gets_its_branch_listed():
 
 
 @pytest.mark.parametrize("field,wrong,csps,reason", [
-    ("dc", "X", [{"branch": "JAMUI"}], "only fixes AO and RBO"),
+    ("dc", "X", [{"branch": "JAMUI"}], "does not change dc"),
     ("ao", "AO BHAGALPUR", [{"branch": "", "state": "Bihar"}], "no Branch Name"),
     ("ao", "AO SOMEWHERE", [{"branch": "JAMUI", "state": "Bihar",
                              "district": "Jamui"}], "no longer gives"),

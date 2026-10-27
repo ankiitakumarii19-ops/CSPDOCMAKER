@@ -76,12 +76,12 @@ export default function InfoSuggestions({ onChanged }: { onChanged: () => void }
             Loop 1 — suggested INFO fixes
           </h3>
           <p className="text-xs text-gray-500">
-            The same correction to an INFO value on {minCsps} or more CSPs. <b>AO and RBO Name are
-            fixed in INFO by the app itself</b> (within 30 minutes): only the corrected branches move
-            to the right AO / RBO row — the other branches are not touched — and every changed cell is
-            listed below. Anything it cannot do safely stays here with the reason. Other fields (DC,
-            ASM, LHO…): Accept means your team corrects INFO; it is marked Fixed once INFO gives the
-            right value.
+            The same correction to an INFO value on {minCsps} or more CSPs. <b>Fixed in INFO by the app
+            itself</b> (within 30 minutes): AO and RBO Name — only the corrected branches move to the
+            right row, the other branches are not touched — and a DC&apos;s or ASM&apos;s own email or phone.
+            Every changed cell is listed below; anything it cannot do safely stays here with the reason.
+            Names, LHO and State: Accept means your team corrects INFO; it is marked Fixed once INFO gives
+            the right value.
           </p>
         </div>
         <div className="flex flex-wrap gap-1">

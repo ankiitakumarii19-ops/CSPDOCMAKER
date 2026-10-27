@@ -14,6 +14,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import ReplyLearning from "./ReplyLearning";
 import { api } from "../lib/api";
 import type { ApiError, CspReplyRow } from "../lib/api";
 
@@ -130,6 +131,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
           {showAll ? "Only waiting" : "Show all"}
         </button>
       </div>
+      <ReplyLearning version={rows?.length ?? 0} />
       {error && <p className="px-5 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="divide-y divide-gray-100 dark:divide-gray-700">
         {rows?.map((r) => (
@@ -193,9 +195,21 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   </div>
                 </>
               ) : (
-                <div className="px-3 py-2 rounded-lg bg-green-50/50 dark:bg-green-900/10 text-gray-800 dark:text-gray-200">
-                  {r.reply_text || <span className="text-gray-400">No reply</span>}
-                </div>
+                <>
+                  <div className="px-3 py-2 rounded-lg bg-green-50/50 dark:bg-green-900/10 text-gray-800 dark:text-gray-200">
+                    {r.reply_text || <span className="text-gray-400">No reply</span>}
+                    {r.status === "sent" && r.edited !== null && (
+                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[11px] ${
+                        r.edited ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
+                                 : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"}`}>
+                        {r.edited ? "changed from the draft" : "sent as drafted"}
+                      </span>
+                    )}
+                  </div>
+                  {r.status === "sent" && r.edited && r.draft_text && (
+                    <div className="text-xs text-gray-400 mt-1">Agent&apos;s draft: {r.draft_text}</div>
+                  )}
+                </>
               )}
               <div className="text-xs text-gray-500 mt-1">
                 {r.sent_at && `Sent ${when(r.sent_at)} by ${r.decided_by}. `}

@@ -697,6 +697,30 @@ export interface FeedbackSummary {
   }[];
 }
 
+/** No. 154: drafts sent as they were, changed or skipped, per kind. */
+export interface ReplyLearning {
+  days: number;
+  sent: number;
+  unchanged: number;
+  edited: number;
+  skipped: number;
+  unchanged_rate: number | null;
+  kinds: {
+    key: string;
+    intents: string[];
+    label: string;
+    sent: number;
+    unchanged: number;
+    edited: number;
+    skipped: number;
+    unchanged_rate: number | null;
+    avg_distance: number | null;
+    skipped_rate: number | null;
+    suggested: { text: string; times: number }[];
+    can_use: boolean;
+  }[];
+}
+
 /** A reply to what a CSP wrote on WhatsApp (No. 151). */
 export interface CspReplyRow {
   id: string;
@@ -706,6 +730,10 @@ export interface CspReplyRow {
   last_in_at: string | null;
   intents: { key: string; label: string }[];
   reply_text: string;
+  /** No. 154: the agent's own draft, and whether the person changed it. */
+  draft_text: string;
+  edited: boolean | null;
+  edit_distance: number | null;
   action: string | null;
   status: "draft" | "sent" | "skipped" | "failed" | "expired";
   note: string;
@@ -1407,6 +1435,17 @@ class ApiClient {
     return this.request<{ mode: "off" | "draft" | "auto"; waiting: number; replies: CspReplyRow[] }>(
       `/admin/csp-replies${status ? `?status=${status}` : ""}`
     );
+  }
+
+  async replyLearning(days = 30) {
+    return this.request<ReplyLearning>(`/admin/csp-replies/learning?days=${days}`);
+  }
+
+  async useReplyWording(intent: string, text: string) {
+    return this.request<{ entry: string; text: string }>("/admin/csp-replies/learning/use", {
+      method: "POST",
+      body: JSON.stringify({ intent, text }),
+    });
   }
 
   async sendCspReply(id: string, text: string) {

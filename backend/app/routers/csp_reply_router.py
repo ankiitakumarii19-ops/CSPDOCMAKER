@@ -70,6 +70,36 @@ async def set_mode(body: ModeIn, session: AsyncSession = Depends(get_session),
     return {"mode": mode}
 
 
+class WordingIn(BaseModel):
+    intent: str = Field(min_length=1, max_length=40)
+    text: str = Field(min_length=1, max_length=900)
+
+
+@router.get("/learning")
+async def learning(days: int = Query(30, ge=1, le=365),
+                   session: AsyncSession = Depends(get_session),
+                   user=Depends(require_role(*ADMINS))):
+    """No. 154: drafts sent as they were, changed or skipped, per kind."""
+    from app.services import csp_replies
+    return await session.run_sync(csp_replies.learning, days)
+
+
+@router.post("/learning/use")
+async def use_wording(body: WordingIn, session: AsyncSession = Depends(get_session),
+                      user=Depends(require_role(*ADMINS))):
+    """A person's edit becomes the agent's wording (a Knowledge Base entry)."""
+    from app.services import csp_replies
+    try:
+        question = await session.run_sync(csp_replies.use_wording, body.intent,
+                                          body.text, _who(user))
+    except ValueError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    _audit(session, user, "csp_reply_wording", body.intent,
+           {"entry": question, "text": body.text})
+    await session.commit()
+    return {"entry": question, "text": body.text}
+
+
 @router.get("")
 async def list_replies(
     status_: str = Query("", alias="status",

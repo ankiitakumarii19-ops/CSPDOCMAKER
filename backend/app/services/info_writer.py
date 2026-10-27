@@ -28,11 +28,17 @@ plan() is pure (rows in, changes out); apply() writes them.
 import logging
 from typing import Dict, List, Optional, Tuple
 
-from app.services.info_directory import AO_COLUMNS, normalize, place_key
+from app.services.info_directory import (ASM, AO_COLUMNS, BLOCK_HEADERS,
+                                         COLUMN_ALIASES, DC, normalize,
+                                         place_key)
 
 logger = logging.getLogger(__name__)
 
-FIELDS = ("ao", "rbo_name")
+# No. 154: a person's own email / phone — the same person, just their
+# details — corrected on 2+ CSPs the same way is changed in their INFO row.
+PEOPLE_FIELDS = {"dc_email": (DC, "email"), "dc_contact": (DC, "mobile"),
+                 "asm_email": (ASM, "email"), "asm_contact": (ASM, "mobile")}
+FIELDS = ("ao", "rbo_name") + tuple(PEOPLE_FIELDS)
 
 
 class CannotFix(Exception):
@@ -87,8 +93,10 @@ def plan(rows: List[List[str]], field: str, wrong: str, right: str,
       {"op": "insert", "after_row", "values"}
     Raises CannotFix with the reason when it is not safe.
     """
+    if field in PEOPLE_FIELDS:
+        return _plan_person(rows, field, wrong, right)
     if field not in FIELDS:
-        raise CannotFix(f"the app only fixes AO and RBO Name in INFO, not {field}")
+        raise CannotFix(f"the app does not change {field} in INFO by itself")
     _, cols, data = _block(rows)
     if "branches" not in cols or "ao" not in cols:
         raise CannotFix("INFO's AO block has no Branch Name or AO column")
@@ -197,6 +205,42 @@ def plan(rows: List[List[str]], field: str, wrong: str, right: str,
     if not ops:
         raise CannotFix("nothing to change — INFO already gives the right value")
     return ops
+
+
+def _plan_person(rows: List[List[str]], field: str, wrong: str,
+                 right: str) -> List[dict]:
+    """The one cell of one person (a DC or an ASM) that holds `wrong`."""
+    role, attribute = PEOPLE_FIELDS[field]
+    hits, current, columns = [], None, {}
+    for r, raw in enumerate(rows):
+        cells = [str(c).strip() for c in (raw or [])]
+        if not any(cells):
+            current, columns = None, {}
+            continue
+        header = BLOCK_HEADERS.get(normalize(cells[0]))
+        if header:
+            current = header
+            columns = {i: COLUMN_ALIASES.get(normalize(h))
+                       for i, h in enumerate(cells[1:], start=1)}
+            continue
+        if current != role:
+            continue
+        col = next((i for i, a in columns.items() if a == attribute), None)
+        if col is None:
+            continue
+        cell = cells[col] if col < len(cells) else ""
+        if " ".join(cell.split()).lower() == " ".join(wrong.split()).lower():
+            hits.append((r, col, cell))
+    who = {DC: "DC", ASM: "ASM"}[role]
+    if not hits:
+        raise CannotFix(f"no {who} in INFO has {wrong} any more — it may have "
+                        "been fixed already")
+    if len(hits) > 1:
+        raise CannotFix(f"{len(hits)} {who}s in INFO have {wrong} — a person "
+                        "must decide whose it is")
+    r, col, cell = hits[0]
+    return [{"op": "set", "row": r + 1, "col": col, "before": cell,
+             "after": right}]
 
 
 def apply(spreadsheet_id: str, tab: str, ops: List[dict]) -> List[dict]:

@@ -100,7 +100,24 @@ INTENT_LABEL = {
     "feedback_1": "Feedback: got the documents, all correct",
     "feedback_2": "Feedback: did not get the documents",
     "feedback_3": "Feedback: something is wrong in them",
+    "technical": "Technical issue — not answered",
 }
+
+# Technical problems that are not this project's (27 Oct 2026, No. 154:
+# "for other technical issues don't reply"): devices, network / server,
+# bank portal / software, transactions / money. No reply is written.
+TECHNICAL_WORDS = (
+    r"(?:^|\s)(machine|device|biometric|finger|fingerprint|thumb|scanner|printer|"
+    r"morpho|mantra|startek|laptop|computer|cpu|internet|network|wifi|"
+    r"server|site|portal|website|login|password|otp|error|crash|hang|"
+    r"software|application|transaction|txn|debit|deduct|balance|"
+    r"settlement|refund|withdraw|withdrawal|deposit|aeps|cash|atm|upi|"
+    r"मशीन|नेटवर्क|सर्वर|ट्रांजैक्शन|पैसा)"
+    r"|net nahi|app nahi|app band|paisa kat|paise kat|amount kat|money deduct")
+
+
+def is_technical(text: str) -> bool:
+    return _any(norm(text), TECHNICAL_WORDS)
 
 
 # ---- understanding a message --------------------------------------------
@@ -240,6 +257,7 @@ def compose(session, record, texts: List[str],
     intents: List[str] = []
     knowledge: List[str] = []
     not_understood: List[str] = []
+    technical = False
     for text in texts:
         found = classify(text)
         if found:
@@ -251,10 +269,14 @@ def compose(session, record, texts: List[str],
                 knowledge.append(ranked[0].entry.answer)
             if "knowledge" not in intents:
                 intents.append("knowledge")
+        elif is_technical(text):
+            technical = True          # not answered (No. 154)
         elif norm(text):
             not_understood.append(norm(text))
     if feedback:
         intents.insert(0, f"feedback_{feedback}")
+    if technical and not intents and not not_understood:
+        return ["technical"], "", None
     if intents and all(i == "thanks" for i in intents) and not not_understood:
         return ["thanks"], "", None
     intents = [i for i in intents if i != "thanks"]
@@ -431,8 +453,12 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
         draft.intents, draft.reply_text, draft.action = compose(
             session, record, texts, feedback=feedback)
         draft.status, draft.note = "draft", ""
+        draft.draft_text = draft.reply_text
         if draft.intents == ["thanks"]:
             draft.status, draft.note = "skipped", "no reply needed"
+        elif draft.intents == ["technical"]:
+            draft.status = "skipped"
+            draft.note = "technical issue — not answered (as decided)"
         elif record.send_hold:
             draft.status, draft.note = "skipped", f"on hold: {record.send_hold}"
     # Drafts nobody sent in time are out of date.
@@ -473,6 +499,12 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
                        outcome=outcome, csp_id=record.csp_id,
                        csp_name=record.name or "")
     reply.reply_text, reply.decided_by = body, by
+    # What the person did with the agent's draft (No. 154): kept as it was,
+    # or changed — and by how much.
+    from app.services.field_quality import levenshtein
+    draft = clean(reply.draft_text or "")
+    reply.edited = body != draft
+    reply.edit_distance = levenshtein(draft, body) if reply.edited else 0
     if outcome["status"] == wa.PENDING:
         reply.note = ("WhatsApp is checking the wording (first time only) — "
                       "not sent yet; try again later")
@@ -549,9 +581,110 @@ def as_row(reply: CspReply, name: str = "") -> dict:
         "intents": [{"key": i, "label": INTENT_LABEL.get(i, i)}
                     for i in (reply.intents or [])],
         "reply_text": reply.reply_text,
+        "draft_text": reply.draft_text,
+        "edited": reply.edited,
+        "edit_distance": reply.edit_distance,
         "action": reply.action,
         "status": reply.status,
         "note": reply.note,
         "decided_by": reply.decided_by,
         "sent_at": reply.sent_at.isoformat() if reply.sent_at else None,
     }
+
+
+# ---- what the agent learns from the week of drafts (No. 154) ------------
+
+# The Knowledge Base wording behind a reply that answers one thing only —
+# the ones a person's edit can replace.
+RULE_ENTRY = {"link": LINK, "upload": UPLOAD, "wrong_details": WRONG,
+              "else": ELSE, "feedback_1": FEEDBACK["1"],
+              "feedback_2": FEEDBACK["2"], "feedback_3": FEEDBACK["3"]}
+DATE = re.compile(r"\b\d{2} [A-Z][a-z]{2} \d{4}\b")
+
+
+def as_wording(session, reply: CspReply) -> str:
+    """A sent reply turned back into a wording: the CSP's own RM, email and
+    dates put back as {rm}, {email}, {date}."""
+    from app.models.csp_record import CSPRecord
+    record = session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == reply.csp_id)).scalar_one_or_none()
+    text = reply.reply_text or ""
+    if record is not None:
+        rm = rm_contact(session, record)
+        if rm and rm in text:
+            text = text.replace(rm, "{rm}")
+        if record.email and record.email in text:
+            text = text.replace(record.email, "{email}")
+    return DATE.sub("{date}", text)
+
+
+def learning(session, days: int = 30) -> dict:
+    """Per kind of reply: how often the draft was sent as it was, changed,
+    or skipped; the changes people made most, ready to become the wording."""
+    from collections import Counter
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = session.execute(select(CspReply).where(
+        CspReply.last_in_at >= since,
+        CspReply.status.in_(("sent", "skipped")),
+        CspReply.draft_text != "")).scalars().all()
+    groups: Dict[str, dict] = {}
+    edits: Dict[str, Counter] = {}
+    for r in rows:
+        key = " + ".join(r.intents or []) or "none"
+        g = groups.setdefault(key, {
+            "key": key, "intents": list(r.intents or []),
+            "label": " + ".join(INTENT_LABEL.get(i, i) for i in (r.intents or [])),
+            "sent": 0, "unchanged": 0, "edited": 0, "skipped": 0,
+            "distance": 0})
+        if r.status == "skipped":
+            g["skipped"] += 1
+            continue
+        g["sent"] += 1
+        if r.decided_by == "automatic" or not r.edited:
+            g["unchanged"] += 1
+        else:
+            g["edited"] += 1
+            g["distance"] += r.edit_distance or 0
+            if len(r.intents or []) == 1 and r.intents[0] in RULE_ENTRY:
+                edits.setdefault(key, Counter())[as_wording(session, r)] += 1
+    out = []
+    for key, g in sorted(groups.items(), key=lambda kv: -(kv[1]["sent"] + kv[1]["skipped"])):
+        handled = g["sent"] + g["skipped"]
+        g["unchanged_rate"] = round(100 * g["unchanged"] / g["sent"], 1) if g["sent"] else None
+        g["avg_distance"] = round(g["distance"] / g["edited"], 1) if g["edited"] else None
+        g["skipped_rate"] = round(100 * g["skipped"] / handled, 1) if handled else None
+        g["suggested"] = [{"text": t, "times": n} for t, n in
+                          edits.get(key, Counter()).most_common(3)]
+        g["can_use"] = len(g["intents"]) == 1 and g["intents"][0] in RULE_ENTRY
+        del g["distance"]
+        out.append(g)
+    sent = sum(g["sent"] for g in out)
+    unchanged = sum(g["unchanged"] for g in out)
+    return {"days": days, "sent": sent, "unchanged": unchanged,
+            "edited": sum(g["edited"] for g in out),
+            "skipped": sum(g["skipped"] for g in out),
+            "unchanged_rate": round(100 * unchanged / sent, 1) if sent else None,
+            "kinds": out}
+
+
+def use_wording(session, intent: str, text: str, by: str) -> str:
+    """A person's edit becomes the wording the agent drafts from now on."""
+    from app.models.knowledge import KnowledgeEntry
+    question = RULE_ENTRY.get(intent)
+    if question is None:
+        raise ValueError("This kind of reply has no single wording to change.")
+    text = " ".join((text or "").split())
+    if not text:
+        raise ValueError("The wording is empty.")
+    entry = session.execute(select(KnowledgeEntry).where(
+        KnowledgeEntry.category == CATEGORY,
+        KnowledgeEntry.question == question)).scalars().first()
+    if entry is None:
+        entry = KnowledgeEntry(question=question, phrasings="", keywords="",
+                               category=CATEGORY, answer=text, active=True)
+        session.add(entry)
+    entry.answer, entry.active, entry.updated_by = text, True, by
+    logger.info("csp_replies: %s now drafts from a new wording (by %s)",
+                question, by)
+    return question

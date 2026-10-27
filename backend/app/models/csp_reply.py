@@ -42,6 +42,10 @@ class CspReply(Base):
         JSONB, nullable=False, default=list,
         comment="What the agent understood, e.g. ['link', 'upload']")
     reply_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # No. 154: the agent's own draft, and what the person did with it.
+    draft_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    edited: Mapped[Optional[bool]] = mapped_column(nullable=True)
+    edit_distance: Mapped[Optional[int]] = mapped_column(nullable=True)
     action: Mapped[Optional[str]] = mapped_column(
         String(30), nullable=True,
         comment="Done when the reply is sent: fresh_link, or none")
