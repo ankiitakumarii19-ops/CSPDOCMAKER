@@ -16,6 +16,7 @@ import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
 import WorkspaceRules from "./WorkspaceRules";
 import EmailMessages from "./EmailMessages";
+import CspReplies from "./CspReplies";
 import DataQuality from "./DataQuality";
 import FreshnessBadges from "../components/FreshnessBadges";
 import DashboardView from "./DashboardView";
@@ -267,6 +268,19 @@ export default function AdminDashboard() {
           >
             <i className="fab fa-whatsapp w-5 text-center"></i> WhatsApp messages
           </button>
+          {/* What CSPs wrote back, and the replies to them (No. 151) — its
+              own page since 27 Oct (asked), so WhatsApp messages shows its
+              numbers first again. */}
+          <button
+            onClick={() => setAdminRoute("replies")}
+            className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+              adminRoute === "replies"
+                ? "bg-navy-800 text-white border-l-4 border-eko"
+                : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+            }`}
+          >
+            <i className="fas fa-reply w-5 text-center"></i> Replies
+          </button>
           {/* Every email to a CSP and what became of it (No. 127). */}
           <button
             onClick={() => setAdminRoute("emails")}
@@ -488,6 +502,17 @@ export default function AdminDashboard() {
               <Agents canSeeHistory={isOwner} canAct={isOwner} />
             )}
             {adminRoute === "whatsapp" && <WhatsAppMessages />}
+            {adminRoute === "replies" && (
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Replies</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    What CSPs wrote back on WhatsApp, and the replies to them.
+                  </p>
+                </div>
+                <CspReplies canSwitch={isOwner} />
+              </div>
+            )}
             {adminRoute === "emails" && <EmailMessages />}
             {canConfigure && adminRoute === "quality" && <DataQuality />}
             {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
