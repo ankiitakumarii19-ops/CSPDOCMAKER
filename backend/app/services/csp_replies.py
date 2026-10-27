@@ -143,7 +143,8 @@ DOCUMENT_WORDS = (r"(document|documents|docs|dastavez|dastavej|दस्ता�
                   r"appointment|letter|bcp)")
 WRONG_WORDS = r"(galat|wrong|change|badal|sudhar|correct|update|गलत|बदल)"
 FIELD_WORDS = (r"(naam|name|address|pata|mobile|number|email|mail|branch|"
-               r"नाम|पता|नंबर)")
+               r"photo|pho|foto|pic|image|tasveer|"
+               r"नाम|पता|नंबर|फोटो|तस्वीर)")
 THANKS_ONLY = re.compile(
     r"(ok|okay|okk+|thanks?|thank you|thanku|thx|ty|dhanyavad|dhanyawad|"
     r"shukriya|done|ho gaya|hogaya|ji|haan|ha|yes|theek hai|thik hai|"
@@ -473,8 +474,10 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
 # ---- sending ------------------------------------------------------------
 
 def send(session, reply: CspReply, by: str, text: Optional[str] = None,
-         wa=None) -> CspReply:
-    """Send this reply (edited text if given), then do what it promised."""
+         wa=None, send_link: Optional[bool] = None) -> CspReply:
+    """Send this reply (edited text if given), then do what it promised.
+    send_link (No. 161): the person's choice whether the data verification
+    link goes too — None keeps the agent's own plan."""
     from app.models.csp_record import CSPRecord
     from app.models.whatsapp_message import KIND_OTHER
     from app.services import assistant_tools, message_log, message_sender
@@ -519,17 +522,13 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     reply.status, reply.sent_at = "sent", datetime.now(timezone.utc)
     notes = []
     actions = [a for a in (reply.action or "").split(",") if a]
+    if send_link is True and "fresh_link" not in actions:
+        actions.append("fresh_link")
+    elif send_link is False and "fresh_link" in actions:
+        actions.remove("fresh_link")
+    reply.action = ",".join(actions) or None
     if "fresh_link" in actions:
-        # The data verification message (asked 27 Oct 2026, No. 152), with
-        # a new link; the old one is closed so the new one is the only one.
-        drs.cancel(session, record.csp_id,
-                   "the CSP asked to change their details / the link did "
-                   "not work — a new one was sent")
-        with send_reason.because(send_reason.CSP_ASKED):
-            out = message_sender.ask_for_details(session, record, verify=True,
-                                                 manual=True)
-        notes.append("new link sent" if out.get("sent")
-                     else f"new link NOT sent: {out.get('reason', '')}")
+        notes.append(send_verification_link(session, record))
     if "resend_documents" in actions:
         from app.services import feedback_loops
         with send_reason.because(send_reason.NOT_RECEIVED):
@@ -539,6 +538,21 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     logger.info("csp_replies: reply sent to CSP %s by %s (%s)", record.csp_id,
                 by, ", ".join(reply.intents or []))
     return reply
+
+
+def send_verification_link(session, record) -> str:
+    """The data verification message with a new link (No. 152); the old link
+    is closed so the new one is the only one. Returns what happened, in words."""
+    from app.services import data_request_service as drs
+    from app.services import message_sender, send_reason
+    drs.cancel(session, record.csp_id,
+               "the CSP asked to change their details / the link did "
+               "not work — a new one was sent")
+    with send_reason.because(send_reason.CSP_ASKED):
+        out = message_sender.ask_for_details(session, record, verify=True,
+                                             manual=True)
+    return ("new link sent" if out.get("sent")
+            else f"new link NOT sent: {out.get('reason', '')}")
 
 
 def run(session, now: Optional[datetime] = None, wa=None,

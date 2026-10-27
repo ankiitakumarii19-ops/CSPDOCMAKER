@@ -43,6 +43,9 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
   const [mode, setMode] = useState<"off" | "draft" | "auto">("draft");
   const [showAll, setShowAll] = useState(false);
   const [texts, setTexts] = useState<Record<string, string>>({});
+  // No. 161: whether the data verification link goes with the reply.
+  const [links, setLinks] = useState<Record<string, boolean>>({});
+  const plansLink = (r: CspReplyRow) => (r.action || "").includes("fresh_link");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
@@ -64,11 +67,13 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
     load();
   }, [load]);
 
-  async function act(r: CspReplyRow, what: "send" | "skip") {
+  async function act(r: CspReplyRow, what: "send" | "skip" | "link") {
     setBusy(r.id);
     setRowError(null);
     try {
-      if (what === "send") await api.sendCspReply(r.id, texts[r.id] ?? r.reply_text);
+      if (what === "send")
+        await api.sendCspReply(r.id, texts[r.id] ?? r.reply_text, links[r.id] ?? plansLink(r));
+      else if (what === "link") await api.linkCspReply(r.id);
       else await api.skipCspReply(r.id);
       await load();
     } catch (e) {
@@ -169,11 +174,14 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                     onChange={(e) => setTexts({ ...texts, [r.id]: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
                   />
-                  {r.action === "fresh_link" && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      Sending also sends the CSP a new details link (the old one is closed).
-                    </p>
-                  )}
+                  <label className="mt-1 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                    <input
+                      type="checkbox"
+                      checked={links[r.id] ?? plansLink(r)}
+                      onChange={(e) => setLinks({ ...links, [r.id]: e.target.checked })}
+                    />
+                    Also send the data verification link (the old link is closed)
+                  </label>
                   <div className="mt-2 flex gap-1">
                     <button
                       disabled={busy === r.id || !(texts[r.id] ?? r.reply_text).trim()}
@@ -208,6 +216,16 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   </div>
                   {r.status === "sent" && r.edited && r.draft_text && (
                     <div className="text-xs text-gray-400 mt-1">Agent&apos;s draft: {r.draft_text}</div>
+                  )}
+                  {r.status === "sent" && (
+                    <button
+                      disabled={busy === r.id}
+                      onClick={() => act(r, "link")}
+                      className="mt-1 px-2.5 py-1 rounded text-xs font-semibold text-eko hover:bg-eko/10 disabled:opacity-50"
+                    >
+                      <i className="fas fa-link mr-1"></i>
+                      {plansLink(r) ? "Send the data verification link again" : "Send data verification link"}
+                    </button>
                   )}
                 </>
               )}

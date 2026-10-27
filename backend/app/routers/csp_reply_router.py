@@ -13,6 +13,7 @@ send, skip and switch is audited.
 
 import logging
 import uuid
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -35,6 +36,8 @@ def _who(user) -> str:
 
 class SendIn(BaseModel):
     text: str = Field(min_length=1, max_length=900)
+    # No. 161: also send the data verification link (None = the agent's plan).
+    send_link: Optional[bool] = None
 
 
 class ModeIn(BaseModel):
@@ -148,13 +151,44 @@ async def send_reply(reply_id: str, body: SendIn,
         raise HTTPException(status.HTTP_409_CONFLICT,
                             f"This reply is already {reply.status}.")
     try:
-        await session.run_sync(csp_replies.send, reply, _who(user), body.text)
+        await session.run_sync(csp_replies.send, reply, _who(user),
+                               body.text, None, body.send_link)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     _audit(session, user, "csp_reply_send", reply_id,
            {"csp_id": reply.csp_id, "status": reply.status,
             "action": reply.action, "note": reply.note})
     await session.commit()
+    return csp_replies.as_row(reply)
+
+
+@router.post("/{reply_id}/link")
+async def send_link_after(reply_id: str, session: AsyncSession = Depends(get_session),
+                          user=Depends(require_role(*ADMINS))):
+    """No. 161: the data verification link for a CSP whose reply was already
+    sent without it (e.g. the text promised a link the agent had not planned)."""
+    from sqlalchemy import select as _select
+
+    from app.models.csp_record import CSPRecord
+    from app.services import csp_replies
+
+    reply = await _reply(session, reply_id)
+    record = (await session.execute(_select(CSPRecord).where(
+        CSPRecord.csp_id == reply.csp_id))).scalar_one_or_none()
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "This CSP is no longer in the records.")
+    if record.send_hold:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            f"Nothing is sent to this CSP: {record.send_hold}")
+    note = await session.run_sync(csp_replies.send_verification_link, record)
+    reply.note = (f"{reply.note}; " if reply.note else "") + note
+    if "fresh_link" not in (reply.action or ""):
+        reply.action = ",".join(filter(None, [reply.action, "fresh_link"]))
+    _audit(session, user, "csp_reply_link", reply_id,
+           {"csp_id": reply.csp_id, "note": note})
+    await session.commit()
+    if note.startswith("new link NOT sent"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, note)
     return csp_replies.as_row(reply)
 
 

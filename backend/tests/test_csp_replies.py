@@ -374,3 +374,67 @@ async def test_admins_list_send_and_skip_and_only_the_owner_switches(
     r = await client.put("/api/admin/csp-replies/mode",
                          headers=_auth("super_admin"), json={"mode": "draft"})
     assert r.json() == {"mode": "draft"}
+
+
+# ---- the data verification link is the person's choice (No. 161) --------
+
+@pytest.mark.parametrize("message", ["Pho change karna hai", "photo badalna hai",
+                                     "फोटो बदलनी है"])
+def test_a_photo_change_is_a_change_of_details(message):
+    assert cr.classify(message) == ["wrong_details"]
+
+
+def _else_draft(db):
+    _csp(db)
+    _ours(db)
+    cr.collect(db, FakeWhatsApp([_in("mera commission kab aayega", 10)]))
+    db.commit()
+    return db.execute(select(CspReply)).scalar_one()
+
+
+def test_ticking_the_box_sends_the_link_with_any_reply(rdb, monkeypatch):
+    from app.services import message_sender
+    asked = []
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, r, **kw: asked.append(kw) or {"sent": True})
+    reply = _else_draft(rdb)
+    assert reply.action is None
+    cr.send(rdb, reply, "a@eko.co.in", "Hum aapko link bhej rahe hain.",
+            wa=FakeWhatsApp(), send_link=True)
+    assert asked == [{"verify": True, "manual": True}]
+    assert reply.action == "fresh_link" and reply.note == "new link sent"
+
+
+def test_unticking_the_box_keeps_the_link_back(rdb, monkeypatch):
+    from app.services import message_sender
+    asked = []
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, r, **kw: asked.append(kw) or {"sent": True})
+    _csp(rdb)
+    _ours(rdb)
+    cr.collect(rdb, FakeWhatsApp([_in("link open nahi hota", 10)]))
+    rdb.commit()
+    reply = rdb.execute(select(CspReply)).scalar_one()
+    cr.send(rdb, reply, "a@eko.co.in", wa=FakeWhatsApp(), send_link=False)
+    assert asked == [] and reply.action is None
+
+
+@on_loop
+async def test_the_link_can_be_sent_after_the_reply(client, rdb, monkeypatch):
+    from app.services import message_sender, whatsapp_platform
+    monkeypatch.setattr(whatsapp_platform, "send", FakeWhatsApp().send)
+    asked = []
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, r, **kw: asked.append(kw) or {"sent": True})
+    reply = _else_draft(rdb)
+    r = await client.post(f"/api/admin/csp-replies/{reply.id}/send",
+                          headers=_auth("admin"), json={"text": "Theek hai."})
+    assert r.status_code == 200 and asked == []
+    r = await client.post(f"/api/admin/csp-replies/{reply.id}/link",
+                          headers=_auth("rm"))
+    assert r.status_code == 403
+    r = await client.post(f"/api/admin/csp-replies/{reply.id}/link",
+                          headers=_auth("admin"))
+    assert r.status_code == 200, r.text
+    assert asked == [{"verify": True, "manual": True}]
+    assert "new link sent" in r.json()["note"]

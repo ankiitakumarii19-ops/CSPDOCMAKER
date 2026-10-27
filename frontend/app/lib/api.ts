@@ -1475,10 +1475,17 @@ class ApiClient {
     });
   }
 
-  async sendCspReply(id: string, text: string) {
+  async sendCspReply(id: string, text: string, sendLink?: boolean) {
     return this.request<CspReplyRow>(`/admin/csp-replies/${encodeURIComponent(id)}/send`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, send_link: sendLink }),
+    });
+  }
+
+  /** No. 161: the data verification link for a reply already sent without it. */
+  async linkCspReply(id: string) {
+    return this.request<CspReplyRow>(`/admin/csp-replies/${encodeURIComponent(id)}/link`, {
+      method: "POST",
     });
   }
 
