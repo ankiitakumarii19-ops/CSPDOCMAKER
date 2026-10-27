@@ -727,6 +727,12 @@ export interface InfoSuggestion {
   decided_by: string | null;
   decided_at: string | null;
   fixed_at: string | null;
+  /** No. 153: what the app changed in INFO itself. */
+  applied: { cell: string; before: string; after: string }[];
+  /** Why it was left for a person, or "INFO corrected by the app". */
+  note: string;
+  /** AO / RBO Name: the app fixes these in INFO itself. */
+  automatic: boolean;
 }
 
 /** Loop 2 (No. 150): a bad WhatsApp number or a bounced email, and what was done. */

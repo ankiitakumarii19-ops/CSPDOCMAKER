@@ -143,6 +143,9 @@ def list_suggestions(session, status: str = "") -> List[dict]:
             "decided_by": s.decided_by,
             "decided_at": s.decided_at.isoformat() if s.decided_at else None,
             "fixed_at": s.fixed_at.isoformat() if s.fixed_at else None,
+            "applied": s.applied or [],
+            "note": s.note or "",
+            "automatic": s.field in ("ao", "rbo_name"),
         })
     return out
 
@@ -593,3 +596,67 @@ def list_contact_fixes(session, status: str = "", limit: int = 100) -> dict:
             "updated_at": f.updated_at.isoformat() if f.updated_at else None,
         } for f, name in rows],
     }
+
+
+# ---- loop 1, automatic: the app fixes INFO itself (No. 153) -------------
+
+def auto_fix_info(session, settings, writer=None) -> Dict[str, int]:
+    """For every open suggestion about AO or RBO Name: correct INFO's AO
+    block (info_writer), mark it fixed and keep what changed. Anything that
+    cannot be done safely stays open with the reason, for a person."""
+    from app.models.csp_record import CSPRecord
+    from app.services import csp_gsheet_service, info_writer
+
+    writer = writer or info_writer
+    counts = {"fixed": 0, "left": 0}
+    refresh_suggestions(session, settings.quality_suggest_min_csps)
+    session.commit()
+    open_ones = session.execute(select(QualitySuggestion).where(
+        QualitySuggestion.status == "open",
+        QualitySuggestion.field.in_(info_writer.FIELDS))).scalars().all()
+    if not open_ones:
+        return counts
+    rows = csp_gsheet_service.read_info_sheet()
+    if not rows:
+        logger.error("feedback_loops.auto_fix_info: INFO could not be read — "
+                     "nothing changed")
+        return counts
+    for s in open_ones:
+        rivals = [o for o in open_ones if o is not s and o.field == s.field
+                  and o.rule == s.rule and o.from_value == s.from_value]
+        if rivals:
+            s.note = ("people corrected it to different values ("
+                      + ", ".join(sorted({s.to_value, *[o.to_value for o in rivals]}))
+                      + ") — a person must decide")
+            counts["left"] += 1
+            continue
+        records = session.execute(select(CSPRecord).where(
+            CSPRecord.csp_id.in_(s.csp_ids or []))).scalars().all()
+        csps = [{"branch": r.branch_name, "state": r.state,
+                 "district": r.district} for r in records]
+        try:
+            ops = writer.plan(rows, s.field, s.from_value, s.to_value, csps)
+            done = writer.apply(settings.google_sheets_csp_sheet_id,
+                                settings.google_sheets_info_tab_name, ops)
+        except writer.CannotFix as e:
+            s.note = str(e)
+            counts["left"] += 1
+            continue
+        except Exception as e:
+            s.note = f"INFO could not be updated: {type(e).__name__}: {e}"[:500]
+            logger.error("feedback_loops.auto_fix_info: %s", s.note, exc_info=True)
+            counts["left"] += 1
+            session.commit()
+            break         # the sheet is not answering: stop for this run
+        now = datetime.now(timezone.utc)
+        s.status, s.fixed_at, s.decided_at = "fixed", now, now
+        s.decided_by = "the app (automatic)"
+        s.applied, s.note = done, "INFO corrected by the app"
+        counts["fixed"] += 1
+        logger.info("feedback_loops.auto_fix_info: INFO %s for %s: %r -> %r "
+                    "(%d change(s))", s.field, s.rule, s.from_value,
+                    s.to_value, len(done))
+        session.commit()
+        rows = csp_gsheet_service.read_info_sheet()   # read again after a change
+    session.commit()
+    return counts

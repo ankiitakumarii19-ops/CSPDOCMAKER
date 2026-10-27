@@ -201,6 +201,10 @@ class Settings(BaseSettings):
                                        alias="CONTACT_LOOP_ENABLED")
     contact_loop_minutes: int = Field(default=30, alias="CONTACT_LOOP_MINUTES")
     contact_loop_batch: int = Field(default=10, alias="CONTACT_LOOP_BATCH")
+    # No. 153: the app writes AO / RBO corrections into INFO itself.
+    info_auto_fix_enabled: bool = Field(default=True,
+                                        alias="INFO_AUTO_FIX_ENABLED")
+    info_auto_fix_minutes: int = Field(default=30, alias="INFO_AUTO_FIX_MINUTES")
     # No. 152: the day after the documents, "did you get them? 1 / 2 / 3".
     documents_feedback_enabled: bool = Field(
         default=True, alias="DOCUMENTS_FEEDBACK_ENABLED")

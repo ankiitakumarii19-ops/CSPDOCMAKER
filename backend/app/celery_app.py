@@ -87,6 +87,12 @@ celery_app.conf.update(
             "schedule": settings.whatsapp_status_minutes * 60,
             "options": {"expires": settings.whatsapp_status_minutes * 60 - 5},
         },
+        # The app corrects INFO's AO / RBO itself (No. 153).
+        "fix-info": {
+            "task": "workers.fix_info",
+            "schedule": settings.info_auto_fix_minutes * 60,
+            "options": {"expires": settings.info_auto_fix_minutes * 60 - 5},
+        },
         # The contact loop (No. 150): bad numbers / bounced emails.
         "contact-loop": {
             "task": "workers.contact_loop",
@@ -169,6 +175,7 @@ celery_app.conf.include = [
     "app.workers.verify_old_csps_worker",
     "app.workers.contact_loop_worker",
     "app.workers.csp_reply_worker",
+    "app.workers.info_fix_worker",
     "app.workers.email_bounce_worker",
     "app.workers.new_csp_worker",
     "app.workers.pending_request_worker",

@@ -52,6 +52,10 @@ class QualitySuggestion(Base):
         DateTime(timezone=True), nullable=True)
     fixed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True)
+    # No. 153: what the app changed in INFO itself ([{cell, before, after}])
+    # and, when it did not, why a person has to.
+    applied: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(

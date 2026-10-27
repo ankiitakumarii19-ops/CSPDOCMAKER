@@ -76,9 +76,12 @@ export default function InfoSuggestions({ onChanged }: { onChanged: () => void }
             Loop 1 — suggested INFO fixes
           </h3>
           <p className="text-xs text-gray-500">
-            The same correction to an INFO value on {minCsps} or more CSPs. Accept means your team
-            will correct the INFO sheet — the app does not change INFO itself — and it is marked
-            Fixed once INFO gives the right value.
+            The same correction to an INFO value on {minCsps} or more CSPs. <b>AO and RBO Name are
+            fixed in INFO by the app itself</b> (within 30 minutes): only the corrected branches move
+            to the right AO / RBO row — the other branches are not touched — and every changed cell is
+            listed below. Anything it cannot do safely stays here with the reason. Other fields (DC,
+            ASM, LHO…): Accept means your team corrects INFO; it is marked Fixed once INFO gives the
+            right value.
           </p>
         </div>
         <div className="flex flex-wrap gap-1">
@@ -114,6 +117,20 @@ export default function InfoSuggestions({ onChanged }: { onChanged: () => void }
               {s.still_wrong > 0 && s.status !== "fixed" && (
                 <div className="text-xs text-amber-700 dark:text-amber-400 mt-1">
                   INFO still gives {s.from_value} to {s.still_wrong} more CSP(s) nobody has checked.
+                </div>
+              )}
+              {s.applied.length > 0 && (
+                <ul className="text-xs text-gray-600 dark:text-gray-300 mt-1 list-disc ml-4">
+                  {s.applied.map((a, i) => (
+                    <li key={i}>
+                      INFO {a.cell}: {a.before ? <>&ldquo;{a.before}&rdquo; → </> : null}&ldquo;{a.after}&rdquo;
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {s.note && s.status !== "fixed" && (
+                <div className="text-xs text-amber-700 dark:text-amber-400 mt-1">
+                  Not changed automatically: {s.note}
                 </div>
               )}
               {s.decided_by && (
