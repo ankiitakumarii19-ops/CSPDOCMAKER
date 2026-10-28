@@ -81,13 +81,18 @@ DEFAULTS = {
     FEEDBACK["1"]: ("Dhanyavaad! Humein khushi hai ki aapko aapke documents "
                     "mil gaye."),
     FEEDBACK["2"]: ("Khed hai. Hum aapke documents dobara {email} par bhej "
-                    "rahe hain - kripya inbox aur spam folder dekhein."),
+                    "rahe hain - kripya inbox aur spam folder dekhein. Saath "
+                    "hi data verification ka link bhej rahe hain - agar aapka "
+                    "email galat hai to usme sahi email bharein."),
     FEEDBACK["3"]: ("Khed hai. Hum aapko data verification ka link bhej rahe "
                     "hain - usme jo galat hai use sudharein, phir aapke "
                     "documents dobara banenge."),
 }
-# What each feedback answer does when the reply is sent (No. 152).
-FEEDBACK_ACTION = {"1": None, "2": "resend_documents", "3": "fresh_link"}
+# What each feedback answer does when the reply is sent (No. 152). No. 163
+# (28 Oct 2026): 2 also gets the data verification link — the email may be
+# wrong, and the link is where they correct it.
+FEEDBACK_ACTION = {"1": [], "2": ["resend_documents", "fresh_link"],
+                   "3": ["fresh_link"]}
 
 INTENT_LABEL = {
     "link": "Link does not open",
@@ -299,10 +304,9 @@ def compose(session, record, texts: List[str],
             if "{email}" in wording:
                 wording = wording.replace("{email}", record.email or "aapke email")
             parts.append(wording)
-            if FEEDBACK_ACTION[answer]:
-                actions.append(FEEDBACK_ACTION[answer])
-                if FEEDBACK_ACTION[answer] == "fresh_link":
-                    action = "fresh_link"
+            actions += [a for a in FEEDBACK_ACTION[answer] if a not in actions]
+            if "fresh_link" in FEEDBACK_ACTION[answer]:
+                action = "fresh_link"
         elif intent == "link":
             answered = _answered(session, record.csp_id)
             if answered is not None and drs.open_request_for(

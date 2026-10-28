@@ -8,6 +8,8 @@ DOCUMENTS_FEEDBACK_AFTER_MINUTES):
 
   1 — got them and everything is correct  -> "thank you"
   2 — did not get them                    -> the documents email again
+                                             + the data verification message
+                                             (No. 163: to correct the email)
   3 — something is wrong in them          -> the data verification message
 
 The question goes DOCUMENTS_FEEDBACK_AFTER_MINUTES (15) after the

@@ -648,8 +648,8 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
     fb = documents_feedback.summary(session, limit=0)
     row("feedback", "Feedback after documents (loop 5)",
         "Whether CSPs got their documents, asked 15 minutes after the documents message",
-        "Reply 1 got them / 2 did not (emailed again) / 3 something wrong "
-        "(data verification sent)",
+        "Reply 1 got them / 2 did not (emailed again + data verification) / "
+        "3 something wrong (data verification sent)",
         (f"{fb['asked']} asked · {fb['answers']['1']} got them · "
          f"{fb['answers']['2']} did not · {fb['answers']['3']} something "
          f"wrong · {fb['no_answer']} no answer yet") if fb["asked"] else "none asked yet",

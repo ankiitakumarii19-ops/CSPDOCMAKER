@@ -206,21 +206,30 @@ def _asked(db):
     return q
 
 
-def test_answer_2_resends_the_documents_when_the_reply_is_sent(fdb, monkeypatch):
+def test_answer_2_resends_the_documents_and_the_link_when_the_reply_is_sent(
+        fdb, monkeypatch):
+    """No. 163: answer 2 also gets the data verification link (to correct
+    the email)."""
+    from app.services import message_sender
     _asked(fdb)
     cr.collect(fdb, FakeWhatsApp([_in("2", 30)]))
     fdb.commit()
     q = fdb.execute(select(CspFeedback)).scalar_one()
     assert (q.answer, q.answer_text) == ("2", "2")
     reply = fdb.execute(select(cr.CspReply)).scalar_one()
-    assert (reply.intents, reply.action) == (["feedback_2"], "resend_documents")
+    assert (reply.intents, reply.action) == (["feedback_2"],
+                                             "resend_documents,fresh_link")
     assert "dobara reply@example.com par" in reply.reply_text
-    resent = []
+    assert "data verification ka link" in reply.reply_text
+    resent, asked = [], []
     monkeypatch.setattr(fl, "resend_documents_email", lambda s, r: (
         resent.append(r.email) or (True, "documents emailed again", True)))
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, r, **kw: asked.append(kw) or {"sent": True})
     cr.send(fdb, reply, "admin@eko.co.in", wa=FakeWhatsApp())
     assert resent == ["reply@example.com"]
-    assert "documents emailed again" in reply.note
+    assert asked == [{"verify": True, "manual": True}]
+    assert "documents emailed again" in reply.note and "new link sent" in reply.note
 
 
 def test_answer_3_sends_the_data_verification_message(fdb, monkeypatch):
