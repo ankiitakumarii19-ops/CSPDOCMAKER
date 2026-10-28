@@ -46,6 +46,9 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
   // No. 161: whether the data verification link goes with the reply.
   const [links, setLinks] = useState<Record<string, boolean>>({});
   const plansLink = (r: CspReplyRow) => (r.action || "").includes("fresh_link");
+  // No. 165: "1 — got them, all correct" and nothing else: no link button.
+  const allGood = (r: CspReplyRow) =>
+    !plansLink(r) && r.intents.length > 0 && r.intents.every((i) => i.key === "feedback_1");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
@@ -217,7 +220,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   {r.status === "sent" && r.edited && r.draft_text && (
                     <div className="text-xs text-gray-400 mt-1">Agent&apos;s draft: {r.draft_text}</div>
                   )}
-                  {r.status === "sent" && (
+                  {r.status === "sent" && !allGood(r) && (
                     <button
                       disabled={busy === r.id}
                       onClick={() => act(r, "link")}
