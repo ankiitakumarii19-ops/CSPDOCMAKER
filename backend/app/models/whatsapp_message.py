@@ -116,6 +116,15 @@ class WhatsAppMessage(Base):
     sent_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now(),
         index=True)
+    # No. 164: a send that failed is tried again (services/resend_failed).
+    retried_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="When it was last tried again after failing")
+    retry_status: Mapped[Optional[str]] = mapped_column(
+        String(20), nullable=True,
+        comment="not_needed = not tried again any more; NULL = still tried")
+    retry_note: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="What the last try again did")
 
     # Meta's report, refreshed.
     delivery_status: Mapped[Optional[str]] = mapped_column(

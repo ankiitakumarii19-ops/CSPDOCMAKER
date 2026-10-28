@@ -201,6 +201,12 @@ class Settings(BaseSettings):
                                        alias="CONTACT_LOOP_ENABLED")
     contact_loop_minutes: int = Field(default=30, alias="CONTACT_LOOP_MINUTES")
     contact_loop_batch: int = Field(default=10, alias="CONTACT_LOOP_BATCH")
+    # No. 164: a WhatsApp the platform failed to send is sent again until it
+    # goes (not when the number is not on WhatsApp — the contact loop's).
+    resend_failed_enabled: bool = Field(default=True,
+                                        alias="RESEND_FAILED_ENABLED")
+    resend_failed_minutes: int = Field(default=10, alias="RESEND_FAILED_MINUTES")
+    resend_failed_batch: int = Field(default=20, alias="RESEND_FAILED_BATCH")
     # No. 153: the app writes AO / RBO corrections into INFO itself.
     info_auto_fix_enabled: bool = Field(default=True,
                                         alias="INFO_AUTO_FIX_ENABLED")

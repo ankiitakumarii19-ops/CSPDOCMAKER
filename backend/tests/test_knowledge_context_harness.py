@@ -145,9 +145,10 @@ def test_with_nothing_recorded_the_harness_says_so(qdb):
     rows = _rows(qdb)
     assert list(rows) == ["auto_fill", "corrections", "kept_rate", "checked",
                           "freshness", "sending", "mapping_loop",
-                          "contact_loop", "csp_replies", "feedback", "chat",
-                          "golden", "tests"]
+                          "contact_loop", "csp_replies", "resend", "feedback",
+                          "chat", "golden", "tests"]
     assert rows["mapping_loop"]["state"] == rows["contact_loop"]["state"] == "empty"
+    assert rows["resend"]["state"] == "empty"        # No. 164
     assert rows["auto_fill"]["state"] == "empty"
     assert rows["kept_rate"]["now"] == "no data yet"
     assert rows["sending"]["state"] == "ok"

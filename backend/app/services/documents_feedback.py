@@ -41,7 +41,9 @@ def _wait() -> timedelta:
     return timedelta(minutes=max(get_settings().documents_feedback_after_minutes, 1))
 TOO_LATE = timedelta(days=7)
 ONCE_PER = timedelta(days=7)
-MAX_TRIES = 3
+# No. 164: a failed question is tried again until it goes (waits from
+# services/resend_failed), not 3 times only — unless the number is not on
+# WhatsApp.
 BATCH = 20
 
 # The WhatsApp wording (Meta approves it once; keep it stable).
@@ -87,7 +89,7 @@ def _due(session, now: datetime):
     """Documents messages whose feedback question is due (or to retry)."""
     from app.models.whatsapp_message import (KIND_DOCUMENTS_READY, SEND_SENT,
                                              WhatsAppMessage)
-    from app.services import message_log
+    from app.services import message_log, resend_failed
 
     done = {f.documents_message_id: f for f in
             session.execute(select(CspFeedback)).scalars()}
@@ -106,8 +108,10 @@ def _due(session, now: datetime):
         .order_by(WhatsAppMessage.sent_at)).scalars().all()
     for m in messages:
         row = done.get(m.id)
-        if row is not None and not (row.ask_status == "pending"
-                                    and row.tries < MAX_TRIES):
+        if row is not None and row.ask_status != "pending":
+            continue
+        if (row is not None and row.note.startswith("not sent")
+                and now - row.updated_at < resend_failed.wait(row.tries)):
             continue
         if m.csp_id in asked_lately:
             continue
@@ -120,7 +124,8 @@ def run(session, now: Optional[datetime] = None, wa=None) -> Dict[str, int]:
     """Send the feedback questions that are due (the caller checks hours)."""
     from app.config import get_settings
     from app.models.csp_record import CSPRecord
-    from app.services import message_log, whatsapp_platform
+    from app.services import message_log, resend_failed, send_reason
+    from app.services import whatsapp_platform
 
     if not get_settings().documents_feedback_enabled:
         return {"skipped": "off (DOCUMENTS_FEEDBACK_ENABLED=false)"}
@@ -139,9 +144,12 @@ def run(session, now: Optional[datetime] = None, wa=None) -> Dict[str, int]:
         outcome = wa.send(message.phone, WORDING,
                           {"name": record.name or "CSP"},
                           source_name=message_log.source_name(KIND, record.csp_id))
-        message_log.record(session, kind=KIND, mobile=message.phone,
-                           outcome=outcome, csp_id=record.csp_id,
-                           csp_name=record.name or "")
+        with send_reason.because(send_reason.RETRY if row.tries
+                                 and row.note.startswith("not sent")
+                                 else send_reason.current()):
+            message_log.record(session, kind=KIND, mobile=message.phone,
+                               outcome=outcome, csp_id=record.csp_id,
+                               csp_name=record.name or "")
         row.tries += 1
         if outcome["status"] == wa.SENT:
             row.ask_status, row.asked_at, row.note = "sent", now, ""
@@ -151,8 +159,10 @@ def run(session, now: Optional[datetime] = None, wa=None) -> Dict[str, int]:
             row.note = "waiting for Meta to approve the wording (first time)"
             counts["pending"] += 1
         else:
-            row.ask_status = "pending" if row.tries < MAX_TRIES else "failed"
-            row.note = f"not sent: {outcome.get('reason', '')}"[:500]
+            reason = outcome.get("reason", "")
+            row.ask_status = ("failed" if resend_failed.not_on_whatsapp(reason)
+                              else "pending")
+            row.note = f"not sent: {reason}"[:500]
             counts["failed"] += 1
         session.commit()
     if counts["asked"]:

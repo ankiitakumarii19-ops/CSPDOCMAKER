@@ -644,6 +644,19 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
         f"{to_rm} sent to their RM (not understood)",
         "attention" if replies.get("draft") else "ok" if replies else "empty")
 
+    from app.services import resend_failed
+    again = resend_failed.summary(session, now)
+    row("resend", "Failed WhatsApps sent again",
+        "WhatsApps the platform could not send (platform / Meta unreachable, "
+        "wording waiting for approval)",
+        "Tried again after 30 min, 1 h, 2 h, then every 4 h for 7 days; not "
+        "when the number is not on WhatsApp (contact loop)",
+        (f"last 7 days: {again['sent']} sent on a later try · "
+         f"{again['failed']} later tries failed too")
+        if again["sent"] or again["failed"] else "nothing needed sending again",
+        "attention" if again["failed"] > again["sent"] else
+        "ok" if again["sent"] else "empty")
+
     from app.services import documents_feedback
     fb = documents_feedback.summary(session, limit=0)
     row("feedback", "Feedback after documents (loop 5)",

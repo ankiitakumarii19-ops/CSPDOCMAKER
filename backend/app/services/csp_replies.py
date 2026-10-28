@@ -503,7 +503,8 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     outcome = wa.send(reply.phone, assistant_tools.WHATSAPP_WORDING,
                       {"name": record.name or "CSP", "message": body},
                       source_name=message_log.source_name("chat", record.csp_id))
-    with send_reason.because(send_reason.REPLY):
+    # A reply tried again after an error says so (No. 164).
+    with send_reason.because(send_reason.current() or send_reason.REPLY):
         message_log.record(session, kind=KIND_OTHER, mobile=reply.phone,
                            outcome=outcome, csp_id=record.csp_id,
                            csp_name=record.name or "")

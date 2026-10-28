@@ -69,7 +69,7 @@ def test_the_second_number_in_the_cell_is_tried_first(ldb, senders,
 def test_a_working_alternate_replaces_the_number_in_cspdata(ldb, senders, sheet):
     _csp(ldb, mobile="9812345601/ 9812345602")
     _wa(ldb)
-    fl.run(ldb, SETTINGS)
+    fl.run(ldb, SETTINGS, now=NOW)       # the clock the alternate is dated by
     _wa(ldb, phone=ALT, delivery="delivered", at=NOW + timedelta(minutes=1))
     fl.run(ldb, SETTINGS, now=NOW + timedelta(minutes=10))
     assert sheet == [("1A996001", {"mobile": "9812345602"})]
@@ -84,7 +84,7 @@ def test_a_working_alternate_replaces_the_number_in_cspdata(ldb, senders, sheet)
 def test_an_unreachable_alternate_falls_back_to_email(ldb, senders, sheet):
     _csp(ldb, mobile="9812345601/ 9812345602")
     _wa(ldb)
-    fl.run(ldb, SETTINGS)
+    fl.run(ldb, SETTINGS, now=NOW)       # the clock the alternate is dated by
     _wa(ldb, phone=ALT, delivery="failed", at=NOW + timedelta(minutes=1))
     fl.run(ldb, SETTINGS, now=NOW + timedelta(minutes=10))
     assert senders["ask"][-1][1:] == ("email", True, True), "emailed the form"
@@ -183,7 +183,7 @@ def test_the_question_is_not_sent_when_it_should_not_be(fdb, hours_ago,
     from tests.test_csp_replies import _csp as reply_csp
     reply_csp(fdb, send_hold=hold)
     _documents_message(fdb, hours_ago=hours_ago, delivery=delivery)
-    assert dfb.run(fdb, wa=FakeWhatsApp())["asked"] == 0
+    assert dfb.run(fdb, now=NOW, wa=FakeWhatsApp())["asked"] == 0
 
 
 def test_a_wording_waiting_for_meta_is_tried_again(fdb):

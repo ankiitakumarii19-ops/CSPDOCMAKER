@@ -26,6 +26,7 @@ EMAIL_BOUNCED = "email_bounced"
 WHATSAPP_UNREACHABLE = "whatsapp_unreachable"
 ALTERNATE_NUMBER = "alternate_number"
 CORRECTED = "contact_corrected"
+RETRY = "sent_again_after_error"
 
 LABELS = {
     REPLY: "Reply to the CSP's message",
@@ -35,6 +36,7 @@ LABELS = {
     WHATSAPP_UNREACHABLE: "WhatsApp did not reach them",
     ALTERNATE_NUMBER: "Alternate number (main one unreachable)",
     CORRECTED: "Sent again after their number / email was corrected",
+    RETRY: "Sent again after an error (No. 164)",
 }
 USUAL = "Usual flow"
 

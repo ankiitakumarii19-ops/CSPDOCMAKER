@@ -197,10 +197,16 @@ def find_problems(session) -> int:
     latest: Dict[tuple, object] = {}
     for m in messages:
         latest[(m.csp_id, _phone(m.phone))] = m
+    from app.services import resend_failed
     for (csp_id, phone), m in latest.items():
-        # "Did not reach the phone", or no delivery after 24 hours.
+        # "Did not reach the phone", or no delivery after 24 hours — or
+        # refused at send time because the number is not on WhatsApp
+        # (No. 164: every other send error is tried again instead).
+        stage = message_log.stage(m)
         if (phone and (csp_id, phone) not in tried
-                and message_log.stage(m) == message_log.NOT_RECEIVED):
+                and (stage == message_log.NOT_RECEIVED
+                     or (stage == message_log.NOT_SENT
+                         and resend_failed.not_on_whatsapp(m.send_error)))):
             found.append((csp_id, WHATSAPP_UNDELIVERED, phone, m.kind))
 
     emails = session.execute(
