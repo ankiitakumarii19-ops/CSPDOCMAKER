@@ -1,107 +1,131 @@
-# CSP Document Generation & Email Automation Platform
+# CSPdocMaker
 
-> Internal EKO enterprise application for automated CSP document generation, validation, and delivery.
+Eko's internal web app that makes and sends the official documents of
+**SBI Kiosk CSPs** (Customer Service Points), and keeps in touch with them on
+WhatsApp and email.
 
-## Architecture
+Live: **https://indev.eko.in/csp-docmaker** · Owner: Ankita (Eko)
 
-| Layer | Technology |
+---
+
+## What it does
+
+- **Makes 4 documents** per CSP from Word templates — **CSP ID Card,
+  Appointment Letter, Training Certificate, BCP** (Sub-KOs get no BCP) — checks
+  them, turns them into PDF, stores them and **emails** them.
+- **Finds new CSPs by itself** in the CSPDATA Google Sheet (read every minute)
+  and the Calling / Lead sheets, and handles them with nobody logging in.
+- **Asks the CSP, never the RM,** for missing details through a one-time form
+  link on WhatsApp. Old CSPs get a **data verification** message to check
+  their details.
+- **Fills org fields from the INFO tab** (DC, ASM, RM, LHO, State, AO, RBO)
+  and blank email / address / state / gender from **Zoho**.
+- **Passport photo** for every CSP, always printed **35 × 45 mm**.
+- **Reads CSPs' WhatsApp replies** and drafts an answer from fixed rules and
+  the Knowledge Base; a person sends it (or Automatic mode).
+- **Asks whether the documents arrived** (reply 1 / 2 / 3) 15 minutes after
+  sending them.
+- **Never loses a message:** a failed WhatsApp is sent again until it goes; a
+  number not on WhatsApp → alternate number → email; a bounced email → ask on
+  WhatsApp.
+- **Checks itself:** every auto-filled value and correction is recorded;
+  Setup → Data quality shows what the app reads and how it checks itself.
+
+**No AI anywhere.** Every decision is a fixed rule — same input, same result.
+
+Full description: [.claude/skills/cspdocmaker/SKILL.md](.claude/skills/cspdocmaker/SKILL.md)
+
+---
+
+## Who uses it
+
+| Role | Can |
 |---|---|
-| Frontend | Next.js + TypeScript + Tailwind CSS |
-| Backend API | Python + FastAPI |
-| Database | PostgreSQL 16 |
-| Job Queue | Redis + Celery |
-| Auth Source | Google Sheets API |
-| Email | Gmail / Google Workspace API |
-| SMS | Provider-independent abstraction |
-| AI Validation | Controlled AI agent |
+| **Super Admin** | Everything: access, agents, sheets, reply mode |
+| **Admin** | See everything; templates, messaging, Knowledge Base, data quality, replies |
+| **RM** | Search their CSPs, choose and send documents |
 
-## Project Structure
+Sign-in: email + emailed code; @eko.co.in and @ekosupport.in.
+
+---
+
+## Built with
+
+| Part | Technology |
+|---|---|
+| Website | Next.js 16, React 19, Tailwind |
+| API | Python, FastAPI |
+| Database | PostgreSQL 16 (also holds the PDFs) |
+| Scheduled jobs | Celery + Redis |
+| Documents | python-docx → LibreOffice → PDF |
+| Data | Google Sheets, Zoho CRM (read only) |
+| WhatsApp | Eko's WhatsApp platform (Meta) |
+| Server | Docker Compose + Caddy on one Linux machine |
+
+---
+
+## Folders
 
 ```
-CSPDOCMAKER/
-├── frontend/          → Next.js web application
-├── backend/           → FastAPI REST API + workers
-├── agents/            → AI validation agent
-├── templates/         → DOCX & email templates
-├── database/          → Alembic migrations & seeds
-├── tests/             → All test suites
-├── scripts/           → Sync & maintenance scripts
-├── docs/              → Project documentation
-└── docker-compose.yml → Local dev orchestration
+backend/      API, database models, scheduled jobs, tests
+  app/services/   the rules (documents, messages, INFO, replies, loops)
+  app/workers/    scheduled jobs (sync, new CSPs, verification, retries, ...)
+  alembic/        database changes
+  tests/          automatic tests + golden cases (tests/golden/cases.json)
+frontend/     the website (admin, RM and CSP form screens)
+templates/    document, email and message templates
+deploy/       server settings and Caddy
+docs/         architecture and decisions
 ```
 
-## Quick Start
+---
 
-### Prerequisites
-- Python 3.11+
-- Node.js 18+
-- Docker & Docker Compose
-- PostgreSQL 16 (via Docker)
-- Redis 7 (via Docker)
+## Run it on a laptop
 
-### 1. Clone and configure
 ```bash
-cp .env.example backend/.env
-# Edit backend/.env with your actual configuration values
-# Put the Google service-account JSON in backend/credentials/ (git-ignored)
-```
-
-### 2. Start infrastructure
-```bash
-docker-compose up -d
-```
-
-### 3. Backend setup
-```bash
+docker compose up -d                       # Postgres + Redis
 cd backend
-python -m venv .venv
-.venv\Scripts\activate        # Windows
+python -m venv .venv && .venv/Scripts/activate
 pip install -r requirements.txt
-alembic upgrade head          # Run database migrations
+alembic upgrade head
 uvicorn app.main:app --reload --port 8000
+celery -A app.celery_app worker --loglevel=info
+celery -A app.celery_app beat --loglevel=info
+cd ../frontend && npm install && npm run dev   # http://localhost:3000
 ```
 
-### 4. Start Celery worker and scheduler
+Settings go in `backend/.env` (never committed). Nothing is sent to CSPs from
+a laptop — only from the public server.
+
+**Tests** (from `backend/`):
 ```bash
-cd backend
-celery -A app.celery_app worker --loglevel=info   # executes tasks
-celery -A app.celery_app beat --loglevel=info     # schedules the 1-minute CSP sync
+PYTHONPATH=. .venv/Scripts/python.exe -m pytest -q
 ```
 
-### 5. Frontend setup
+---
+
+## Update the server
+
 ```bash
-cd frontend
-npm install
-npm run dev
+cd /home/Ankita/Csp_Doc_Maker
+# back up first if the update changes the database:
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres pg_dump -U cspdocmaker cspdocmaker | gzip > ~/cspdocmaker-$(date +%F-%H%M).sql.gz
+git pull
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build
 ```
 
-### 6. Access
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+Details: [DEPLOY.md](DEPLOY.md)
 
-## User Roles
+---
 
-| Role | Access |
+## More
+
+| File | What |
 |---|---|
-| **RM** | CSP search, document generation, email sending |
-| **Admin** | Dashboard, metrics, monitoring, audit logs |
-| **System Owner** | Google Sheet authorization management |
+| [PROJECT-REGISTER.md](PROJECT-REGISTER.md) | Every request, numbered, and what was done |
+| [AI_SPEC.md](AI_SPEC.md) | Every design decision and why |
+| [AGENT.md](AGENT.md) | Rules for any AI agent working on this code |
+| [SYSTEM_PROMPT.md](SYSTEM_PROMPT.md) | Prompt for an assistant that answers about this project |
+| [DEPLOY.md](DEPLOY.md) | Server setup and updates |
 
-## Key Workflows
-
-1. **RM Workflow**: Login → Search CSP → Select documents → Generate → Validate → Confirm → Send email → SMS notification
-2. **New CSP Automation**: Excel row detected → Validate → Generate docs → Validate docs → Send email → SMS → Complete
-
-## Security
-
-- HTTPS required in production
-- `@eko.co.in` email domain enforcement
-- Server-side role-based access control
-- OTP two-factor authentication
-- Google Sheet as authorization source of truth
-- AI agent constrained — cannot override security controls
-
-## License
-
-Internal — EKO proprietary
+Internal — Eko proprietary.
