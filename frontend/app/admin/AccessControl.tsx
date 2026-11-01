@@ -16,6 +16,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import Avatar from "../components/Avatar";
+
 import { api } from "../lib/api";
 import type {
   AccessListing,
@@ -337,10 +339,15 @@ export default function AccessControl({
             {data?.people.map((p) => (
               <tr key={`${p.email}-${p.role}`} className="hover:bg-gray-50 dark:hover:bg-gray-700/40">
                 <td className="px-4 py-3">
-                  <div className="font-medium text-gray-900 dark:text-white">
-                    {p.name}
+                  <div className="flex items-center gap-3">
+                    <Avatar email={p.email} name={p.name} className="w-8 h-8 text-xs bg-gray-400 dark:bg-gray-600" />
+                    <div>
+                      <div className="font-medium text-gray-900 dark:text-white">
+                        {p.name}
+                      </div>
+                      <div className="text-xs text-gray-500">{p.email}</div>
+                    </div>
                   </div>
-                  <div className="text-xs text-gray-500">{p.email}</div>
                 </td>
                 <td className="px-4 py-3">
                   <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase">

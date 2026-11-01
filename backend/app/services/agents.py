@@ -176,6 +176,14 @@ def data_agent(session) -> Outcome:
 
 @performs("verification")
 def verification_agent(session) -> Outcome:
+    """Decides every difference itself — the newest value wins (No. 171,
+    services/verification_auto.py). Nothing waits for a person; each
+    decision is logged once, with the old and new value."""
+    from app.config import get_settings
+    from app.models.agent import ACCEPTED, AgentFinding, PROPOSED
+    from app.services import message_sender
+    from app.services import verification_auto as va
+
     now = datetime.now(timezone.utc)
     requests = session.execute(select(DataRequest)).scalars().all()
     findings = []
@@ -186,36 +194,63 @@ def verification_agent(session) -> Outcome:
                if r.status in ("open", "expired")
                and _aware(r.expires_at) <= now]
 
-    changed_fields, conflicts = 0, []
-    for request in answered:
-        record = session.execute(
-            select(CSPRecord).where(CSPRecord.csp_id == request.csp_id)
-        ).scalars().first()
+    # The cards it used to leave for a person are closed: it decides now.
+    for card in session.execute(select(AgentFinding).where(
+            AgentFinding.agent_key == "verification",
+            AgentFinding.status == PROPOSED)).scalars():
+        card.status, card.decided_by, card.decided_at = (
+            ACCEPTED, "verification agent (automatic)", now)
+
+    records = {r.csp_id: r for r in session.execute(
+        select(CSPRecord).where(CSPRecord.csp_id.in_(
+            {r.csp_id for r in answered}))).scalars()} if answered else {}
+    decisions = []
+    for request, name, submitted in va.newest_answers(answered):
+        record = records.get(request.csp_id)
         if record is None:
             continue
-        for name, submitted in (request.answered_values or {}).items():
-            current = getattr(record, name, None)
-            if current is None:
-                continue
-            if str(current).strip() != str(submitted).strip():
-                # The record no longer matches what the CSP sent, which
-                # means something overwrote it after they submitted.
-                conflicts.append((request.csp_id, name,
-                                  str(submitted), str(current)))
-            else:
-                changed_fields += 1
+        d = va.decide(request, name, submitted, getattr(record, name, None))
+        if d is not None:
+            decisions.append(d)
 
-    for csp_id, name, submitted, current in conflicts[:20]:
+    logged = va.already_logged(session, [d.key for d in decisions])
+    fresh = [d for d in decisions if d.key not in logged]
+    on_server = message_sender.link_is_reachable(get_settings().public_app_url)
+    kept, written, failed, waiting = 0, 0, 0, 0
+    for d in fresh:
+        if d.kind == va.KEPT_SHEET:
+            va.log(session, d)
+            kept += 1
+            continue
+        if not on_server:
+            # Only the server writes to the sheet; it decides this one.
+            waiting += 1
+            continue
+        try:
+            va.write_answer(session, d, records[d.csp_id])
+        except Exception as e:
+            # Logged with its reason and tried again next run.
+            logger.error("verification_agent: could not write %s %s to the "
+                         "sheet: %s: %s", d.csp_id, d.field,
+                         type(e).__name__, e, exc_info=True)
+            failed += 1
+            continue
+        va.log(session, d)
+        written += 1
+
+    if kept or written:
         findings.append(Finding(
-            title=f"{csp_id}: {fo.label_of(name)} disagrees with what the "
-                  f"CSP submitted",
-            detail=f"They sent {submitted!r}; the record now says "
-                   f"{current!r}. Something changed it afterwards — most "
-                   f"likely the sheet.",
+            title=f"Decided by itself: {written} CSP answer(s) written to the "
+                  f"sheet, {kept} newer sheet value(s) kept",
+            detail="The newest value wins. Each one is listed under "
+                   "\"Decided automatically\" with the old and new value.",
+            severity=INFO,
+        ))
+    if failed:
+        findings.append(Finding(
+            title=f"{failed} CSP answer(s) could not be written to the sheet",
+            detail="Tried again on the next run. The reason is in the log.",
             severity=WARNING,
-            proposal={"action": "accept_csp_value", "csp_id": csp_id,
-                      "field": name, "value": submitted},
-            subject_type="csp", subject_id=csp_id,
         ))
 
     if expired:
@@ -228,10 +263,16 @@ def verification_agent(session) -> Outcome:
 
     return Outcome(
         summary=f"{len(answered)} answered, {len(open_now)} still open, "
-                f"{len(expired)} expired, {len(conflicts)} conflict(s).",
+                f"{len(expired)} expired; {len(decisions)} difference(s): "
+                f"{written} answer(s) written to the sheet, {kept} newer "
+                f"sheet value(s) kept"
+                + (f", {waiting} left for the server" if waiting else "")
+                + (f", {failed} failed" if failed else "") + ".",
         findings=findings,
         detail={"answered": len(answered), "open": len(open_now),
-                "expired": len(expired), "conflicts": len(conflicts)},
+                "expired": len(expired), "differences": len(decisions),
+                "written": written, "kept": kept, "failed": failed,
+                "waiting_for_server": waiting},
     )
 
 

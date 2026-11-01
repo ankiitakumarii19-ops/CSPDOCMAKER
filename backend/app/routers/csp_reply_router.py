@@ -38,6 +38,8 @@ class SendIn(BaseModel):
     text: str = Field(min_length=1, max_length=900)
     # No. 161: also send the data verification link (None = the agent's plan).
     send_link: Optional[bool] = None
+    # No. 171: the CSP's message this answers, quoted in front of the text.
+    quote: Optional[str] = Field(None, max_length=2000)
 
 
 class ModeIn(BaseModel):
@@ -152,12 +154,13 @@ async def send_reply(reply_id: str, body: SendIn,
                             f"This reply is already {reply.status}.")
     try:
         await session.run_sync(csp_replies.send, reply, _who(user),
-                               body.text, None, body.send_link)
+                               body.text, None, body.send_link, body.quote)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     _audit(session, user, "csp_reply_send", reply_id,
            {"csp_id": reply.csp_id, "status": reply.status,
-            "action": reply.action, "note": reply.note})
+            "action": reply.action, "note": reply.note,
+            "quoted": bool((body.quote or "").strip())})
     await session.commit()
     return csp_replies.as_row(reply)
 

@@ -344,6 +344,27 @@ def clean(text: str) -> str:
     return " ".join((text or "").split())[:MAX_CHARS]
 
 
+QUOTE_CHARS = 100
+
+
+def with_quote(quote: Optional[str], body: str) -> str:
+    """The reply with the CSP's message it answers in front (No. 171).
+
+    Eko's WhatsApp platform sends approved wordings only, so a real WhatsApp
+    quote bubble is not possible: the quote goes into the text, on one line.
+    """
+    q = " ".join((quote or "").split())
+    if not q:
+        return body
+    if len(q) > QUOTE_CHARS:
+        q = q[:QUOTE_CHARS - 1].rstrip() + "…"
+    text = f'Aapne likha: "{q}" — {body}'
+    if len(text) > MAX_CHARS:
+        raise ValueError("The reply and the quoted message together are too "
+                         "long for one WhatsApp. Please shorten the reply.")
+    return text
+
+
 # ---- the switch ---------------------------------------------------------
 
 def get_mode(session) -> str:
@@ -478,10 +499,12 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
 # ---- sending ------------------------------------------------------------
 
 def send(session, reply: CspReply, by: str, text: Optional[str] = None,
-         wa=None, send_link: Optional[bool] = None) -> CspReply:
+         wa=None, send_link: Optional[bool] = None,
+         quote: Optional[str] = None) -> CspReply:
     """Send this reply (edited text if given), then do what it promised.
     send_link (No. 161): the person's choice whether the data verification
-    link goes too — None keeps the agent's own plan."""
+    link goes too — None keeps the agent's own plan. quote (No. 171): the
+    CSP's message being answered, put in front of the text."""
     from app.models.csp_record import CSPRecord
     from app.models.whatsapp_message import KIND_OTHER
     from app.services import assistant_tools, message_log, message_sender
@@ -498,6 +521,8 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     body = clean(text if text is not None else reply.reply_text)
     if not body:
         raise ValueError("The reply is empty.")
+    answer = body                      # what the person wrote, for learning
+    body = with_quote(quote, body)
 
     from app.services import send_reason
     outcome = wa.send(reply.phone, assistant_tools.WHATSAPP_WORDING,
@@ -513,8 +538,8 @@ def send(session, reply: CspReply, by: str, text: Optional[str] = None,
     # or changed — and by how much.
     from app.services.field_quality import levenshtein
     draft = clean(reply.draft_text or "")
-    reply.edited = body != draft
-    reply.edit_distance = levenshtein(draft, body) if reply.edited else 0
+    reply.edited = answer != draft
+    reply.edit_distance = levenshtein(draft, answer) if reply.edited else 0
     if outcome["status"] == wa.PENDING:
         reply.note = ("WhatsApp is checking the wording (first time only) — "
                       "not sent yet; try again later")

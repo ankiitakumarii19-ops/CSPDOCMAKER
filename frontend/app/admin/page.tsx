@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
 import BrandLogo from "../components/BrandLogo";
 import AssistantChat from "../components/AssistantChat";
 import DocumentTemplates from "./DocumentTemplates";
@@ -24,6 +25,7 @@ import DashboardBuilder from "./DashboardBuilder";
 import { api } from "../lib/api";
 import type { ApiError, DashboardSummary } from "../lib/api";
 import { useSessionUser } from "../lib/useSessionUser";
+import { setUrlParams, useUrlParam } from "../lib/useUrlParam";
 import { useTheme } from "../lib/useTheme";
 
 interface Metrics {
@@ -76,8 +78,18 @@ const ADMIN_ROLES = ["admin", "super_admin"];
 export default function AdminDashboard() {
   const router = useRouter();
   const user = useSessionUser();
+  // One's own profile picture (No. 171).
+  const photo = useProfilePhoto(user?.email ?? "");
 
-  const [adminRoute, setAdminRoute] = useState("overview");
+  // The section open is in the address (?section=…), so a refresh, a
+  // bookmark or Back stays on it (No. 171). Leaving a section closes what
+  // was open inside it (a CSP's chat, a message).
+  const [adminRoute] = useUrlParam("section", "overview");
+  const setAdminRoute = useCallback(
+    (route: string) =>
+      setUrlParams({ section: route === "overview" ? null : route, chat: null, message: null }),
+    []
+  );
   // What each role may do, deliberately separated. The server enforces the
   // same split; hiding a button here is for clarity, not security.
   //
@@ -125,9 +137,13 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [options, setOptions] = useState<Record<string, string[]>>({});
   const [filters, setFilters] = useState<Record<string, string>>({});
-  // One day, not a range: the dashboard is read day-wise. It is sent as
-  // date_from and date_to together, which the API treats as inclusive.
-  const [day, setDay] = useState("");
+  // The days the documents were made (No. 171): today, yesterday, one
+  // date, or a From–To range, in India time. Sent as date_from / date_to,
+  // which the API treats as inclusive; it works with every other filter.
+  const [dateMode, setDateMode] = useState<"" | "today" | "yesterday" | "on" | "range">("");
+  const [dateOn, setDateOn] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [error, setError] = useState("");
 
   const [drill, setDrill] = useState<{ title: string; rows: CSPRow[] } | null>(null);
@@ -145,9 +161,31 @@ export default function AdminDashboard() {
     else if (!ADMIN_ROLES.includes(user.role)) router.replace("/rm");
   }, [user, router]);
 
-  const dayParams: Record<string, string> = day
-    ? { date_from: day, date_to: day }
+  const today = indiaDay(0);
+  const yesterday = indiaDay(-1);
+  const rangeWrong = dateMode === "range" && !!dateFrom && !!dateTo && dateTo < dateFrom;
+  const dayParams: Record<string, string> =
+    dateMode === "today" ? { date_from: today, date_to: today }
+    : dateMode === "yesterday" ? { date_from: yesterday, date_to: yesterday }
+    : dateMode === "on" && dateOn ? { date_from: dateOn, date_to: dateOn }
+    : dateMode === "range" && !rangeWrong && (dateFrom || dateTo)
+      ? { ...(dateFrom ? { date_from: dateFrom } : {}), ...(dateTo ? { date_to: dateTo } : {}) }
     : {};
+  const dateLabel =
+    dateMode === "today" ? `Today (${showDay(today)})`
+    : dateMode === "yesterday" ? `Yesterday (${showDay(yesterday)})`
+    : dateMode === "on" && dateOn ? showDay(dateOn)
+    : dateMode === "range" && dayParams.date_from && dayParams.date_to
+      ? `${showDay(dateFrom)} – ${showDay(dateTo)}`
+    : dateMode === "range" && dayParams.date_from ? `From ${showDay(dateFrom)}`
+    : dateMode === "range" && dayParams.date_to ? `Up to ${showDay(dateTo)}`
+    : "";
+  const clearDates = () => {
+    setDateMode("");
+    setDateOn("");
+    setDateFrom("");
+    setDateTo("");
+  };
   const query = { ...filters, ...dayParams };
   const queryKey = JSON.stringify(query);
 
@@ -203,11 +241,11 @@ export default function AdminDashboard() {
   if (!user || !ADMIN_ROLES.includes(user.role)) return null;
 
   const activeFilters = Object.entries(filters).filter(([, v]) => v);
-  const anythingApplied = activeFilters.length > 0 || day !== "";
+  const anythingApplied = activeFilters.length > 0 || dateMode !== "";
 
   const clearAll = () => {
     setFilters({});
-    setDay("");
+    clearDates();
     setDrill(null);
   };
 
@@ -453,15 +491,20 @@ export default function AdminDashboard() {
               className="flex items-center gap-2 cursor-pointer relative"
               onClick={() => setLogoutMenu(!logoutMenu)}
             >
-              <div className="w-8 h-8 rounded-full bg-blue-600 text-white flex items-center justify-center font-bold text-sm">
-                {user.name.slice(0, 2).toUpperCase()}
-              </div>
+              <Avatar
+                email={user.email}
+                name={user.name}
+                initials={user.name.slice(0, 2).toUpperCase()}
+                className="w-8 h-8 text-sm bg-blue-600"
+              />
               <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 hidden sm:block">
                 {user.name}
               </span>
+              {photo.input}
 
               {logoutMenu && (
-                <div className="absolute top-12 right-0 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <div className="absolute top-12 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                  <ProfilePhotoMenuItems photo={photo} />
                   <button
                     onClick={logout}
                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -547,17 +590,70 @@ export default function AdminDashboard() {
                   <i className="fas fa-xmark mr-1"></i> Clear filters
                 </button>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-9 gap-3">
-                <div>
-                  <label className="block text-[11px] font-medium text-gray-500 mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={day}
-                    onChange={(e) => setDay(e.target.value)}
-                    className="w-full px-2 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 dark:text-white focus:ring-2 focus:ring-eko outline-none cursor-pointer"
-                  />
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-3">
+                <div className="col-span-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-[11px] font-medium text-gray-500">
+                      Documents made
+                    </label>
+                    {dateMode && (
+                      <button
+                        onClick={clearDates}
+                        className="text-[11px] text-eko hover:underline"
+                      >
+                        Clear filter
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={dateMode}
+                    onChange={(e) => setDateMode(e.target.value as typeof dateMode)}
+                    className={dateBox}
+                  >
+                    <option value="">All days</option>
+                    <option value="today">Today</option>
+                    <option value="yesterday">Yesterday</option>
+                    <option value="on">On a date…</option>
+                    <option value="range">From – To…</option>
+                  </select>
+                  {dateMode === "on" && (
+                    <input
+                      type="date"
+                      value={dateOn}
+                      max={today}
+                      onChange={(e) => setDateOn(e.target.value)}
+                      aria-label="Date"
+                      className={`${dateBox} mt-2`}
+                    />
+                  )}
+                  {dateMode === "range" && (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                      <input
+                        type="date"
+                        value={dateFrom}
+                        max={dateTo || today}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                        aria-label="From"
+                        title="From"
+                        className={dateBox}
+                      />
+                      <input
+                        type="date"
+                        value={dateTo}
+                        min={dateFrom || undefined}
+                        max={today}
+                        onChange={(e) => setDateTo(e.target.value)}
+                        aria-label="To"
+                        title="To"
+                        className={dateBox}
+                      />
+                    </div>
+                  )}
+                  {rangeWrong && (
+                    <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+                      &ldquo;To&rdquo; is before &ldquo;From&rdquo;.
+                    </p>
+                  )}
                 </div>
                 {FILTERS.map(([key, label]) => (
                   <div key={key}>
@@ -583,9 +679,9 @@ export default function AdminDashboard() {
               </div>
               {anythingApplied && (
                 <div className="mt-3 flex flex-wrap gap-2">
-                  {day && (
+                  {dateLabel && (
                     <span className="text-[11px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                      Date: {day}
+                      Documents made: {dateLabel}
                     </span>
                   )}
                   {activeFilters.map(([key, value]) => (
@@ -826,4 +922,21 @@ export default function AdminDashboard() {
       <AssistantChat />
     </div>
   );
+}
+
+const dateBox =
+  "w-full px-2 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 dark:text-white focus:ring-2 focus:ring-eko outline-none cursor-pointer";
+
+/** YYYY-MM-DD in India, `offset` days from today (No. 171). */
+function indiaDay(offset: number): string {
+  const ist = new Date(Date.now() + offset * 86_400_000);
+  return ist.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+}
+
+/** "1 Nov 2026" for a YYYY-MM-DD day. */
+function showDay(day: string): string {
+  const [y, m, d] = day.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", {
+    day: "numeric", month: "short", year: "numeric", timeZone: "UTC",
+  });
 }

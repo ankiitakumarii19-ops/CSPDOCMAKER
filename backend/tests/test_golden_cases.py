@@ -15,6 +15,7 @@ code — the same functions the sync, the jobs and the forms call:
   form       field_ownership   — what their form shows (No. 130)
   channel    message_sender    — WhatsApp or email (No. 7)
   go_live    source_sheets.run — old or new, over several runs (No. 121, 145)
+  verify     verification_auto — which value wins a difference (No. 171)
 
 Run before every deploy (DEPLOY.md):
 
@@ -55,7 +56,7 @@ def _cases(*kinds):
 # ---- the file itself ----------------------------------------------------
 
 RUNNERS = {"documents", "info", "rm", "hold", "mobile", "address", "ask",
-           "form", "channel", "go_live"}
+           "form", "channel", "go_live", "verify"}
 
 
 def test_the_golden_file_is_well_formed():
@@ -129,6 +130,24 @@ def test_hold(case):
 def test_mobile(case):
     assert alert_composer.normalize_mobile(case["input"]["mobile"]) \
         == case["expect"]["whatsapp"]
+
+
+@pytest.mark.parametrize("case", _cases("verify"))
+def test_verify(case):
+    from app.services import verification_auto
+
+    i = case["input"]
+    field = i["field"]
+    request = SimpleNamespace(
+        id="golden", csp_id="1A990901",
+        sheet_saved=[field] if i["reached"] else [],
+        previous_values={field: i["before"]} if "before" in i else {})
+    d = verification_auto.decide(request, field, i["answered"], i["current"])
+    expect = case["expect"]
+    if expect["decision"] is None:
+        assert d is None, d
+    else:
+        assert (d.kind, d.after) == (expect["decision"], expect["value"])
 
 
 @pytest.mark.parametrize("case", _cases("address"))

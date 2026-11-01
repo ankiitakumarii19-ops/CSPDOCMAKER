@@ -65,8 +65,11 @@ async def test_the_sign_in_screen_accepts_any_address(client):
     workspace, and each workspace's Owner chooses who may join it."""
     r = await client.get("/api/auth/config")
     assert r.status_code == 200, r.text
-    assert r.json() == {"allowed_email_domains": [],
-                        "allowed_email_domains_text": "any"}
+    body = r.json()
+    # google_client_id (No. 171) rides along: the Google button's setting.
+    assert {k: body[k] for k in ("allowed_email_domains",
+                                 "allowed_email_domains_text")} == {
+        "allowed_email_domains": [], "allowed_email_domains_text": "any"}
 
 
 async def test_the_config_endpoint_needs_no_token(client):

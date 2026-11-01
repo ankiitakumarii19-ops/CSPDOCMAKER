@@ -14,7 +14,11 @@ export default function HomePage() {
   useEffect(() => {
     if (user === undefined) return;
     router.replace(
-      user === null ? "/auth/login" : user.role === "admin" ? "/admin" : "/rm"
+      user === null
+        ? "/auth/login"
+        : user.role === "admin" || user.role === "super_admin"
+        ? "/admin"
+        : "/rm"
     );
   }, [user, router]);
 

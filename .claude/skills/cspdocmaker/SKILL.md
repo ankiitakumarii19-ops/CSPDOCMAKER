@@ -132,6 +132,11 @@ Skip; can edit, can tick "also send the data verification link"), **Automatic**
 before switching to Automatic. The app learns which drafts were sent as-is or
 changed ("What the agent learned").
 
+**Reply to one message** (No. 171): "Reply" on a CSP's message shows it quoted
+above the draft; the WhatsApp starts `Aapne likha: "…" —` (the platform cannot
+make a real quote bubble). Clicking the CSP's name or the quote opens their
+whole WhatsApp chat.
+
 ---
 
 ## 7. INFO and data quality
@@ -141,7 +146,8 @@ changed ("What the agent learned").
 - **Loop 1:** when 2+ CSPs get the same AO / RBO correction, the app **fixes INFO itself** (only those branches move). DC / ASM email / phone too. Names, LHO, State stay suggestions.
 - **Loop 2:** contact loop (above). **Loop 3:** unanswered chat questions → add to Knowledge Base. **Loop 4:** 60+ golden cases run before every push. **Loop 5:** feedback answers.
 - **Freshness chips** in the header: sheet read on time (green), late (amber), failed / stuck (red), never (grey).
-- Screen: **Setup → Data quality** (Context table, Harness table, Auto-filled values, Loops).
+- **Verification agent decides by itself** (No. 171): when a CSP's form answer differs from the record, the **newest value wins**. Only capitals / spaces / leading zeros / RBO place name = no difference. Sheet changed after the answer → sheet kept. Answer never reached the sheet and the sheet is unchanged → the answer is written to the sheet (server only). Every decision logged (old value, new value, time) on **Agents → Decided automatically**. No Accept / Decline.
+- Screen: **Setup → Data quality** (Upload document, Context, Harness, **Guardrails**, Auto-filled values, Loops). The words of Context, Harness and Guardrails are editable (Admins, Super Admins) and the chat answers with them; editing them does **not** change what the app does. "Upload document" (PDF / DOCX / TXT) splits a file by its headings into those sections and the Knowledge Base, for review before saving.
 
 ---
 
@@ -150,7 +156,12 @@ changed ("What the agent learned").
 **Roles:** **Super Admin** (everything; access, agents, reply mode) · **Admin**
 (sees everything; templates, messaging, Knowledge Base, data quality) · **RM**
 (searches CSPs, chooses documents; sees own CSPs + unresolved ones). Sign-in
-with email + emailed code; domains @eko.co.in and @ekosupport.in.
+with email + emailed code, or **Log in with Google** (same email = same
+account; only people already allowed in; needs `GOOGLE_CLIENT_ID`); domains
+@eko.co.in and @ekosupport.in. Anyone may add a **profile picture** (header
+menu; optional, initials otherwise). The page open is kept in the address, so
+a refresh stays on it. Dashboard Overview's date filter (Today, Yesterday, a
+date, From–To) is **the day the documents were made**, India time.
 
 Admin menu: Dashboard Overview · Build a dashboard · Database · Sheets ·
 Document Templates · Messaging · **WhatsApp messages** (sent / rejected / not

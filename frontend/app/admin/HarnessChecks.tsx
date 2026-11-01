@@ -6,10 +6,14 @@
  * sending failures, unanswered chat questions, golden cases, tests — and
  * where each stands now. The same list is in the Knowledge Base ("How does
  * the app check itself?").
+ *
+ * Check, What it watches and How can be edited (No. 171); Now and State
+ * stay the app's own. A save also rewrites the chat's answer.
  */
 
 import { useEffect, useState } from "react";
 
+import { EditButtons } from "./ContextSources";
 import { api } from "../lib/api";
 import type { ApiError, HarnessCheck } from "../lib/api";
 
@@ -22,7 +26,32 @@ const STATE: Record<HarnessCheck["state"], { label: string; cls: string }> = {
 
 export default function HarnessChecks({ version }: { version: number }) {
   const [checks, setChecks] = useState<HarnessCheck[] | null>(null);
+  const [draft, setDraft] = useState<HarnessCheck[] | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!draft) return;
+    setSaving(true);
+    setError("");
+    try {
+      await api.saveQualityTexts(
+        "harness",
+        draft.map(({ key, name, watches, how }) => ({ key, name, watches, how }))
+      );
+      setChecks((await api.qualityHarness()).checks);
+      setDraft(null);
+    } catch (e) {
+      setError((e as ApiError).detail || "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const change = (i: number, field: "name" | "watches" | "how", value: string) =>
+    setDraft((d) => d && d.map((c, j) => (j === i ? { ...c, [field]: value } : c)));
+  const input =
+    "w-full px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-900 dark:text-white text-sm";
 
   useEffect(() => {
     api
@@ -36,11 +65,20 @@ export default function HarnessChecks({ version }: { version: number }) {
 
   return (
     <section className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
-      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700">
-        <h3 className="font-semibold text-gray-900 dark:text-white">Harness — how the app checks itself</h3>
-        <p className="text-xs text-gray-500">
-          Every check on the app&apos;s own work, and where it stands now.
-        </p>
+      <div className="px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-gray-900 dark:text-white">Harness — how the app checks itself</h3>
+          <p className="text-xs text-gray-500">
+            Every check on the app&apos;s own work, and where it stands now.
+          </p>
+        </div>
+        <EditButtons
+          editing={draft !== null}
+          saving={saving}
+          onEdit={() => checks && setDraft(checks.map((c) => ({ ...c })))}
+          onSave={save}
+          onCancel={() => setDraft(null)}
+        />
       </div>
       {error && <p className="px-5 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
       <div className="overflow-x-auto">
@@ -55,11 +93,30 @@ export default function HarnessChecks({ version }: { version: number }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-            {checks?.map((c) => (
+            {(draft ?? checks)?.map((c, i) => (
               <tr key={c.key} className="align-top">
-                <td className="px-5 py-2 text-gray-900 dark:text-white whitespace-nowrap">{c.name}</td>
-                <td className="px-5 py-2 text-gray-600 dark:text-gray-300">{c.watches}</td>
-                <td className="px-5 py-2 text-gray-500">{c.how}</td>
+                {draft ? (
+                  <>
+                    <td className="px-5 py-2 min-w-[10rem]">
+                      <input className={input} value={c.name} maxLength={80}
+                        onChange={(e) => change(i, "name", e.target.value)} />
+                    </td>
+                    <td className="px-5 py-2 min-w-[14rem]">
+                      <textarea className={input} rows={3} value={c.watches} maxLength={1000}
+                        onChange={(e) => change(i, "watches", e.target.value)} />
+                    </td>
+                    <td className="px-5 py-2 min-w-[14rem]">
+                      <textarea className={input} rows={3} value={c.how} maxLength={1000}
+                        onChange={(e) => change(i, "how", e.target.value)} />
+                    </td>
+                  </>
+                ) : (
+                  <>
+                    <td className="px-5 py-2 text-gray-900 dark:text-white whitespace-nowrap">{c.name}</td>
+                    <td className="px-5 py-2 text-gray-600 dark:text-gray-300">{c.watches}</td>
+                    <td className="px-5 py-2 text-gray-500">{c.how}</td>
+                  </>
+                )}
                 <td className="px-5 py-2 text-gray-900 dark:text-white">{c.now}</td>
                 <td className="px-5 py-2 whitespace-nowrap">
                   <span className={`px-2 py-0.5 rounded-full text-xs ${STATE[c.state].cls}`}>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
 import BrandLogo from "../components/BrandLogo";
 import FreshnessBadges from "../components/FreshnessBadges";
 import AssistantChat from "../components/AssistantChat";
@@ -12,6 +13,7 @@ import Sheets from "../admin/Sheets";
 import { api, DOCUMENT_TYPES } from "../lib/api";
 import type { ApiError, CSPDetail, DocumentTypeKey } from "../lib/api";
 import { useSessionUser } from "../lib/useSessionUser";
+import { useUrlParam } from "../lib/useUrlParam";
 import { useTheme } from "../lib/useTheme";
 
 interface MissingField {
@@ -75,11 +77,19 @@ function blockedBy(data: MissingData, fieldName: string): string[] {
 export default function RMDashboard() {
   const router = useRouter();
   const user = useSessionUser();
+  // One's own profile picture (No. 171).
+  const photo = useProfilePhoto(user?.email ?? "");
 
   const [rmStep, setRmStep] = useState<Step>("dashboard");
   // Sheets and Database for RMs too (No. 104): the CSP tabs, editable; every
   // CSP's record, read-only. The documents flow keeps its place meanwhile.
-  const [rmView, setRmView] = useState<"documents" | "sheets" | "database">("documents");
+  // The tab and the CSP open are in the address (?view=…&csp=…), so a
+  // refresh comes back to them instead of an empty Documents tab (No. 171).
+  const [view, setView] = useUrlParam("view", "documents");
+  const rmView = (["sheets", "database"].includes(view) ? view : "documents") as
+    "documents" | "sheets" | "database";
+  const setRmView = (next: "documents" | "sheets" | "database") => setView(next);
+  const [cspParam, setCspParam] = useUrlParam("csp");
   const [theme, toggleTheme] = useTheme();
   const [alertsMenu, setAlertsMenu] = useState(false);
   const [logoutMenu, setLogoutMenu] = useState(false);
@@ -152,6 +162,7 @@ export default function RMDashboard() {
   }, []);
 
   const resetRM = useCallback(() => {
+    setCspParam(null, false);
     setRmStep("dashboard");
     setSearchQuery("");
     setResults([]);
@@ -162,7 +173,7 @@ export default function RMDashboard() {
     setJobId("");
     setProcessingError("");
     setMissing(null);
-  }, []);
+  }, [setCspParam]);
 
   const searchCSP = async (term?: string) => {
     const text = (term ?? searchQuery).trim();
@@ -173,9 +184,7 @@ export default function RMDashboard() {
       const res = await api.searchCSP(text);
       setResults(res.results);
       if (res.results.length === 1) {
-        setCsp(res.results[0]);
-        setSelectedDocs(documentsFor(res.results[0]).map((d) => d.key));
-        setRmStep("search_result");
+        pick(res.results[0]);
       } else if (res.results.length === 0) {
         setSearchError(`No CSP found for "${text}".`);
       }
@@ -206,11 +215,26 @@ export default function RMDashboard() {
     }
   };
 
-  const pick = (record: CSPDetail) => {
+  function pick(record: CSPDetail) {
     setCsp(record);
     setSelectedDocs(documentsFor(record).map((d) => d.key));
     setRmStep("search_result");
-  };
+    setCspParam(record.csp_id, false);
+  }
+
+  // After a refresh: open the CSP the address names again (No. 171).
+  useEffect(() => {
+    if (!user || user.role !== "rm" || !cspParam || csp) return;
+    let cancelled = false;
+    api
+      .getCSP(cspParam)
+      .then((record) => !cancelled && pick(record))
+      .catch(() => !cancelled && setCspParam(null, false));
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per CSP named in the address
+  }, [user, cspParam]);
 
   const openAlert = async (alert: AlertItem) => {
     setAlertsMenu(false);
@@ -306,12 +330,6 @@ export default function RMDashboard() {
   if (!user || user.role !== "rm") return null;
 
   const unreadAlerts = rmAlerts.length;
-  const initials = user.name
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
   const docLabel = (key: DocumentTypeKey) =>
     DOCUMENT_TYPES.find((d) => d.key === key)?.label ?? key;
 
@@ -426,11 +444,11 @@ export default function RMDashboard() {
               </div>
               <div className="text-xs text-gray-500">{user.email}</div>
             </div>
-            <div className="w-9 h-9 rounded-full bg-eko text-white flex items-center justify-center font-bold">
-              {initials}
-            </div>
+            <Avatar email={user.email} name={user.name} className="w-9 h-9 bg-eko" />
+            {photo.input}
             {logoutMenu && (
-              <div className="absolute top-12 right-0 w-48 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+              <div className="absolute top-12 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
+                <ProfilePhotoMenuItems photo={photo} />
                 <button
                   onClick={logout}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"

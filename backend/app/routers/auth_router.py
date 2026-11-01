@@ -6,6 +6,7 @@ API endpoints for user authentication:
   POST /api/auth/signup      — Create account (requires Google Sheet authorization)
   POST /api/auth/login       — Authenticate with email + password → sends OTP
   POST /api/auth/verify-otp  — Verify OTP → returns JWT tokens
+  POST /api/auth/google      — Log in with Google → returns JWT tokens
   POST /api/auth/logout      — Invalidate session (client-side)
   POST /api/auth/forgot-password — Email a reset code
   POST /api/auth/reset-password  — Verify the code and set a new password
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.config import get_settings
 from app.schemas.auth import (
+    GoogleSignInRequest,
     ResendOTPRequest,
     SignupRequest,
     SignupResponse,
@@ -59,6 +61,8 @@ async def auth_config():
     return {
         "allowed_email_domains": [],
         "allowed_email_domains_text": "any",
+        # Blank = no "Log in with Google" button (No. 171).
+        "google_client_id": settings.google_client_id.strip(),
     }
 
 
@@ -254,11 +258,19 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
             detail="User not found. Please sign up first.",
         )
 
+    return await _finish_sign_in(db, user, http_request, method="email_code")
+
+
+async def _finish_sign_in(db: AsyncSession, user, http_request: Request,
+                          method: str) -> OTPVerifyResponse:
+    """Everything after the person is proved to own the address — by the
+    emailed code, or by Google (No. 171). One path, so both ways in apply
+    the same Super Admin list, memberships and workspace rules."""
     # Activate account if pending
     if user.account_status == AccountStatus.PENDING:
         user.account_status = AccountStatus.ACTIVE
         logger.info(
-            "auth_router.verify_otp: account activated for %s", request.email,
+            "auth_router: account activated for %s (%s)", user.email, method,
         )
 
     # Update last login, and write the sign-in down. The timestamp answers
@@ -267,7 +279,8 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
     user.last_login_at = datetime.now(timezone.utc)
     await login_history.record_login(
         db, user,
-        address=http_request.client.host if http_request.client else None)
+        address=http_request.client.host if http_request.client else None,
+        method=method)
 
     # Configuration decides who is a Super Admin OF EKO SBI KIOSK CSP, and
     # it is read at every login — so adding someone to the list, or removing
@@ -328,6 +341,7 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
         return OTPVerifyResponse(
             verified=True,
             name=user.name,
+            email=user.email,
             choose_workspace=True,
             workspaces=[WorkspaceChoice(id=str(ws.id), name=ws.name,
                                         role=m.role) for m, ws in choices],
@@ -360,7 +374,26 @@ def _issue_tokens(user, member, ws) -> OTPVerifyResponse:
         name=user.name,
         workspace_id=str(ws.id),
         workspace_name=ws.name,
+        email=user.email,
     )
+
+
+@router.post("/google", response_model=OTPVerifyResponse)
+async def google_sign_in(request: GoogleSignInRequest, http_request: Request,
+                         db: AsyncSession = Depends(get_db)):
+    """Log in with Google (No. 171): the ID token from Google's button
+    replaces the password and the emailed code. Same email = same account;
+    a new account only for someone "Create Account" would also let in."""
+    from app.services import google_login
+
+    try:
+        email, name = await google_login.verify(request.credential)
+        user = await google_login.user_for(db, email, name)
+    except google_login.GoogleLoginError as e:
+        await db.rollback()
+        raise HTTPException(status_code=e.status_code, detail=e.message)
+    logger.info("auth_router.google_sign_in: %s proved by Google", email)
+    return await _finish_sign_in(db, user, http_request, method="google")
 
 
 @router.post("/select-workspace", response_model=OTPVerifyResponse)

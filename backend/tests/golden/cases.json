@@ -240,6 +240,25 @@
      "expect": {"imported_as": {"1A990107": null}, "held": {"1A990107": true}}},
     {"id": "LIVE-08", "kind": "go_live", "rule": "No. 121", "title": "Inactive in the Calling sheet: copied in as OLD but held",
      "input": {"runs": [{"calling": [{"code": "1A990108", "status": "Inactive"}], "lead": []}]},
-     "expect": {"imported_as": {"1A990108": "baseline"}, "held": {"1A990108": true}}}
+     "expect": {"imported_as": {"1A990108": "baseline"}, "held": {"1A990108": true}}},
+
+    {"id": "VER-01", "kind": "verify", "rule": "No. 171", "title": "Email only in other capitals: not a difference",
+     "input": {"field": "email", "answered": "Asha.Devi@example.com", "current": "asha.devi@example.com", "reached": true},
+     "expect": {"decision": null}},
+    {"id": "VER-02", "kind": "verify", "rule": "No. 171", "title": "Branch code with leading zeros: not a difference",
+     "input": {"field": "branch_code", "answered": "8474", "current": "008474", "reached": true},
+     "expect": {"decision": null}},
+    {"id": "VER-03", "kind": "verify", "rule": "No. 171", "title": "RBO with and without its place name: not a difference",
+     "input": {"field": "rbo_name", "answered": "RBO 6 Samastipur", "current": "RBO 6", "reached": true},
+     "expect": {"decision": null}},
+    {"id": "VER-04", "kind": "verify", "rule": "No. 171", "title": "Sheet changed after the answer reached it: the sheet's newer value stays",
+     "input": {"field": "email", "answered": "first.try@example.com", "current": "fixed.later@example.com", "reached": true, "before": "old@example.com"},
+     "expect": {"decision": "kept_sheet", "value": "fixed.later@example.com"}},
+    {"id": "VER-05", "kind": "verify", "rule": "No. 171", "title": "Answer never reached the sheet, sheet untouched since: the answer is written",
+     "input": {"field": "branch_code", "answered": "8475", "current": "8474", "reached": false, "before": "8474"},
+     "expect": {"decision": "wrote_answer", "value": "8475"}},
+    {"id": "VER-06", "kind": "verify", "rule": "No. 171", "title": "Answer never reached the sheet, sheet changed since: the sheet's value stays",
+     "input": {"field": "branch_code", "answered": "8475", "current": "8476", "reached": false, "before": "8474"},
+     "expect": {"decision": "kept_sheet", "value": "8476"}}
   ]
 }

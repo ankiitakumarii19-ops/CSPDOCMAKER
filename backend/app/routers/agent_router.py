@@ -103,6 +103,11 @@ async def list_findings(
     if only_open:
         statement = statement.where(AgentFinding.status.in_(
             (PROPOSED, "informational")))
+    # The verification agent decides by itself since No. 171: a card it
+    # left before that waits for nobody (its next run closes it).
+    statement = statement.where(~(
+        (AgentFinding.agent_key == "verification")
+        & (AgentFinding.status == PROPOSED)))
     findings = (await session.execute(statement.limit(200))).scalars().all()
 
     return {
@@ -124,6 +129,21 @@ async def list_findings(
         ],
         "awaiting_decision": sum(1 for f in findings if f.status == PROPOSED),
     }
+
+
+@router.get("/verification/decisions")
+async def verification_decisions(
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("super_admin")),
+):
+    """What the verification agent decided by itself (No. 171): the CSP's
+    answer, the old and new value, why and when. Newest first."""
+    from app.services import verification_auto
+
+    rows = await session.run_sync(verification_auto.history,
+                                  max(1, min(limit, 500)))
+    return {"decisions": rows}
 
 
 @router.get("/{key}/runs")

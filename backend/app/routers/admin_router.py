@@ -382,8 +382,13 @@ def _parse_day(value: str | None, field: str):
     return parsed.replace(tzinfo=timezone.utc)
 
 
-def _apply_dates(query, column, date_from: str | None, date_to: str | None):
-    """Inclusive of both days: date_to covers everything up to its midnight."""
+# India time: "today" on the dashboard is the day as people at Eko count it.
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _document_days(date_from: str | None, date_to: str | None):
+    """(start, end) of the days asked — end exclusive — in India time, for
+    the day a document was made (No. 171). (None, None) = all days."""
     start = _parse_day(date_from, "date_from")
     end = _parse_day(date_to, "date_to")
     if start and end and end < start:
@@ -391,11 +396,32 @@ def _apply_dates(query, column, date_from: str | None, date_to: str | None):
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="date_to cannot be before date_from.",
         )
+    return (start.replace(tzinfo=IST) if start else None,
+            (end + timedelta(days=1)).replace(tzinfo=IST) if end else None)
+
+
+def _made_in(query, days):
+    """Only documents (stored PDFs) made on the days asked."""
+    from app.models.stored_document import StoredDocument
+
+    start, end = days
     if start:
-        query = query.where(column >= start)
+        query = query.where(StoredDocument.created_at >= start)
     if end:
-        query = query.where(column < end + timedelta(days=1))
+        query = query.where(StoredDocument.created_at < end)
     return query
+
+
+def _with_documents_made(query, days):
+    """CSPs with at least one document made on the days asked."""
+    from app.models.enums import DocumentFormat
+    from app.models.stored_document import StoredDocument
+
+    if days == (None, None):
+        return query
+    made = _made_in(select(StoredDocument.csp_id).where(
+        StoredDocument.file_format == DocumentFormat.PDF), days)
+    return query.where(CSPRecord.csp_id.in_(made))
 
 
 FILTER_FIELDS = {
@@ -433,7 +459,11 @@ async def csp_metrics(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("admin", "super_admin")),
 ):
-    """New vs existing CSPs, and how many of each hold every document."""
+    """New vs existing CSPs, and how many of each hold every document.
+
+    date_from / date_to: the days the documents were made, in India time
+    (No. 171) — only CSPs with a document made then, and only those
+    documents counted."""
     from app.models.enums import DocumentFormat, DocumentType
     from app.models.rm_alert import OPEN, RMAlert
     from app.models.stored_document import StoredDocument
@@ -445,8 +475,8 @@ async def csp_metrics(
     # Which CSPs are in scope, as a reusable subquery.
     scoped_query = _apply_filters(
         select(CSPRecord.csp_id, CSPRecord.origin), active)
-    scoped_query = _apply_dates(
-        scoped_query, CSPRecord.created_at, date_from, date_to)
+    days = _document_days(date_from, date_to)
+    scoped_query = _with_documents_made(scoped_query, days)
     scoped = scoped_query.subquery()
 
     totals = (await session.execute(
@@ -462,14 +492,14 @@ async def csp_metrics(
     # sent, so it is the only honest measure of "done".
     per_document = []
     for doc_type in DocumentType:
-        rows = (await session.execute(
+        rows = (await session.execute(_made_in(
             select(scoped.c.origin, func.count(func.distinct(StoredDocument.csp_id)))
             .select_from(scoped)
             .join(StoredDocument, StoredDocument.csp_id == scoped.c.csp_id)
             .where(
                 StoredDocument.document_type == doc_type,
                 StoredDocument.file_format == DocumentFormat.PDF,
-            )
+            ), days)
             .group_by(scoped.c.origin)
         )).all()
         counts = {origin or "unknown": count for origin, count in rows}
@@ -606,8 +636,9 @@ async def _drill_rows(session, params: dict):
 
     active = {k: v for k, v in params["filters"].items() if v}
     query = _apply_filters(select(CSPRecord), active)
-    query = _apply_dates(query, CSPRecord.created_at,
-                         params.get("date_from"), params.get("date_to"))
+    # The days the documents were made (No. 171), as the counts use.
+    days = _document_days(params.get("date_from"), params.get("date_to"))
+    query = _with_documents_made(query, days)
 
     if view == "new":
         query = query.where(CSPRecord.origin == "new")
@@ -641,10 +672,10 @@ async def _drill_rows(session, params: dict):
                 detail=f"Unknown document type '{document_type}'.",
             )
         if not delivery:
-            holders = select(StoredDocument.csp_id).where(
+            holders = _made_in(select(StoredDocument.csp_id).where(
                 StoredDocument.document_type == doc_type,
                 StoredDocument.file_format == DocumentFormat.PDF,
-            )
+            ), days)
             query = query.where(
                 CSPRecord.csp_id.notin_(holders) if params.get("missing")
                 else CSPRecord.csp_id.in_(holders)

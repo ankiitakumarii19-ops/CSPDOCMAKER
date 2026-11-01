@@ -71,7 +71,8 @@ async def test_every_agent_says_what_it_owns_and_may_do():
         assert agent.owns and agent.owns.endswith("?"), agent.key
         assert agent.does, agent.key
         assert agent.may, agent.key
-        assert agent.proposes, agent.key
+        # The verification agent decides by itself (No. 171): newest wins.
+        assert agent.proposes or agent.key == "verification", agent.key
 
 
 async def test_the_communication_agent_is_off_until_switched_on():

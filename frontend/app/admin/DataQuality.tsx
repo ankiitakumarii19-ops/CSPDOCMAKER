@@ -13,7 +13,8 @@
  * Context (the sheets the app reads, and how fresh), the harness (how the
  * app checks itself, No. 149) and the auto-filled values themselves (check
  * or correct) are at the top; Setup section, Admins and Super Admins. The
- * context and the harness are in the Knowledge Base too.
+ * context and the harness are in the Knowledge Base too. Since No. 171 their
+ * words, and the Guardrails, are editable, and "Upload document" fills them.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -21,6 +22,8 @@ import { useCallback, useEffect, useState } from "react";
 import AutoFilledValues from "./AutoFilledValues";
 import ContextSources from "./ContextSources";
 import HarnessChecks from "./HarnessChecks";
+import Guardrails from "./Guardrails";
+import QualityUpload from "./QualityUpload";
 import InfoSuggestions from "./InfoSuggestions";
 import ContactFixes from "./ContactFixes";
 import UnansweredQuestions from "./UnansweredQuestions";
@@ -96,8 +99,11 @@ export default function DataQuality() {
         </p>
       </div>
 
-      <ContextSources />
+      {/* The words are editable, and a document can fill them (No. 171). */}
+      <QualityUpload onSaved={() => setVersion((v) => v + 1)} />
+      <ContextSources version={version} />
       <HarnessChecks version={version} />
+      <Guardrails version={version} />
       {/* The feedback loops (No. 150). Loop 4 (golden cases) runs on the
           laptop before every push; its row is in the Harness table. */}
       <InfoSuggestions onChanged={() => setVersion((v) => v + 1)} />

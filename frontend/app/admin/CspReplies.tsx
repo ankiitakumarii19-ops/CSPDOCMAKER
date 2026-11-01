@@ -10,12 +10,19 @@
  * Draft mode: each reply waits here — edit it if needed, then Send or Skip.
  * Auto mode: replies go out by themselves (8 am – 8 pm, max 3 a day per
  * CSP). Only the Super Admin changes the mode.
+ *
+ * Reply (No. 171): answer one of the CSP's messages — it is shown quoted
+ * above the reply, and the WhatsApp starts with it ('Aapne likha: "…"').
+ * The CSP's name, or a quoted message, opens their whole chat.
  */
 
 import { useCallback, useEffect, useState } from "react";
 
+import Avatar from "../components/Avatar";
+import CspChat from "./CspChat";
 import ReplyLearning from "./ReplyLearning";
 import { api } from "../lib/api";
+import { useUrlParam } from "../lib/useUrlParam";
 import type { ApiError, CspReplyRow } from "../lib/api";
 
 const MODES: { key: "off" | "draft" | "auto"; label: string; hint: string }[] = [
@@ -52,6 +59,16 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [rowError, setRowError] = useState<{ id: string; text: string } | null>(null);
+  // No. 171: the CSP message each reply answers, and the chat opened.
+  const [quotes, setQuotes] = useState<Record<string, string>>({});
+  // The open chat is in the address (?chat=<CSP code>), so a refresh keeps
+  // it open (No. 171); the quoted message to mark is not.
+  const [chatCsp, setChatCsp] = useUrlParam("chat");
+  const [highlight, setHighlight] = useState<string | undefined>();
+  const setChat = (c: { csp: string; highlight?: string } | null) => {
+    setHighlight(c?.highlight);
+    setChatCsp(c?.csp ?? null);
+  };
 
   const load = useCallback(
     () =>
@@ -75,7 +92,8 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
     setRowError(null);
     try {
       if (what === "send")
-        await api.sendCspReply(r.id, texts[r.id] ?? r.reply_text, links[r.id] ?? plansLink(r));
+        await api.sendCspReply(
+          r.id, texts[r.id] ?? r.reply_text, links[r.id] ?? plansLink(r), quotes[r.id]);
       else if (what === "link") await api.linkCspReply(r.id);
       else await api.skipCspReply(r.id);
       await load();
@@ -146,17 +164,39 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
           <div key={r.id} className="px-5 py-3 grid gap-3 md:grid-cols-2 text-sm">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-gray-900 dark:text-white font-medium">{r.csp_name || "—"}</span>
-                <span className="text-xs font-mono text-gray-500">{r.csp_id}</span>
+                <button
+                  onClick={() => setChat({ csp: r.csp_id })}
+                  title="Open this CSP's WhatsApp chat"
+                  className="flex items-center gap-2 hover:underline decoration-eko"
+                >
+                  <span className="text-gray-900 dark:text-white font-medium">{r.csp_name || "—"}</span>
+                  <span className="text-xs font-mono text-gray-500">{r.csp_id}</span>
+                  <i className="fas fa-comments text-[11px] text-eko"></i>
+                </button>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS[r.status].cls}`}>
                   {STATUS[r.status].label}
                 </span>
               </div>
               <div className="mt-2 space-y-1">
                 {r.messages.map((m, i) => (
-                  <div key={i} className="px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/50 text-gray-800 dark:text-gray-200">
-                    {m.text || `(${m.type})`}
-                    <span className="ml-2 text-[11px] text-gray-400">{when(m.at)}</span>
+                  <div
+                    key={i}
+                    className={`group flex items-start gap-2 px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-gray-900/50 text-gray-800 dark:text-gray-200 ${
+                      quotes[r.id] && quotes[r.id] === m.text ? "ring-1 ring-eko" : ""}`}
+                  >
+                    <span className="flex-1">
+                      {m.text || `(${m.type})`}
+                      <span className="ml-2 text-[11px] text-gray-400">{when(m.at)}</span>
+                    </span>
+                    {(r.status === "draft" || r.status === "failed") && m.text && (
+                      <button
+                        onClick={() => setQuotes({ ...quotes, [r.id]: m.text })}
+                        title="Reply to this message"
+                        className="shrink-0 text-[11px] text-gray-400 hover:text-eko sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                      >
+                        <i className="fas fa-reply mr-1"></i>Reply
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -171,6 +211,27 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
             <div>
               {r.status === "draft" || r.status === "failed" ? (
                 <>
+                  {quotes[r.id] && (
+                    <div className="mb-1 flex items-start gap-2 rounded-lg border-l-4 border-eko bg-gray-50 dark:bg-gray-900/50 px-3 py-1.5">
+                      <button
+                        onClick={() => setChat({ csp: r.csp_id, highlight: quotes[r.id] })}
+                        title="Open this message in the CSP's chat"
+                        className="flex-1 text-left"
+                      >
+                        <div className="text-[11px] font-semibold text-eko">
+                          Replying to {r.csp_name || r.csp_id}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">{quotes[r.id]}</div>
+                      </button>
+                      <button
+                        onClick={() => setQuotes({ ...quotes, [r.id]: "" })}
+                        aria-label="Remove the quote"
+                        className="text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                      >
+                        <i className="fas fa-xmark text-xs"></i>
+                      </button>
+                    </div>
+                  )}
                   <textarea
                     rows={4}
                     value={texts[r.id] ?? r.reply_text}
@@ -208,7 +269,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
               ) : (
                 <>
                   <div className="px-3 py-2 rounded-lg bg-green-50/50 dark:bg-green-900/10 text-gray-800 dark:text-gray-200">
-                    {r.reply_text || <span className="text-gray-400">No reply</span>}
+                    <SentText text={r.reply_text} onOpen={(q) => setChat({ csp: r.csp_id, highlight: q })} />
                     {r.status === "sent" && r.edited !== null && (
                       <span className={`ml-2 px-1.5 py-0.5 rounded text-[11px] ${
                         r.edited ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
@@ -232,8 +293,16 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   )}
                 </>
               )}
-              <div className="text-xs text-gray-500 mt-1">
-                {r.sent_at && `Sent ${when(r.sent_at)} by ${r.decided_by}. `}
+              <div className="text-xs text-gray-500 mt-1 flex flex-wrap items-center gap-1">
+                {r.sent_at && (
+                  <>
+                    Sent {when(r.sent_at)} by
+                    {r.decided_by?.includes("@") && (
+                      <Avatar email={r.decided_by} name={r.decided_by} className="w-4 h-4 text-[8px] bg-gray-400" />
+                    )}
+                    {r.decided_by}.{" "}
+                  </>
+                )}
                 {r.note}
               </div>
               {rowError?.id === r.id && (
@@ -248,6 +317,30 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
           </p>
         )}
       </div>
+      {chatCsp && <CspChat cspId={chatCsp} highlight={highlight} onClose={() => setChat(null)} />}
     </section>
+  );
+}
+
+// 'Aapne likha: "…" — reply' as sent (csp_replies.with_quote).
+const QUOTED = /^Aapne likha: "(.*)" — (.*)$/;
+
+/** A sent reply; one that answered a quoted message shows the quote. */
+function SentText({ text, onOpen }: { text: string; onOpen: (quote: string) => void }) {
+  if (!text) return <span className="text-gray-400">No reply</span>;
+  const m = QUOTED.exec(text);
+  if (!m) return <>{text}</>;
+  const quote = m[1].replace(/…$/, "");
+  return (
+    <>
+      <button
+        onClick={() => onOpen(quote)}
+        title="Open this message in the CSP's chat"
+        className="block w-full text-left mb-1 rounded border-l-4 border-eko bg-white/60 dark:bg-gray-900/40 px-2 py-1 text-xs text-gray-600 dark:text-gray-300"
+      >
+        {m[1]}
+      </button>
+      {m[2]}
+    </>
   );
 }

@@ -68,6 +68,11 @@ class OTPVerifyRequest(BaseModel):
     otp: str = Field(..., min_length=6, max_length=6)
 
 
+class GoogleSignInRequest(BaseModel):
+    """The ID token Google's sign-in button gave the page (No. 171)."""
+    credential: str = Field(..., min_length=20, max_length=8192)
+
+
 class OTPVerifyResponse(BaseModel):
     """OTP verification response."""
     verified: bool
@@ -78,6 +83,9 @@ class OTPVerifyResponse(BaseModel):
     name: Optional[str] = None
     workspace_id: Optional[str] = None
     workspace_name: Optional[str] = None
+    # The account's address: after Log in with Google the page has not
+    # been told it (No. 171).
+    email: Optional[str] = None
     # Set instead of the tokens when the person belongs to more than one
     # workspace: they choose, then exchange selection_token for real tokens.
     choose_workspace: bool = False

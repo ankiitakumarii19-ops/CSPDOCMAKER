@@ -42,7 +42,8 @@ MAX_ENTRIES = 200
 
 
 async def record_login(session: AsyncSession, user: User,
-                       address: Optional[str] = None) -> None:
+                       address: Optional[str] = None,
+                       method: str = "email_code") -> None:
     """Write down that this person signed in.
 
     Two things here are the result of this having broken login once, and
@@ -82,6 +83,8 @@ async def record_login(session: AsyncSession, user: User,
                     # Where from, when the request carried it. Not a precise
                     # location and not meant to be one.
                     "address": address or "",
+                    # email_code (password + emailed code) or google (No. 171).
+                    "method": method,
                 },
             ))
     except Exception as e:

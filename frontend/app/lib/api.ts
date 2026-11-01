@@ -5,7 +5,7 @@
  * Handles authentication tokens, error responses, and type safety.
  */
 
-import { withBase } from "./basePath";
+import { BASE_PATH, withBase } from "./basePath";
 
 const API_BASE = withBase("/api");
 
@@ -165,6 +165,15 @@ export interface WhatsAppMessageDetail {
     sheet_saved: string[] | null;
     sheet_error: string | null;
   } | null;
+}
+
+/** One CSP's whole WhatsApp chat (No. 171). */
+export interface CspChat {
+  csp_id: string;
+  csp_name: string;
+  phones: string[];
+  items: WhatsAppChat["items"];
+  error: string | null;
 }
 
 export interface WhatsAppChat {
@@ -370,6 +379,8 @@ export interface SignInResult {
   name?: string;
   workspace_id?: string;
   workspace_name?: string;
+  /** The account's address (needed after Log in with Google, No. 171). */
+  email?: string;
   choose_workspace?: boolean;
   workspaces?: WorkspaceChoice[];
   selection_token?: string;
@@ -817,6 +828,49 @@ export interface HarnessCheck {
   how: string;
   now: string;
   state: "ok" | "attention" | "empty" | "laptop";
+  /** Its words were changed on the page (No. 171). */
+  edited?: boolean;
+}
+
+/** One difference the verification agent settled by itself (No. 171). */
+export interface VerificationDecision {
+  at: string | null;
+  csp_id: string | null;
+  field: string | null;
+  label: string | null;
+  decision: "kept_sheet" | "wrote_answer" | null;
+  csp_answered: string | null;
+  old_value: string | null;
+  new_value: string | null;
+  why: string | null;
+  result: string;
+  error?: string | null;
+}
+
+/** The words on Data quality, editable (No. 171). */
+export interface ContextText {
+  key: string;
+  label: string;
+  used_for: string;
+  edited?: boolean;
+}
+
+export interface Guardrail {
+  title: string;
+  detail: string;
+}
+
+export type TextSection = "context" | "harness" | "guardrails";
+
+/** What an uploaded file says for each section — for review, not saved. */
+export interface ExtractedTexts {
+  file: string;
+  context: ContextText[];
+  harness: Pick<HarnessCheck, "key" | "name" | "watches" | "how">[];
+  guardrails: Guardrail[];
+  knowledge: { question: string; answer: string; category: string }[];
+  unplaced: string[];
+  headings_found: boolean;
 }
 
 /** One value the app filled in by itself, as the Data quality page lists it. */
@@ -1001,7 +1055,11 @@ class ApiClient {
       if (typeof window !== "undefined") {
         // A full page load on purpose: it drops every screen's in-memory
         // state from the expired session (there is no router in this file).
-        window.location.assign(withBase("/auth/login?expired=1"));
+        // Where they were, so signing in again brings them back (No. 171).
+        const here = window.location.pathname.slice(BASE_PATH.length) + window.location.search;
+        window.location.assign(
+          withBase(`/auth/login?expired=1&next=${encodeURIComponent(here)}`)
+        );
       }
     }
     return { detail, status: response.status, data };
@@ -1040,7 +1098,17 @@ class ApiClient {
     return this.request<{
       allowed_email_domains: string[];
       allowed_email_domains_text: string;
+      /** Blank = no "Log in with Google" button (No. 171). */
+      google_client_id?: string;
     }>("/auth/config");
+  }
+
+  /** Log in with Google (No. 171): the ID token from Google's button. */
+  async googleSignIn(credential: string) {
+    return this.request<SignInResult>("/auth/google", {
+      method: "POST",
+      body: JSON.stringify({ credential }),
+    });
   }
 
   async signup(data: {
@@ -1383,6 +1451,43 @@ class ApiClient {
   /** A stored photo or PDF, fetched with the login so it can be shown. */
   /** The CSP's photo as every screen shows it — the passport version — or
    *  null when the app has none yet (No. 102). */
+  // ---- Profile pictures (No. 171) ----
+  /** A person's picture, or null when they have none (show initials). */
+  async profilePhoto(email: string): Promise<Blob | null> {
+    const path = `/profile/photo/${encodeURIComponent(email.toLowerCase())}`;
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (response.status === 404) return null;
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not load the picture");
+    }
+    return response.blob();
+  }
+
+  async setProfilePhoto(file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    const token = this.getToken();
+    const path = "/profile/photo";
+    const response = await this.send(`${API_BASE}${path}`, {
+      method: "PUT",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "The picture could not be saved");
+    }
+    return (await response.json()) as { email: string; version: string };
+  }
+
+  async removeProfilePhoto() {
+    return this.request<{ email: string; removed: boolean }>("/profile/photo", {
+      method: "DELETE",
+    });
+  }
+
   async cspPhoto(cspId: string): Promise<Blob | null> {
     const path = `/csps/${encodeURIComponent(cspId)}/photo`;
     const token = this.getToken();
@@ -1475,10 +1580,11 @@ class ApiClient {
     });
   }
 
-  async sendCspReply(id: string, text: string, sendLink?: boolean) {
+  /** quote (No. 171): the CSP's message this answers, put in front. */
+  async sendCspReply(id: string, text: string, sendLink?: boolean, quote?: string) {
     return this.request<CspReplyRow>(`/admin/csp-replies/${encodeURIComponent(id)}/send`, {
       method: "POST",
-      body: JSON.stringify({ text, send_link: sendLink }),
+      body: JSON.stringify({ text, send_link: sendLink, quote: quote || null }),
     });
   }
 
@@ -1523,6 +1629,36 @@ class ApiClient {
 
   async qualityHarness() {
     return this.request<{ checks: HarnessCheck[] }>("/admin/quality/harness");
+  }
+
+  async qualityTexts() {
+    return this.request<{ context: ContextText[]; guardrails: Guardrail[] }>(
+      "/admin/quality/texts"
+    );
+  }
+
+  async saveQualityTexts(section: TextSection, items: object[]) {
+    return this.request<{ saved: TextSection; context: ContextText[]; guardrails: Guardrail[] }>(
+      `/admin/quality/texts/${section}`,
+      { method: "PUT", body: JSON.stringify({ items }) }
+    );
+  }
+
+  /** Read a PDF / Word / text file into the sections; nothing is saved. */
+  async extractQualityTexts(file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    const token = this.getToken();
+    const path = "/admin/quality/texts/extract";
+    const response = await this.send(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "The file could not be read");
+    }
+    return (await response.json()) as ExtractedTexts;
   }
 
   async qualityScoreboard(weeks = 8) {
@@ -1777,6 +1913,13 @@ class ApiClient {
     );
   }
 
+  /** What the verification agent decided by itself (No. 171). */
+  async verificationDecisions(limit = 100) {
+    return this.request<{ decisions: VerificationDecision[] }>(
+      `/admin/agents/verification/decisions?limit=${limit}`
+    );
+  }
+
   /** Every run this agent has had, newest first. */
   async agentRuns(key: string) {
     return this.request<{ agent: string; runs: AgentRun[] }>(
@@ -1837,6 +1980,12 @@ class ApiClient {
   async whatsappChat(id: string) {
     return this.request<WhatsAppChat>(
       `/admin/whatsapp-messages/${encodeURIComponent(id)}/conversation`);
+  }
+
+  /** One CSP's whole WhatsApp chat, by their code (No. 171). */
+  async cspChat(cspId: string) {
+    return this.request<CspChat>(
+      `/admin/whatsapp-messages/csp/${encodeURIComponent(cspId)}/conversation`);
   }
 
   async refreshWhatsappMessages() {

@@ -149,18 +149,18 @@ VERIFICATION = register(Agent(
     owns="Does what a CSP submitted agree with what was already on file?",
     does=[
         "Compares each submitted value against the stored one",
-        "Lists fields the CSP changed rather than confirmed",
-        "Flags a change that contradicts the source sheet as a conflict",
+        "Treats a value written differently (capitals, leading zeros, "
+        "RBO place name) as the same",
+        "Decides each real difference itself: the newest value wins "
+        "(No. 171)",
         "Notices links sent and never answered, and links that expired",
-        "Routes a conflict to the RM who owns that CSP",
     ],
     may=[
-        "Record what changed",
-        "Mark a request answered, expired or in conflict",
+        "Keep the sheet's value when it was changed after the CSP answered",
+        "Write a CSP's answer that never reached the sheet onto the sheet",
+        "Log every decision with the old and new value",
     ],
-    proposes=[
-        "Accepting a contradicting value over the one on file",
-    ],
+    proposes=[],
     trigger=BOTH,
     every_minutes=30,
 ))

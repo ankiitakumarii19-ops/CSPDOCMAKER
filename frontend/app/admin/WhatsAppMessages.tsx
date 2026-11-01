@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import ContactStatusLine from "../components/ContactStatusLine";
 import { api } from "../lib/api";
+import { useUrlParam } from "../lib/useUrlParam";
 import WhatsAppMessageDetails from "./WhatsAppMessageDetails";
 import type {
   ApiError, WhatsAppCounts, WhatsAppMessageRow, WhatsAppRefreshResult,
@@ -131,7 +132,10 @@ export default function WhatsAppMessages() {
   // Bumped to load again with the same filters (after Refresh).
   const [reloads, setReloads] = useState(0);
   // The message whose details are open (No. 111).
-  const [opened, setOpened] = useState<string | null>(null);
+  // The opened message is in the address (?message=…): a refresh keeps it
+  // open (No. 171).
+  const [openedId, setOpened] = useUrlParam("message");
+  const opened = openedId || null;
 
   useEffect(() => {
     let current = true;

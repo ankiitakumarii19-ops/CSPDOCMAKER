@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import BrandLogo from "../../components/BrandLogo";
+import GoogleSignIn from "../../components/GoogleSignIn";
 import { api } from "../../lib/api";
 import type { ApiError, SignInResult, WorkspaceChoice } from "../../lib/api";
 
@@ -27,6 +28,8 @@ export default function AuthPage() {
   const [domains, setDomains] = useState<string[]>([]);
   const [domainsText, setDomainsText] = useState("your company");
   const [theme, setTheme] = useState<"light" | "dark">("light");
+  // Blank until the server says Google sign-in is set up (No. 171).
+  const [googleClientId, setGoogleClientId] = useState("");
 
   // Login
   const [email, setEmail] = useState("");
@@ -72,6 +75,7 @@ export default function AuthPage() {
         if (cancelled) return;
         setDomains(res.allowed_email_domains);
         setDomainsText(res.allowed_email_domains_text);
+        setGoogleClientId(res.google_client_id ?? "");
       })
       .catch(() => {
         /* Leave it open; the server is the authority either way. */
@@ -268,6 +272,33 @@ export default function AuthPage() {
     }
   };
 
+  // Log in with Google (No. 171): Google proved the address, so there is no
+  // emailed code. Several workspaces → the same choice as after a code.
+  const googleSignIn = async (credential: string) => {
+    setError("");
+    setInfo("");
+    setLoading(true);
+    try {
+      const res = await api.googleSignIn(credential);
+      if (res.email) setEmail(res.email);
+      if (res.choose_workspace && res.workspaces) {
+        setChoices(res.workspaces);
+        setChosen(res.workspaces[0]?.id ?? "");
+        setSelectionToken(res.selection_token ?? "");
+        return;
+      }
+      if (!res.access_token) {
+        setError("Google sign-in was not accepted.");
+        return;
+      }
+      finishSignIn(res);
+    } catch (err) {
+      setError((err as ApiError).detail || "Google sign-in failed.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const enterWorkspace = async () => {
     setError("");
     setLoading(true);
@@ -302,7 +333,7 @@ export default function AuthPage() {
       localStorage.setItem(
         "user",
         JSON.stringify({
-          email,
+          email: res.email || email,
           role: res.role,
           name: res.name,
           workspace_id: res.workspace_id,
@@ -312,9 +343,12 @@ export default function AuthPage() {
     } catch {
       /* private browsing */
     }
-    router.replace(
-      res.role === "admin" || res.role === "super_admin" ? "/admin" : "/rm"
-    );
+    const home = res.role === "admin" || res.role === "super_admin" ? "/admin" : "/rm";
+    // Back to the page the session ran out on (No. 171) — only a page of
+    // this app that the role opens, never another site.
+    const next = new URLSearchParams(window.location.search).get("next") || "";
+    const sameApp = /^\/(admin|rm)(\?|$)/.test(next) && next.startsWith(home);
+    router.replace(sameApp ? next : home);
   };
 
   const otpBoxes = (
@@ -549,6 +583,21 @@ export default function AuthPage() {
                     <i className="fas fa-arrow-right text-xs"></i>
                   </button>
                 </div>
+
+                {googleClientId && (
+                  <>
+                    <div className="flex items-center gap-3 text-xs text-gray-400">
+                      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700"></div>
+                      or
+                      <div className="flex-1 h-px bg-gray-200 dark:bg-gray-700"></div>
+                    </div>
+                    <GoogleSignIn
+                      clientId={googleClientId}
+                      onCredential={googleSignIn}
+                      dark={theme === "dark"}
+                    />
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -153,7 +153,7 @@ def test_with_nothing_recorded_the_harness_says_so(qdb):
     assert rows["kept_rate"]["now"] == "no data yet"
     assert rows["sending"]["state"] == "ok"
     assert rows["chat"] == {**rows["chat"], "now": "none", "state": "ok"}
-    assert rows["golden"]["now"] == "60 cases in this version"
+    assert rows["golden"]["now"] == "66 cases in this version"   # +6 verify (No. 171)
     assert rows["golden"]["state"] == rows["tests"]["state"] == "laptop"
     assert rows["freshness"]["state"] == "attention", "nothing read yet"
 

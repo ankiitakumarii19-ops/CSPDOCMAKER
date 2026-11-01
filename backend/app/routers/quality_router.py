@@ -6,6 +6,10 @@ CSP DocMaker — data quality: auto-filled values and sheet freshness (No. 146)
     The reason a read failed is shown to Admins and Super Admins only.
   * GET /api/admin/quality/harness       — Admin + Super Admin: how the app
     checks itself (No. 149), one row per check with where it stands.
+  * GET  /api/admin/quality/texts            — the Context rows' words and
+    PUT  /api/admin/quality/texts/{section}  the Guardrails; save the words
+    POST /api/admin/quality/texts/extract    of context / harness /
+    guardrails; read an uploaded file into them for review (No. 171).
   * GET /api/admin/quality/scoreboard    — Admin + Super Admin: per field
     and source, how many auto-filled values people kept or corrected.
   * GET /api/admin/quality/corrections   — Admin + Super Admin: the
@@ -24,14 +28,15 @@ Computed from field_provenance, field_corrections and sync_runs
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (APIRouter, Depends, File, HTTPException, Query,
+                     UploadFile, status)
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.database import get_session
 from app.dependencies import require_any_role, require_role
-from app.services import field_quality
+from app.services import field_quality, quality_texts
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +81,125 @@ async def harness(
 ):
     rows = await session.run_sync(
         lambda s: field_quality.harness(s, get_settings()))
-    return {"checks": rows}
+    # The words people saved in place of the code's (No. 171).
+    return {"checks": quality_texts.apply_harness(await _workspace(session),
+                                                   rows)}
+
+
+# ---- the words on this page, editable (No. 171) ---------------------------
+
+async def _workspace(session: AsyncSession):
+    from sqlalchemy import select
+
+    from app.models.workspace import Workspace
+    from app.workspace_context import current_workspace_id
+
+    ws_id = current_workspace_id()
+    if ws_id is None:
+        return None
+    return (await session.execute(select(Workspace).where(
+        Workspace.id == ws_id))).scalars().first()
+
+
+class TextsIn(BaseModel):
+    items: list[dict] = Field(default_factory=list, max_length=100)
+
+
+@router.get("/api/admin/quality/texts",
+            summary="The Context rows' words and the Guardrails")
+async def texts(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    ws = await _workspace(session)
+    return {"context": quality_texts.context_rows(ws),
+            "guardrails": quality_texts.guardrails(ws)}
+
+
+@router.put("/api/admin/quality/texts/{section}",
+            summary="Save the words of one section: context, harness or "
+                    "guardrails")
+async def save_texts(
+    section: str,
+    body: TextsIn,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    """Saved for this workspace; the matching Knowledge Base entry is
+    rewritten so the chat answers with the same words. The app's behaviour
+    does not change (D1: no AI reads these)."""
+    from app.models.audit_log import AuditLog
+
+    ws = await _workspace(session)
+    if ws is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found.")
+    code_rows = await session.run_sync(
+        lambda s: field_quality.harness(s, get_settings()))
+    try:
+        value = quality_texts.validated(section, body.items,
+                                        [r["key"] for r in code_rows])
+    except quality_texts.TextError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if section == "harness":
+        value = quality_texts.reset_harness_to_code(code_rows, value)
+
+    before = quality_texts.stored(ws).get(section)
+    ws.settings = quality_texts.saved_settings(ws, section, value)
+    who = _who(user)
+
+    if section == "context":
+        answer = (quality_texts.Q_CONTEXT,
+                  quality_texts.context_answer(quality_texts.context_rows(ws)),
+                  "", "")
+    elif section == "harness":
+        answer = (quality_texts.Q_HARNESS,
+                  quality_texts.harness_answer(
+                      quality_texts.apply_harness(ws, code_rows)), "", "")
+    else:
+        answer = (quality_texts.Q_GUARDRAILS,
+                  quality_texts.guardrails_answer(value),
+                  quality_texts.GUARDRAILS_PHRASINGS,
+                  quality_texts.GUARDRAILS_KEYWORDS)
+    await quality_texts.write_answer(session, answer[0], answer[1], who,
+                                     phrasings=answer[2], keywords=answer[3])
+
+    session.add(AuditLog(
+        workspace_id=ws.id, action="quality_texts_change",
+        resource_type="workspace", resource_id=str(ws.id), result="success",
+        metadata_json={"by": who, "section": section,
+                       "before": before, "after": value}))
+    await session.commit()
+    logger.info("quality_router: %s saved the %s words", who, section)
+    return {"saved": section, "context": quality_texts.context_rows(ws),
+            "guardrails": quality_texts.guardrails(ws)}
+
+
+@router.post("/api/admin/quality/texts/extract",
+             summary="Read a PDF / Word / text file into the sections, for "
+                     "review (nothing is saved)")
+async def extract_texts(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role(*ADMINS)),
+):
+    from app.services import quality_upload
+
+    data = await file.read(quality_upload.MAX_BYTES + 1)
+    try:
+        lines = quality_upload.read_lines(file.filename or "", data)
+    except quality_upload.UploadError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    ws = await _workspace(session)
+    harness_rows = quality_texts.apply_harness(ws, await session.run_sync(
+        lambda s: field_quality.harness(s, get_settings())))
+    found = quality_upload.split(lines, quality_texts.context_rows(ws),
+                                 harness_rows)
+    logger.info("quality_router: %s read %s (%d lines): %d context, %d "
+                "harness, %d guardrails, %d answers, %d not placed",
+                _who(user), file.filename, len(lines), len(found["context"]),
+                len(found["harness"]), len(found["guardrails"]),
+                len(found["knowledge"]), len(found["unplaced"]))
+    return {"file": file.filename, **found}
 
 
 @router.get("/api/admin/quality/scoreboard",

@@ -14,6 +14,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import VerificationDecisions from "./VerificationDecisions";
+
 import { api } from "../lib/api";
 import type { AgentInfo, AgentFinding, AgentRun, ApiError } from "../lib/api";
 
@@ -160,7 +162,8 @@ export default function Agents({
           </h3>
           <p className="text-xs text-amber-800 dark:text-amber-400 mb-4">
             An agent will not change configuration on its own. These are its
-            suggestions.
+            suggestions. (The verification agent decides CSP data by itself —
+            see &ldquo;Decided automatically&rdquo;.)
           </p>
           <div className="space-y-3">
             {decisions.map((f) => (
@@ -202,6 +205,9 @@ export default function Agents({
           </div>
         </div>
       )}
+
+      {/* The verification agent decides by itself (No. 171): its log. */}
+      <VerificationDecisions version={findings.length} />
 
       {/* The agents themselves */}
       <div className="space-y-3">

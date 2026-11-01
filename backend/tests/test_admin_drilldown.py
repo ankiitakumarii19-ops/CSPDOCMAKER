@@ -130,19 +130,78 @@ async def test_page_zero_is_rejected(client, admin_headers):
     assert r.status_code == 400
 
 
-async def test_the_date_filter_is_inclusive_of_both_days(client, admin_headers,
-                                                         population):
-    today = datetime.now(timezone.utc).date().isoformat()
-    body = (await client.get(
-        f"/api/admin/csp-list?date_from={today}&date_to={today}",
-        headers=admin_headers)).json()
-    assert body["total"] == 5, "rows created today must fall inside today"
+IST = timezone(timedelta(hours=5, minutes=30))
 
-    past = (datetime.now(timezone.utc).date() - timedelta(days=3)).isoformat()
-    body = (await client.get(
-        f"/api/admin/csp-list?date_from={past}&date_to={past}",
+
+async def _made(db, csp_id, when, doc="csp_id_card"):
+    """A stored PDF made at `when` (No. 171: the date filter is the day the
+    documents were made)."""
+    import hashlib
+
+    from app.models.enums import DocumentFormat, DocumentType
+    from app.models.stored_document import StoredDocument
+    from tests.conftest import MINIMAL_PDF
+
+    db.add(StoredDocument(
+        csp_id=csp_id, document_type=DocumentType(doc),
+        file_format=DocumentFormat.PDF, version=1, filename=f"{doc}.pdf",
+        content_type="application/pdf", file_data=MINIMAL_PDF,
+        file_size=len(MINIMAL_PDF),
+        checksum=hashlib.sha256(MINIMAL_PDF + csp_id.encode() + doc.encode()).hexdigest(),
+        created_at=when))
+    await db.commit()
+
+
+async def test_the_date_filter_is_the_day_documents_were_made(
+        client, admin_headers, population, db):
+    today = datetime.now(IST).date()
+    await _made(db, "D-NEW-1", datetime.now(timezone.utc))
+    await _made(db, "D-OLD-1", datetime.now(timezone.utc) - timedelta(days=3))
+
+    def q(a, b):
+        return f"date_from={a.isoformat()}&date_to={b.isoformat()}"
+
+    body = (await client.get(f"/api/admin/csp-list?{q(today, today)}",
+                             headers=admin_headers)).json()
+    assert [c["csp_id"] for c in body["csps"]] == ["D-NEW-1"],         "only CSPs whose documents were made that day"
+
+    three = today - timedelta(days=3)
+    body = (await client.get(f"/api/admin/csp-list?{q(three, three)}",
+                             headers=admin_headers)).json()
+    assert [c["csp_id"] for c in body["csps"]] == ["D-OLD-1"]
+
+    body = (await client.get(f"/api/admin/csp-list?{q(three, today)}",
+                             headers=admin_headers)).json()
+    assert body["total"] == 2, "a From-To range covers both ends"
+
+    body = (await client.get("/api/admin/csp-list", headers=admin_headers)).json()
+    assert body["total"] == 5, "no dates: every CSP"
+
+
+async def test_the_counts_follow_the_same_days(client, admin_headers, population, db):
+    today = datetime.now(IST).date().isoformat()
+    await _made(db, "D-NEW-1", datetime.now(timezone.utc))
+    await _made(db, "D-NEW-1", datetime.now(timezone.utc) - timedelta(days=5), "bcp")
+    m = (await client.get(f"/api/admin/csp-metrics?date_from={today}&date_to={today}",
+                          headers=admin_headers)).json()
+    assert m["totals"]["csps"] == 1
+    made = {d["document_type"]: d["generated"] for d in m["documents"]}
+    assert made["csp_id_card"] == 1 and made["bcp"] == 0,         "a document made on another day is not counted"
+    # The tile and the list behind it agree.
+    drill = (await client.get(
+        f"/api/admin/csp-list?document_type=csp_id_card&date_from={today}&date_to={today}",
         headers=admin_headers)).json()
-    assert body["total"] == 0
+    assert drill["total"] == 1
+
+
+async def test_a_day_is_counted_in_india_time(client, admin_headers, population, db):
+    """00:30 in India is still the previous day in UTC."""
+    day = datetime(2026, 10, 20, tzinfo=IST).date()
+    await _made(db, "D-NEW-2", datetime(2026, 10, 20, 0, 30, tzinfo=IST))
+    body = (await client.get(
+        f"/api/admin/csp-list?date_from={day}&date_to={day}",
+        headers=admin_headers)).json()
+    assert [c["csp_id"] for c in body["csps"]] == ["D-NEW-2"]
 
 
 async def test_a_malformed_date_is_rejected(client, admin_headers):

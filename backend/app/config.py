@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     otp_max_attempts: int = Field(default=3, alias="OTP_MAX_ATTEMPTS")
     otp_rate_limit_per_minute: int = Field(default=3, alias="OTP_RATE_LIMIT_PER_MINUTE")
 
+    # ---- Log in with Google (No. 171) ----
+    # The OAuth Client ID (type "Web application") from Google Cloud Console.
+    # Not a secret: the sign-in page shows it to Google. Blank = no Google
+    # button. Google's own check of the address replaces the emailed code.
+    google_client_id: str = Field(default="", alias="GOOGLE_CLIENT_ID")
+
     # ---- Google Sheets ----
     google_sheets_credentials_file: str = Field(
         default="credentials/google_service_account.json",

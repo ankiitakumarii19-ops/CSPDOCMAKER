@@ -165,6 +165,57 @@ async def conversation(
             "error": None}
 
 
+@router.get("/csp/{csp_id}/conversation")
+async def csp_conversation(
+    csp_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """One CSP's whole WhatsApp chat, opened from their name (No. 171).
+
+    Every number the app messaged for this CSP, oldest message first, with
+    what they wrote back (read live from Eko's WhatsApp platform; a failure
+    is shown, not hidden).
+    """
+    from app.models.csp_record import CSPRecord
+    from app.models.csp_reply import CspReply
+    from app.services import whatsapp_platform as wa
+
+    record = (await session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == csp_id))).scalars().first()
+    ours = (await session.execute(
+        select(WhatsAppMessage).where(WhatsAppMessage.csp_id == csp_id)
+        .order_by(WhatsAppMessage.sent_at))).scalars().all()
+    phones = {m.phone for m in ours if m.phone}
+    phones |= set((await session.execute(select(CspReply.phone).where(
+        CspReply.csp_id == csp_id))).scalars())
+    phones.discard(None)
+    phones.discard("")
+    out = {"csp_id": csp_id, "csp_name": record.name if record else "",
+           "phones": sorted(phones), "items": [], "error": None}
+    if record is None and not ours:
+        raise HTTPException(404, "No such CSP.")
+    if not phones:
+        out["error"] = ("No WhatsApp has been sent to this CSP, so there is "
+                        "no chat to show.")
+        return out
+    replies = []
+    try:
+        for phone in sorted(phones):
+            replies += await asyncio.to_thread(message_log.replies_from, wa,
+                                               phone)
+    except Exception as e:
+        logger.error("whatsapp_messages.csp_conversation: inbox for %s could "
+                     "not be read: %s: %s", csp_id, type(e).__name__, e,
+                     exc_info=True)
+        out["error"] = (f"The WhatsApp platform could not be read: "
+                        f"{type(e).__name__}: {e}")
+    since = min((m.sent_at for m in ours),
+                default=datetime.now(timezone.utc) - timedelta(days=365))
+    out["items"] = message_log.build_conversation(list(ours), replies, since)
+    return out
+
+
 @router.post("/refresh")
 async def refresh(
     user=Depends(require_role("admin", "super_admin")),
