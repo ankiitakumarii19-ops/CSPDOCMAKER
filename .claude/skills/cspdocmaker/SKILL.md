@@ -147,6 +147,12 @@ whole WhatsApp chat.
 - **Loop 2:** contact loop (above). **Loop 3:** unanswered chat questions → add to Knowledge Base. **Loop 4:** 60+ golden cases run before every push. **Loop 5:** feedback answers.
 - **Freshness chips** in the header: sheet read on time (green), late (amber), failed / stuck (red), never (grey).
 - **Verification agent decides by itself** (No. 171): when a CSP's form answer differs from the record, the **newest value wins**. Only capitals / spaces / leading zeros / RBO place name = no difference. Sheet changed after the answer → sheet kept. Answer never reached the sheet and the sheet is unchanged → the answer is written to the sheet (server only). Every decision logged (old value, new value, time) on **Agents → Decided automatically**. No Accept / Decline.
+- **Edit a CSP** (No. 175): Database → open a CSP → Edit: the whole sheet row; saved straight to the Google Sheet and the record; phone / email / required checked; refused if the sheet changed meanwhile; every change (who, field, old, new, when) in the record's Edit history. RMs edit only their own (and unowned) CSPs — on the Sheets tab too; Admins any.
+- **Phones and tablets** (No. 176): every page works from 360 px phones to large screens — menu button for the tabs, full-screen search, tables as cards on phones, the chat full screen with Back (beside the list on a laptop), the main button always in view.
+- **Search** (No. 175): one header search on every page (Ctrl+K) — CSPs, documents, chats, action items; part of a code, name, phone, email, district, state or RM. RMs find every CSP; another RM's CSP opens view only. Every search box matches the same way.
+- **Action Required** (No. 174, the RM's bell): each card says what is missing and opens in full (when flagged, every ask, messages, replies) with Message and Open chat; a card whose details are filled moves to **History** as Fixed with when and how (CSP's reply, sheet edit, verification agent…), checked on every sync and every look. The count is only what is still pending.
+- **Messaging → Ask CSPs** (No. 174): anyone can be messaged (search, filters, Select all with a confirmation); the usual details form, a saved message or your own words with {name} {csp_id} {missing_items}; choose WhatsApp or email. Never to a CSP on hold; never the details form to an existing CSP. Every message logged in the chat and Action Required.
+- **Alerts** (No. 173): the Super Admins are emailed when a sheet read is stuck / failing, an agent keeps failing, or WhatsApps are failing — once per problem, again every 4 h, once fixed.
 - Screen: **Setup → Data quality** (Upload document, Context, Harness, **Guardrails**, Auto-filled values, Loops). The words of Context, Harness and Guardrails are editable (Admins, Super Admins) and the chat answers with them; editing them does **not** change what the app does. "Upload document" (PDF / DOCX / TXT) splits a file by its headings into those sections and the Knowledge Base, for review before saving.
 
 ---
@@ -161,7 +167,11 @@ account; only people already allowed in; needs `GOOGLE_CLIENT_ID`); domains
 @eko.co.in and @ekosupport.in. Anyone may add a **profile picture** (header
 menu; optional, initials otherwise). The page open is kept in the address, so
 a refresh stays on it. Dashboard Overview's date filter (Today, Yesterday, a
-date, From–To) is **the day the documents were made**, India time.
+date, From–To) is **the day the documents were made**, India time. The
+sign-in is a protected cookie (No. 173). A **test copy** of the app
+(`/csp-docmaker-test`, yellow TEST COPY bar) never messages anyone; every
+release goes there first (docs/RELEASE-CHECKLIST.md). Each agent has a risk
+class (Agents page; docs/COMPLIANCE.md).
 
 Admin menu: Dashboard Overview · Build a dashboard · Database · Sheets ·
 Document Templates · Messaging · **WhatsApp messages** (sent / rejected / not

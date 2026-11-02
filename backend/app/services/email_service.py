@@ -414,7 +414,9 @@ PAUSED_REASON = ("Emails are paused (EMAILS_PAUSED=true) — nothing is "
 
 def paused() -> bool:
     """Whether emails other than sign-in codes are on hold (No. 133)."""
-    return bool(get_settings().emails_paused)
+    # A test copy never emails anyone but the sign-in code (No. 173).
+    s = get_settings()
+    return bool(s.emails_paused or s.test_copy)
 
 
 def send_documents_email(

@@ -105,6 +105,12 @@ celery_app.conf.update(
             "schedule": settings.resend_failed_minutes * 60,
             "options": {"expires": settings.resend_failed_minutes * 60 - 5},
         },
+        # Alerts to the Super Admins (No. 173).
+        "send-alerts": {
+            "task": "workers.send_alerts",
+            "schedule": settings.alert_minutes * 60,
+            "options": {"expires": settings.alert_minutes * 60 - 5},
+        },
         # Emails that bounced (No. 127).
         "check-email-bounces": {
             "task": "workers.check_email_bounces",
@@ -181,6 +187,7 @@ celery_app.conf.include = [
     "app.workers.verify_old_csps_worker",
     "app.workers.contact_loop_worker",
     "app.workers.resend_worker",
+    "app.workers.alert_worker",
     "app.workers.csp_reply_worker",
     "app.workers.info_fix_worker",
     "app.workers.email_bounce_worker",

@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     # JWT_ACCESS_TOKEN_EXPIRE_MINUTES (30 minutes), which signed people out
     # mid-work; a leftover value of that in an env file is ignored.
     session_hours: int = Field(default=24, alias="SESSION_HOURS")
+    # A test copy of the app (No. 173): never messages anyone — every
+    # WhatsApp is refused and every email but the sign-in code is held, as
+    # with EMAILS_PAUSED — and every screen says TEST COPY.
+    test_copy: bool = Field(default=False, alias="TEST_COPY")
+    # The browser's sign-in cookie (No. 173). A test copy of the app on the
+    # same address uses another name so the two sign-ins stay apart.
+    session_cookie_name: str = Field(default="cspdm_session",
+                                     alias="SESSION_COOKIE_NAME")
 
     # How often the app takes the pictures in the CSP sheet's Photo column
     # for CSPs it has no photo for (No. 102).
@@ -213,6 +221,14 @@ class Settings(BaseSettings):
                                         alias="RESEND_FAILED_ENABLED")
     resend_failed_minutes: int = Field(default=10, alias="RESEND_FAILED_MINUTES")
     resend_failed_batch: int = Field(default=20, alias="RESEND_FAILED_BATCH")
+    # No. 173: email the Super Admins when a sheet read is stuck / failing,
+    # an agent keeps failing or WhatsApps are failing — once per problem,
+    # again every ALERT_REPEAT_HOURS, and once fixed. Off: ALERTS_ENABLED=false.
+    alerts_enabled: bool = Field(default=True, alias="ALERTS_ENABLED")
+    alert_minutes: int = Field(default=15, alias="ALERT_MINUTES")
+    alert_repeat_hours: int = Field(default=4, alias="ALERT_REPEAT_HOURS")
+    alert_agent_failures: int = Field(default=3, alias="ALERT_AGENT_FAILURES")
+    alert_whatsapp_failures: int = Field(default=5, alias="ALERT_WHATSAPP_FAILURES")
     # No. 153: the app writes AO / RBO corrections into INFO itself.
     info_auto_fix_enabled: bool = Field(default=True,
                                         alias="INFO_AUTO_FIX_ENABLED")

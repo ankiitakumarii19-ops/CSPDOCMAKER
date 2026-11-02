@@ -81,6 +81,9 @@ class RMAlert(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # How the missing details were filled, and by whom, in words (No. 174).
+    resolved_via: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    resolved_note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         # At most one open alert of a kind per CSP. A partial index would be

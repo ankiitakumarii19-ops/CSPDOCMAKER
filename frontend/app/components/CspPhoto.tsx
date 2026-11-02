@@ -73,7 +73,7 @@ export default function CspPhoto({
       title={state.kind === "error" ? "The photo could not be loaded" : "No photo yet"}
     >
       <i className="fas fa-user text-lg"></i>
-      <span className="text-[10px] leading-tight mt-1">
+      <span className="text-xs leading-tight mt-1">
         {state.kind === "error" ? "Not loaded" : "No photo"}
       </span>
     </div>

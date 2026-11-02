@@ -3,13 +3,17 @@
 /**
  * Database — every CSP's complete record in one place (tracker No. 47 / 89).
  *
- * RM, Admin and Super Admin (No. 104), read-only. One row per CSP; open a row to see every
+ * RM, Admin and Super Admin (No. 104). One row per CSP; open a row to see every
  * column of the CSP sheet, what the app records about them, their photo
  * (as obtained, and the passport version on the documents) and every
- * stored PDF with its versions. Nothing here changes data.
+ * stored PDF with its versions. Since No. 175 a CSP can be edited from here
+ * (CspEditForm — written to the sheet; RMs their own CSPs) and its edit
+ * history is shown.
  */
 
 import { useEffect, useState } from "react";
+
+import CspEditForm from "./CspEditForm";
 
 import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
@@ -38,6 +42,9 @@ export default function Database() {
   const [record, setRecord] = useState<DatabaseRecord | null>(null);
   const [photoUrls, setPhotoUrls] = useState<Record<string, string>>({});
   const [recordError, setRecordError] = useState("");
+  // The edit form (No. 175), and a counter to read the record again.
+  const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
 
   // First page on arrival.
   useEffect(() => {
@@ -99,7 +106,7 @@ export default function Database() {
       off = true;
       made.forEach((u) => URL.revokeObjectURL(u));
     };
-  }, [openId]);
+  }, [openId, reload]);
 
   function toggle(cspId: string) {
     setRecord(null);
@@ -128,7 +135,8 @@ export default function Database() {
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Database</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
           Every CSP&apos;s complete record: all sheet columns, the photo and the
-          stored documents. Read-only — changes are made in the sheet.
+          stored documents. Open a CSP to edit it — saved straight to the sheet (RMs: their own
+          CSPs).
         </p>
       </div>
 
@@ -162,12 +170,42 @@ export default function Database() {
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+      {/* Phones (No. 176): one card per CSP, a tap opens it. */}
+      <div className="sm:hidden space-y-2">
+        {rows.map((r) => (
+          <button
+            key={r.csp_id}
+            onClick={() => toggle(r.csp_id)}
+            className="w-full text-left rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 py-3"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-sm font-semibold text-gray-900 dark:text-white">{r.csp_code || r.csp_id}</span>
+              {r.level && (
+                <span className="px-2 py-0.5 rounded text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">{r.level}</span>
+              )}
+            </div>
+            <div className="text-sm text-gray-800 dark:text-gray-200 mt-0.5">{show(r.name)}</div>
+            <div className="text-sm text-gray-500">
+              {[r.district, r.rm_name && `RM ${r.rm_name}`].filter(Boolean).join(" · ") || "—"}
+            </div>
+            <div className="text-xs text-gray-500 mt-1">
+              {r.documents.length ? r.documents.join(", ") : "No documents yet"}
+            </div>
+          </button>
+        ))}
+        {!loading && rows.length === 0 && (
+          <p className="px-4 py-8 text-center text-sm text-gray-500">No CSPs match.</p>
+        )}
+      </div>
+
+      {/* Tablets and up: the table; it scrolls inside its box with the code
+          and name kept in view (No. 176). */}
+      <div className="hidden sm:block rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 dark:bg-gray-900/50 text-xs uppercase tracking-wider text-gray-500">
+          <thead className="bg-gray-50 dark:bg-gray-900 text-xs uppercase tracking-wider text-gray-500">
             <tr>
-              <th className="text-left px-4 py-3">CSP Code</th>
-              <th className="text-left px-4 py-3">Name</th>
+              <th className="text-left px-4 py-3 sticky left-0 z-10 min-w-[7.5rem] bg-gray-50 dark:bg-gray-900">CSP Code</th>
+              <th className="text-left px-4 py-3 sticky left-[7.5rem] z-10 min-w-[10rem] bg-gray-50 dark:bg-gray-900">Name</th>
               <th className="text-left px-4 py-3">Level</th>
               <th className="text-left px-4 py-3">District</th>
               <th className="text-left px-4 py-3">State</th>
@@ -185,10 +223,10 @@ export default function Database() {
                   openId === r.csp_id ? "bg-gray-50 dark:bg-gray-700/50" : ""
                 }`}
               >
-                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                <td className="px-4 py-3 font-medium text-gray-900 dark:text-white sticky left-0 z-10 min-w-[7.5rem] bg-white dark:bg-gray-800">
                   {r.csp_code || r.csp_id}
                 </td>
-                <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{show(r.name)}</td>
+                <td className="px-4 py-3 text-gray-700 dark:text-gray-300 sticky left-[7.5rem] z-10 min-w-[10rem] bg-white dark:bg-gray-800">{show(r.name)}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{show(r.level)}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{show(r.district)}</td>
                 <td className="px-4 py-3 text-gray-700 dark:text-gray-300">{show(r.state)}</td>
@@ -231,8 +269,10 @@ export default function Database() {
         )}
       </div>
 
+      {/* The record: full screen below 1024px (No. 176), its Close button
+          at the top; in the page from there up. */}
       {openId && (
-        <div className="p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 space-y-6">
+        <div className="fixed inset-0 z-40 overflow-y-auto bg-white dark:bg-gray-800 px-4 sm:px-6 pt-[calc(1.25rem+env(safe-area-inset-top))] pb-[calc(6rem+env(safe-area-inset-bottom))] lg:static lg:z-auto lg:p-5 lg:rounded-xl lg:border lg:border-gray-200 lg:dark:border-gray-700 space-y-6">
           {recordError && (
             <div className="px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
               <i className="fas fa-circle-exclamation mr-2" />
@@ -251,13 +291,35 @@ export default function Database() {
                     {record.csp_id} {record.level && <>&bull; {record.level}</>}
                   </p>
                 </div>
-                <button
-                  onClick={() => toggle(record.csp_id)}
-                  className="text-sm text-gray-500 hover:underline"
-                >
-                  Close
-                </button>
+                <div className="flex items-center gap-3">
+                  {record.can_edit ? (
+                    <button
+                      onClick={() => setEditing(true)}
+                      className="px-3 py-1.5 rounded-lg bg-eko hover:bg-eko-dark text-white text-sm"
+                    >
+                      <i className="fas fa-pen text-xs mr-1"></i> Edit
+                    </button>
+                  ) : (
+                    <span className="text-xs text-gray-500">Another RM&apos;s CSP — view only</span>
+                  )}
+                  <button
+                    onClick={() => toggle(record.csp_id)}
+                    className="text-sm text-gray-500 hover:underline"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
+              {editing && (
+                <CspEditForm
+                  cspId={record.csp_id}
+                  onClose={() => setEditing(false)}
+                  onSaved={() => {
+                    setEditing(false);
+                    setReload((n) => n + 1);
+                  }}
+                />
+              )}
 
               <section>
                 <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">Photo</h4>
@@ -340,6 +402,48 @@ export default function Database() {
                   </dl>
                 </section>
               ))}
+
+              {/* Every change, who made it and when (No. 175). */}
+              <section>
+                <h4 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3">
+                  Edit history
+                </h4>
+                {(record.edit_history ?? []).length === 0 ? (
+                  <p className="text-sm text-gray-500">No edits made in the portal yet.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm">
+                      <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
+                        <tr>
+                          <th className="pr-4 py-1">When</th>
+                          <th className="pr-4 py-1">Who</th>
+                          <th className="pr-4 py-1">Field</th>
+                          <th className="pr-4 py-1">Old value</th>
+                          <th className="pr-4 py-1">New value</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                        {record.edit_history!.map((h, i) => (
+                          <tr key={i} className="align-top">
+                            <td className="pr-4 py-1 text-gray-500 whitespace-nowrap">
+                              {h.at ? new Date(h.at).toLocaleString("en-IN", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : "—"}
+                            </td>
+                            <td className="pr-4 py-1 text-gray-700 dark:text-gray-300">
+                              {h.by}
+                              <span className="block text-xs text-gray-400">
+                                {h.via === "sheets_tab" ? "Sheets tab" : "Database page"}
+                              </span>
+                            </td>
+                            <td className="pr-4 py-1 text-gray-700 dark:text-gray-300">{h.column}</td>
+                            <td className="pr-4 py-1 text-gray-500 break-words">{h.old || "—"}</td>
+                            <td className="pr-4 py-1 text-gray-900 dark:text-white break-words">{h.new || "—"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </section>
             </>
           )}
         </div>

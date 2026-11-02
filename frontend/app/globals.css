@@ -29,3 +29,26 @@
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
 .dark ::-webkit-scrollbar-thumb { background: #475569; }
+
+/* ---- Touch screens (No. 176) -------------------------------------------
+   Inside @layer base, so any utility on an element still wins — except the
+   input font size, which must beat text-sm: below 16px an iPhone zooms the
+   whole page in when a box is tapped. Fingers need 44px to hit something. */
+@layer base {
+  @media (pointer: coarse) {
+    button, [role="button"], select, summary,
+    input:not([type="checkbox"]):not([type="radio"]):not([type="file"]) {
+      min-height: 44px;
+    }
+    button, [role="button"] { min-width: 44px; }
+    a:not(.inline) { min-height: 44px; display: inline-flex; align-items: center; }
+    input[type="checkbox"], input[type="radio"] { width: 1.375rem; height: 1.375rem; }
+    /* A tick box or choice: the whole line is the target. */
+    label:has(> input[type="checkbox"]), label:has(> input[type="radio"]) {
+      min-height: 44px;
+    }
+  }
+}
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
+}

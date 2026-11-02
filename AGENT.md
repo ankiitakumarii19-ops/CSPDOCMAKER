@@ -33,6 +33,9 @@ CSPs' documents and messages. Work only on this project.
   Tests that set a fixed `NOW` must pass `now=NOW` to the code, or they fail on a slow run.
 - **Every code fix adds a golden case** in `backend/tests/golden/cases.json` in the same commit (or say why it can't).
 - **Record the request** in `PROJECT-REGISTER.md`: a numbered row in plain words + a change-log line.
+- **Before a push, follow `docs/RELEASE-CHECKLIST.md`** (tests, golden cases, test copy, browser check, second reviewer, backup, rollback) and say which boxes are ticked.
+- **Ask before changing an existing flow** (how something already works), even when fixing a gap (owner, No. 173).
+- **Standards:** `docs/COMPLIANCE.md` maps the *Agentic AI Development Principles & Standards* to the app; keep it current, including the owner's decisions and each job's risk class.
 - **Update `AI_SPEC.md`** when a design decision is added or changed.
 - **Log what happens** (start, result, failure with traceback); a new scheduled job also gets a Harness row on Data quality.
 - **Reply to the owner in plain language:** what changed, what to do, what's left. No technical detail they did not ask for.

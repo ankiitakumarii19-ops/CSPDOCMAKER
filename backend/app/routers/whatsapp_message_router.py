@@ -57,11 +57,21 @@ async def report(
     if not include_tests:
         query = query.where(WhatsAppMessage.is_test.is_(False))
     if q and q.strip():
-        like = f"%{q.strip().lower()}%"
-        query = query.where(
+        # Matched as every search box matches (search_match, No. 175):
+        # capitals and extra spaces ignored, a phone by its digits, and the
+        # words a person sent.
+        from app.services import search_match
+        term = search_match.normalize(q)
+        like = f"%{term}%"
+        digits = "".join(ch for ch in term if ch.isdigit())
+        condition = (
             func.lower(func.coalesce(WhatsAppMessage.csp_id, "")).like(like)
-            | func.lower(func.coalesce(WhatsAppMessage.csp_name, "")).like(like)
-            | WhatsAppMessage.phone.like(like))
+            | func.lower(func.regexp_replace(
+                func.coalesce(WhatsAppMessage.csp_name, ""), r"\s+", " ", "g")).like(like)
+            | func.lower(func.coalesce(WhatsAppMessage.body_text, "")).like(like))
+        if len(digits) >= 3:
+            condition = condition | WhatsAppMessage.phone.like(f"%{digits}%")
+        query = query.where(condition)
     messages = (await session.execute(
         query.order_by(WhatsAppMessage.sent_at.desc())
     )).scalars().all()
@@ -177,6 +187,12 @@ async def csp_conversation(
     what they wrote back (read live from Eko's WhatsApp platform; a failure
     is shown, not hidden).
     """
+    return await chat_for_csp(session, csp_id)
+
+
+async def chat_for_csp(session: AsyncSession, csp_id: str) -> dict:
+    """The chat itself; also opened by an RM from Action Required (No. 174),
+    after csp_router has checked the RM may see this CSP."""
     from app.models.csp_record import CSPRecord
     from app.models.csp_reply import CspReply
     from app.services import whatsapp_platform as wa
@@ -210,8 +226,9 @@ async def csp_conversation(
                      exc_info=True)
         out["error"] = (f"The WhatsApp platform could not be read: "
                         f"{type(e).__name__}: {e}")
-    since = min((m.sent_at for m in ours),
-                default=datetime.now(timezone.utc) - timedelta(days=365))
+    # The whole chat: everything they wrote, even before our first message
+    # on record (the platform's inbox may hold older ones).
+    since = datetime(2000, 1, 1, tzinfo=timezone.utc)
     out["items"] = message_log.build_conversation(list(ours), replies, since)
     return out
 

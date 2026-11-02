@@ -34,6 +34,8 @@ ENV/
 .env
 .env.local
 .env.production
+# The test copy's settings (No. 173): real passwords inside.
+.env.test
 .env.*.local
 
 # IDE

@@ -353,7 +353,7 @@ function Widget({
         {body}
         <span className="mt-2 inline-flex items-center gap-1 text-xs text-gray-400 group-hover:text-eko">
           {value === 0 ? "Check the list" : "See which"}
-          <i className="fas fa-arrow-right text-[10px]" />
+          <i className="fas fa-arrow-right text-xs" />
         </span>
       </button>
     );

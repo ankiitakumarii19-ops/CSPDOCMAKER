@@ -275,3 +275,68 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec
 ```
 
 Run it daily (e.g. from `crontab -e`) and keep copies off the server.
+
+## Release checklist (No. 173)
+
+Every push to the live app follows **docs/RELEASE-CHECKLIST.md**: full tests
+and golden cases on the laptop, then the **test copy** first, seen in a
+browser and reviewed by a second person, then a database backup, then the
+live app, then 30 minutes of watching. It ends with the rollback steps.
+
+## Test copy (No. 173)
+
+A second copy of the app on the same server, at
+`https://indev.eko.in/csp-docmaker-test`, with its own database, images,
+documents folder and sign-in. It **never messages anyone** (`TEST_COPY=true`:
+every WhatsApp is refused, every email but the sign-in code is held) and
+every screen shows a yellow **TEST COPY** bar. It does not read or write the
+real CSP, Calling, Lead or Address sheets, nor Zoho. It does read the
+sign-in list, so the same people can sign in.
+
+**Once:**
+
+```bash
+cd /home/Ankita/Csp_Doc_Maker
+git pull
+bash deploy/make-test-env.sh          # makes deploy/.env.test from .env.production
+# To test with data: make a COPY of CSPDATA in Google Sheets, share it with
+# the service account, then instead:
+#   TEST_CSP_SHEET_ID=<the copy's id> bash deploy/make-test-env.sh
+docker compose -p cspdocmaker-test -f docker-compose.prod.yml --env-file deploy/.env.test up -d --build
+curl -s http://127.0.0.1:8089/csp-docmaker-test/api/health
+```
+
+Then nginx forwards the test path, next to the live one (the longer path
+wins, so `/csp-docmaker-test` does not reach the live app):
+
+```nginx
+location /csp-docmaker-test {
+    proxy_pass http://127.0.0.1:8089;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    client_max_body_size 25m;
+    proxy_read_timeout 180s;
+}
+```
+
+```bash
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+**Each release:** the same `git pull`, then the test copy's `up -d --build`
+line above; check it; then the live app (Release checklist).
+
+Always pass `-p cspdocmaker-test` and `--env-file deploy/.env.test` for the
+test copy: without them a command acts on the live app.
+
+## Sign-in cookie and alerts (No. 173)
+
+* The sign-in is a protected cookie now. After the first update with it,
+  **everyone signs in once more**. A test copy uses its own cookie
+  (`SESSION_COOKIE_NAME`), so the two sign-ins do not mix.
+* **Alerts:** the Super Admins get an email when a sheet read is stuck or
+  failing, an agent keeps failing, or WhatsApps are failing — once per
+  problem, again every `ALERT_REPEAT_HOURS` (4) while it lasts, and once
+  fixed; 8 am – 8 pm. They are held while `EMAILS_PAUSED=true`. Off with
+  `ALERTS_ENABLED=false`.

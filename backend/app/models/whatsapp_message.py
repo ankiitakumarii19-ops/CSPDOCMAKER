@@ -109,6 +109,9 @@ class WhatsAppMessage(Base):
     sent_because: Mapped[Optional[str]] = mapped_column(
         String(40), nullable=True,
         comment="Why it was sent (send_reason, No. 156); NULL = usual flow")
+    # A message a person typed (No. 174): the words and who sent them.
+    body_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    sent_by: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     source: Mapped[str] = mapped_column(
         String(20), nullable=False, default="app", server_default="app",
         comment="app = recorded when sent; history = found in the platform's "

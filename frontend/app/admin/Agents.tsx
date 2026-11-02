@@ -19,6 +19,14 @@ import VerificationDecisions from "./VerificationDecisions";
 import { api } from "../lib/api";
 import type { AgentInfo, AgentFinding, AgentRun, ApiError } from "../lib/api";
 
+// Risk class colours (No. 173): the higher, the stronger the controls.
+const RISK: Record<string, string> = {
+  low: "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300",
+  medium: "bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300",
+  high: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300",
+  critical: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300",
+};
+
 export default function Agents({
   canSeeHistory = false,
   canAct = false,
@@ -226,7 +234,7 @@ export default function Agents({
                     {a.name}
                   </h3>
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       a.enabled
                         ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                         : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
@@ -234,13 +242,21 @@ export default function Agents({
                   >
                     {a.enabled ? "Running" : "Off"}
                   </span>
-                  <span className="text-[11px] text-gray-500">
+                  {a.risk && (
+                    <span
+                      title={a.risk_why}
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${RISK[a.risk]}`}
+                    >
+                      {a.risk} risk
+                    </span>
+                  )}
+                  <span className="text-xs text-gray-500">
                     {a.every_minutes
                       ? `every ${a.every_minutes} min`
                       : "on demand"}
                   </span>
                   {a.consecutive_failures > 0 && (
-                    <span className="text-[11px] text-red-600 font-medium">
+                    <span className="text-xs text-red-600 font-medium">
                       failed {a.consecutive_failures}× in a row
                     </span>
                   )}
@@ -341,7 +357,7 @@ export default function Agents({
                             </td>
                             <td className="py-2 pr-4">
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                                   r.status === "ok"
                                     ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                                     : r.status === "skipped"
@@ -399,7 +415,7 @@ export default function Agents({
                     <p className="text-xs text-gray-500">{f.detail}</p>
                   )}
                 </div>
-                <span className="text-[11px] text-gray-400 ml-auto shrink-0">
+                <span className="text-xs text-gray-400 ml-auto shrink-0">
                   {f.agent}
                 </span>
               </div>

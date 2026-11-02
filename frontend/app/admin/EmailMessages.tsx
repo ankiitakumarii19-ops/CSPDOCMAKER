@@ -192,7 +192,29 @@ export default function EmailMessages() {
             className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white"
           />
         </div>
-        <div className="overflow-x-auto">
+        {/* Phones (No. 176): one card per email. */}
+        <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700">
+          {data?.messages.map((m) => (
+            <div key={m.id} className="px-4 py-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{m.csp_name || "—"}</span>
+                <span className={`px-2 py-0.5 rounded-full text-xs shrink-0 ${STATUS[m.status]?.cls ?? ""}`}>
+                  {STATUS[m.status]?.label ?? m.status}
+                </span>
+              </div>
+              <div className="text-xs font-mono text-gray-500">{m.csp_id || ""}</div>
+              <div className="text-sm text-gray-700 dark:text-gray-300 break-words">{m.subject}</div>
+              <div className="text-xs text-gray-500 break-all">{m.to} · {when(m.sent_at)}</div>
+              {(m.status === "failed" || m.status === "bounced") && (
+                <div className="text-xs text-red-600 dark:text-red-400">{m.error || m.bounce_reason}</div>
+              )}
+            </div>
+          ))}
+          {data && data.messages.length === 0 && (
+            <p className="px-4 py-6 text-sm text-gray-500">No emails here yet.</p>
+          )}
+        </div>
+        <div className="hidden sm:block overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead className="text-left text-xs uppercase tracking-wider text-gray-500">
               <tr>
@@ -215,7 +237,7 @@ export default function EmailMessages() {
                     <div>{m.subject}</div>
                     <div className="text-xs text-gray-500">{data.counts[m.kind]?.title ?? m.kind}</div>
                     {m.sent_because && (
-                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                      <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                         {m.sent_because_label}
                       </span>
                     )}

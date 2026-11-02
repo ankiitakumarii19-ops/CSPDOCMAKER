@@ -3,8 +3,12 @@ CSP DocMaker — the Database section (RM, Admin and Super Admin; No. 104)
 
 Tracker No. 47 (plan S7) / No. 89: one place to see a CSP's complete record —
 every sheet column, everything the app records about them, their photo and
-every stored document. Read-only: nothing here changes data. Workspace
-scoping applies as everywhere (only this workspace's CSPs are visible).
+every stored document. Workspace scoping applies as everywhere (only this
+workspace's CSPs are visible).
+
+No. 175: a CSP can be edited from here — the whole sheet row, written to
+the Google Sheet (services/csp_editor.py). RMs their own and unowned CSPs,
+Admins and Super Admins any; every change logged and shown in the record.
 """
 
 import logging
@@ -81,14 +85,14 @@ async def list_csps(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_owner),
 ):
-    """Every CSP, searchable by code, name, district, state or RM."""
+    """Every CSP, searchable by code, name, phone, email, district, state or
+    RM — matched as every search box matches (search_match, No. 175)."""
+    from app.services import search_match
+
     query = select(CSPRecord)
-    if q.strip():
-        like = f"%{q.strip()}%"
-        query = query.where(or_(
-            CSPRecord.csp_id.ilike(like), CSPRecord.csp_code.ilike(like),
-            CSPRecord.name.ilike(like), CSPRecord.district.ilike(like),
-            CSPRecord.state.ilike(like), CSPRecord.rm_name.ilike(like)))
+    condition = search_match.csp_condition(q)
+    if condition is not None:
+        query = query.where(condition)
     total = (await session.execute(
         select(func.count()).select_from(query.subquery()))).scalar()
     csps = (await session.execute(
@@ -162,10 +166,16 @@ async def get_record(
             "id": str(r.id), "version": r.version, "filename": r.filename,
             "size": r.file_size, "created_at": _value(r.created_at)})
 
+    from app.services import csp_access, csp_editor
+
+    history = await session.run_sync(lambda s: csp_editor.history(s, csp_id))
     return {
         "csp_id": csp.csp_id,
         "name": csp.name,
         "level": _level(csp),
+        # No. 175: whether this person may edit it, and every edit so far.
+        "can_edit": csp_access.can_access(csp, user),
+        "edit_history": history,
         "sheet": sheet,
         "app": app_fields,
         "photos": [{"kind": p.kind, "filename": p.filename, "size": p.file_size,
@@ -222,3 +232,79 @@ async def get_document(
     return Response(doc.file_data, media_type=doc.content_type, headers={
         "Content-Disposition": f'inline; filename="{doc.filename}"',
         "Cache-Control": "private, no-store"})
+
+
+# ---- No. 175: edit a CSP from here -----------------------------------------
+
+from pydantic import BaseModel, Field  # noqa: E402
+
+
+class EditIn(BaseModel):
+    # column title -> new value; and what the form showed for those columns
+    changes: dict = Field(default_factory=dict)
+    seen: dict = Field(default_factory=dict)
+
+
+async def _editable(session: AsyncSession, csp_id: str, user) -> CSPRecord:
+    from app.services import csp_access
+
+    csp = await _csp_or_404(session, csp_id)
+    if not csp_access.can_access(csp, user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "This CSP belongs to another RM. You can see it, "
+                            "not change it.")
+    return csp
+
+
+@router.get("/{csp_id}/edit")
+async def edit_form(
+    csp_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_owner),
+):
+    """The CSP's whole sheet row, as the edit form shows it (read now)."""
+    import asyncio
+
+    from app.services import csp_editor
+    from app.services.sheet_writeback_service import SheetWriteError
+
+    csp = await _editable(session, csp_id, user)
+    try:
+        form = await asyncio.to_thread(csp_editor.load, csp.csp_code or csp.csp_id)
+    except csp_editor.EditError as e:
+        raise HTTPException(e.status_code, e.message)
+    except SheetWriteError as e:
+        logger.error("database_router.edit_form: %s: %s", csp_id, e)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, str(e))
+    return {"csp_id": csp_id, "level": _level(csp), **form}
+
+
+@router.put("/{csp_id}")
+async def save_edit(
+    csp_id: str,
+    body: EditIn,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_owner),
+):
+    """Write the changed columns to the sheet and the record; log each one."""
+    from app.services import csp_editor, sheet_admin_service
+    from app.services.sheet_writeback_service import SheetWriteError
+
+    csp = await _editable(session, csp_id, user)
+    who = (user.get("sub") or user.get("email") or "").lower()
+    code = csp.csp_code or csp.csp_id
+    try:
+        result = await session.run_sync(lambda s: csp_editor.save(
+            s, code, {str(k): str(v) for k, v in body.changes.items()},
+            {str(k): str(v) for k, v in body.seen.items()}, who))
+    except csp_editor.EditError as e:
+        await session.rollback()
+        raise HTTPException(e.status_code, {"message": e.message,
+                                            "problems": e.problems})
+    except (SheetWriteError, sheet_admin_service.SheetAdminError) as e:
+        await session.rollback()
+        logger.error("database_router.save_edit: %s: %s", csp_id, e)
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY,
+                            f"The sheet could not be written: {e}")
+    await session.commit()
+    return {"saved": sorted(result["written"]), **result}

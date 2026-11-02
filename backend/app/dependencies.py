@@ -8,7 +8,7 @@ Used with Depends() on protected route handlers.
 import logging
 from typing import Optional
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 from app.services import jwt_service
@@ -21,6 +21,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
 ) -> dict:
     """Extract and validate the current user from the JWT access token.
@@ -31,14 +32,26 @@ async def get_current_user(
     Raises:
         HTTPException 401 if token is missing, invalid, or expired.
     """
-    if credentials is None:
+    from app import session_cookie
+
+    # A Bearer header (scripts, tests), else the browser's cookie (No. 173).
+    token = credentials.credentials if credentials else None
+    via = "bearer" if token else None
+    if token is None:
+        token, via = session_cookie.token_from(request)
+    if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authentication required. Please provide a valid access token.",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if session_cookie.forged(request, via):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This request did not come from the app. Please reload the page.",
+        )
 
-    payload = jwt_service.verify_access_token(credentials.credentials)
+    payload = jwt_service.verify_access_token(token)
     if payload is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

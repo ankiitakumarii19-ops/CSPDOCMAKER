@@ -5,6 +5,9 @@ import { useRouter } from "next/navigation";
 
 import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
 import BrandLogo from "../components/BrandLogo";
+import GlobalSearch from "../components/GlobalSearch";
+import ActionHistory from "../components/ActionHistory";
+import ActionRequiredDetail from "../components/ActionRequiredDetail";
 import FreshnessBadges from "../components/FreshnessBadges";
 import AssistantChat from "../components/AssistantChat";
 import CspPhoto from "../components/CspPhoto";
@@ -38,7 +41,13 @@ interface AlertItem {
   csp_id: string;
   message: string;
   unassigned: boolean;
-  details?: { csp_id: string; csp_name: string; fields: MissingField[] };
+  // As the server stores them (alert_service.describe_missing): field and
+  // label — the card read field_name / field_label and showed nothing (No. 174).
+  details?: {
+    csp_id: string;
+    csp_name: string;
+    fields: { field: string; label: string; type: string; blocks: string[] }[];
+  };
 }
 
 type Step =
@@ -93,11 +102,16 @@ export default function RMDashboard() {
   const [theme, toggleTheme] = useTheme();
   const [alertsMenu, setAlertsMenu] = useState(false);
   const [logoutMenu, setLogoutMenu] = useState(false);
+  // The tabs, on a small screen (No. 175).
+  const [navMenu, setNavMenu] = useState(false);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [results, setResults] = useState<CSPDetail[]>([]);
   const [csp, setCsp] = useState<CSPDetail | null>(null);
   const [searchError, setSearchError] = useState("");
+  // Matches shown while typing (No. 175), and whether the list is open.
+  const [suggestions, setSuggestions] = useState<CSPDetail[]>([]);
+  const [suggestOpen, setSuggestOpen] = useState(false);
   // The CSP's photo on their card, and an RM's upload of one (No. 102).
   const [photoVersion, setPhotoVersion] = useState(0);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -124,6 +138,9 @@ export default function RMDashboard() {
   }, [rmStep]);
 
   const [rmAlerts, setRmAlerts] = useState<AlertItem[]>([]);
+  // A card opened, and the History (No. 174).
+  const [openedAlert, setOpenedAlert] = useState<string | null>(null);
+  const [showHistory, setShowHistory] = useState(false);
 
   // Handing a CSP to the automation instead of walking it through by hand.
   const [enrolling, setEnrolling] = useState(false);
@@ -175,16 +192,37 @@ export default function RMDashboard() {
     setMissing(null);
   }, [setCspParam]);
 
+  // Matches drop down as you type, a moment after the last key (No. 175).
+  useEffect(() => {
+    const text = searchQuery.trim();
+    if (text.length < 2) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      api
+        .searchCSP(text, 8)
+        .then((r) => current && (setSuggestions(r.results), setSuggestOpen(true)))
+        .catch(() => current && setSuggestions([]));
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
+
   const searchCSP = async (term?: string) => {
     const text = (term ?? searchQuery).trim();
     if (!text) return;
+    setSuggestOpen(false);
     setSearching(true);
     setSearchError("");
     try {
-      const res = await api.searchCSP(text);
+      // Enter / Search: the full list (No. 175); straight to the CSP only
+      // when the exact code was typed.
+      const res = await api.searchCSP(text, 100);
       setResults(res.results);
-      if (res.results.length === 1) {
-        pick(res.results[0]);
+      const exact = res.results.find((r) => r.csp_id.toLowerCase() === text.toLowerCase());
+      if (exact || res.results.length === 1) {
+        pick(exact ?? res.results[0]);
       } else if (res.results.length === 0) {
         setSearchError(`No CSP found for "${text}".`);
       }
@@ -214,6 +252,19 @@ export default function RMDashboard() {
       setUploadingPhoto(false);
     }
   };
+
+  // A CSP chosen in the header's search (No. 175): its card on Documents —
+  // view only when it is another RM's.
+  function openFromSearch(cspId: string) {
+    setRmView("documents");
+    api
+      .searchCSP(cspId, 5)
+      .then((r) => {
+        const found = r.results.find((x) => x.csp_id === cspId) ?? r.results[0];
+        if (found) pick(found);
+      })
+      .catch((e) => setSearchError((e as ApiError).detail || "Could not open that CSP."));
+  }
 
   function pick(record: CSPDetail) {
     setCsp(record);
@@ -336,16 +387,27 @@ export default function RMDashboard() {
   return (
     <div className="flex flex-col h-screen bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
       {/* Global Top Nav */}
-      <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0 z-20">
-        <div className="flex items-center gap-3">
+      {/* No. 175: nothing in the header may overlap — fixed groups at the
+          ends, the search takes what is left; tabs go into a menu on small
+          screens; the sheet chips are one indicator. */}
+      <header className="relative h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3 px-3 sm:px-6 shrink-0 z-20">
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => setNavMenu((o) => !o)}
+            className="lg:hidden p-2 -ml-1 text-gray-600 dark:text-gray-300"
+            aria-label="Menu"
+          >
+            <i className={`fas ${navMenu ? "fa-xmark" : "fa-bars"}`}></i>
+          </button>
           <BrandLogo height={36} />
-          <span className="font-bold text-lg hidden sm:block text-gray-900 dark:text-white">
+          <span className="font-bold text-lg hidden xl:block text-gray-900 dark:text-white whitespace-nowrap">
             CSPdocMaker
             <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
               RM Portal
             </span>
           </span>
-          <nav className="flex items-center gap-1 ml-2">
+        </div>
+          <nav className="hidden lg:flex items-center gap-1 shrink-0">
             {(
               [
                 ["documents", "fa-file-signature", "Documents"],
@@ -363,12 +425,14 @@ export default function RMDashboard() {
                 }`}
               >
                 <i className={`fas ${icon} mr-1.5 text-xs`}></i>
-                <span className="hidden md:inline">{label}</span>
+                <span>{label}</span>
               </button>
             ))}
           </nav>
+        <div className="flex-1 min-w-0 flex justify-center">
+          <GlobalSearch onOpenCsp={openFromSearch} />
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 sm:gap-4 shrink-0">
           {/* When the sheets were last read (No. 146). */}
           <FreshnessBadges />
           {/* Notifications Dropdown */}
@@ -380,7 +444,7 @@ export default function RMDashboard() {
             >
               <i className="far fa-bell text-xl"></i>
               {unreadAlerts > 0 && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold flex items-center justify-center rounded-full">
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs font-bold flex items-center justify-center rounded-full">
                   {unreadAlerts}
                 </span>
               )}
@@ -405,7 +469,12 @@ export default function RMDashboard() {
                   {rmAlerts.map((alert) => (
                     <div
                       key={alert.id}
-                      onMouseDown={() => openAlert(alert)}
+                      // Opens the card in full (No. 174); "Work on this CSP"
+                      // in it does what a click used to.
+                      onMouseDown={() => {
+                        setAlertsMenu(false);
+                        setOpenedAlert(alert.id);
+                      }}
                       className="px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-0 transition-colors bg-orange-50/30 dark:bg-orange-900/10"
                     >
                       <div className="flex justify-between items-start mb-1">
@@ -418,11 +487,20 @@ export default function RMDashboard() {
                       </div>
                       <div className="text-xs text-orange-600 dark:text-orange-400 font-medium mt-1.5">
                         <i className="fas fa-exclamation-triangle mr-1"></i> Missing:{" "}
-                        {alert.details?.fields.map((f) => f.field_label ?? f.field_name).join(", ")}
+                        {alert.details?.fields.map((f) => f.label || f.field).join(", ")}
                       </div>
                     </div>
                   ))}
                 </div>
+                <button
+                  onMouseDown={() => {
+                    setAlertsMenu(false);
+                    setShowHistory(true);
+                  }}
+                  className="w-full px-4 py-2 text-xs font-medium text-eko hover:bg-gray-50 dark:hover:bg-gray-700 border-t border-gray-100 dark:border-gray-700"
+                >
+                  <i className="fas fa-clock-rotate-left mr-1"></i> History — fixed and pending
+                </button>
               </div>
             )}
           </div>
@@ -438,7 +516,7 @@ export default function RMDashboard() {
             className="flex items-center gap-3 cursor-pointer group relative"
             onClick={() => setLogoutMenu(!logoutMenu)}
           >
-            <div className="text-right hidden sm:block">
+            <div className="text-right hidden xl:block">
               <div className="text-sm font-semibold text-gray-900 dark:text-white">
                 {user.name}
               </div>
@@ -460,9 +538,35 @@ export default function RMDashboard() {
           </div>
         </div>
       </header>
+      {navMenu && (
+        <nav className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex flex-col gap-1 z-20">
+          {(
+            [
+              ["documents", "fa-file-signature", "Documents"],
+              ["sheets", "fa-table", "Sheets"],
+              ["database", "fa-database", "Database"],
+            ] as const
+          ).map(([view, icon, label]) => (
+            <button
+              key={view}
+              onClick={() => {
+                setRmView(view);
+                setNavMenu(false);
+              }}
+              className={`text-left px-3 py-2 rounded-lg text-sm font-medium ${
+                rmView === view ? "bg-eko/10 text-eko" : "text-gray-700 dark:text-gray-200"
+              }`}
+            >
+              <i className={`fas ${icon} mr-2 text-xs`}></i>
+              {label}
+            </button>
+          ))}
+        </nav>
+      )}
 
       {/* RM Main Scrollable Area */}
-      <main className="flex-grow overflow-y-auto p-4 sm:p-8">
+      {/* Room at the bottom for the chat button and the phone's bar (No. 176). */}
+      <main className="flex-grow overflow-y-auto px-3 sm:px-6 lg:px-8 pt-4 lg:pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))]">
         {rmView === "sheets" && (
           <div className="max-w-6xl mx-auto">
             <Sheets canManage={false} />
@@ -488,11 +592,45 @@ export default function RMDashboard() {
                     <input
                       type="text"
                       value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        if (e.target.value.trim().length < 2) setSuggestOpen(false);
+                      }}
+                      onFocus={() => suggestions.length > 0 && searchQuery.trim().length >= 2 && setSuggestOpen(true)}
+                      onBlur={() => setTimeout(() => setSuggestOpen(false), 150)}
+                      onKeyDown={(e) => e.key === "Escape" && setSuggestOpen(false)}
                       onKeyUp={(e) => e.key === "Enter" && searchCSP()}
                       className="w-full pl-11 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none transition-all text-lg"
-                      placeholder="Enter CSP ID (e.g. 1A850466)"
+                      placeholder="CSP code, name, phone, email or district (e.g. 1A8504)"
                     />
+                    {suggestOpen && searchQuery.trim().length >= 2 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
+                        {suggestions.length === 0 ? (
+                          <p className="px-4 py-3 text-sm text-gray-500">No CSP found for &quot;{searchQuery.trim()}&quot;.</p>
+                        ) : (
+                          suggestions.map((r) => (
+                            <button
+                              key={r.csp_id}
+                              type="button"
+                              onMouseDown={() => {
+                                setSuggestOpen(false);
+                                pick(r);
+                              }}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-50 dark:hover:bg-gray-700/50 border-b last:border-b-0 border-gray-100 dark:border-gray-700"
+                            >
+                              <div className="flex justify-between gap-3">
+                                <span className="text-sm font-medium text-gray-900 dark:text-white truncate">{r.name}</span>
+                                <span className="text-xs font-mono text-gray-500 shrink-0">{r.csp_id}</span>
+                              </div>
+                              <div className="text-xs text-gray-500 truncate">
+                                {[r.district, r.mobile].filter(Boolean).join(" · ") || "—"}
+                                {r.can_act === false && " · another RM's CSP (view only)"}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => searchCSP()}
@@ -508,6 +646,9 @@ export default function RMDashboard() {
                   </p>
                 )}
                 {results.length > 1 && rmStep === "dashboard" && (
+                  <p className="mt-4 text-xs text-gray-500">{results.length} CSPs found{results.length === 100 ? " (the first 100)" : ""}.</p>
+                )}
+                {results.length > 1 && rmStep === "dashboard" && (
                   <div className="mt-4 divide-y divide-gray-100 dark:divide-gray-700 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
                     {results.map((r) => (
                       <button
@@ -515,8 +656,12 @@ export default function RMDashboard() {
                         onClick={() => pick(r)}
                         className="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex justify-between items-center"
                       >
-                        <span className="font-medium text-gray-900 dark:text-white">
-                          {r.name}
+                        <span>
+                          <span className="font-medium text-gray-900 dark:text-white">{r.name}</span>
+                          <span className="block text-xs text-gray-500">
+                            {[r.district, r.mobile].filter(Boolean).join(" · ")}
+                            {r.can_act === false && " · another RM's CSP (view only)"}
+                          </span>
                         </span>
                         <span className="text-xs text-gray-500">{r.csp_id}</span>
                       </button>
@@ -544,6 +689,7 @@ export default function RMDashboard() {
                         cspId={csp.csp_id}
                         className="w-[84px] h-[108px]"
                       />
+                      {csp.can_act !== false && (
                       <label
                         className={`mt-2 mb-3 text-xs font-medium text-eko hover:underline cursor-pointer ${
                           uploadingPhoto ? "opacity-50 pointer-events-none" : ""
@@ -563,6 +709,7 @@ export default function RMDashboard() {
                           }}
                         />
                       </label>
+                      )}
                       {photoMessage && (
                         <p
                           className={`-mt-2 mb-3 text-xs text-center ${
@@ -620,6 +767,13 @@ export default function RMDashboard() {
                     <h3 className="font-semibold text-gray-900 dark:text-white mb-4 text-lg">
                       Select Documents to Generate
                     </h3>
+                    {csp.can_act === false && (
+                      <div className="mb-4 px-4 py-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700 text-sm text-gray-700 dark:text-gray-300">
+                        <i className="fas fa-eye mr-2"></i>
+                        This CSP belongs to {csp.rm_name || "another RM"} — view only. Documents, photos
+                        and messages are for their RM.
+                      </div>
+                    )}
 
                     {confirmAuto && !enrolled && (
                       <div className="mb-4 px-4 py-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-300 dark:border-amber-700 text-sm">
@@ -692,6 +846,14 @@ export default function RMDashboard() {
                     </div>
 
                     <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
+                      {csp.can_act === false ? (
+                        <button
+                          onClick={resetRM}
+                          className="px-5 py-2.5 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                        >
+                          Close
+                        </button>
+                      ) : (<>
                       <button
                         onClick={resetRM}
                         className="px-5 py-2.5 text-gray-600 dark:text-gray-300 font-medium hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -741,6 +903,7 @@ export default function RMDashboard() {
                       >
                         <span>Generate Documents</span> <i className="fas fa-cogs"></i>
                       </button>
+                      </>)}
                     </div>
                   </div>
                 </div>
@@ -849,7 +1012,7 @@ export default function RMDashboard() {
                       </div>
                     </div>
                   </div>
-                  <span className="px-2.5 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-[10px] uppercase tracking-wider rounded font-bold border border-orange-200 dark:border-orange-800">
+                  <span className="px-2.5 py-1 bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400 text-xs uppercase tracking-wider rounded font-bold border border-orange-200 dark:border-orange-800">
                     Pending
                   </span>
                 </div>
@@ -1049,6 +1212,25 @@ export default function RMDashboard() {
           )}
         </div>
       </main>
+      {openedAlert && (
+        <ActionRequiredDetail
+          id={openedAlert}
+          onClose={() => setOpenedAlert(null)}
+          onWorkOn={(cspId) => {
+            setOpenedAlert(null);
+            openAlert({ id: openedAlert, csp_id: cspId, message: "", unassigned: false });
+          }}
+        />
+      )}
+      {showHistory && (
+        <ActionHistory
+          onClose={() => setShowHistory(false)}
+          onWorkOn={(cspId) => {
+            setShowHistory(false);
+            openAlert({ id: "", csp_id: cspId, message: "", unassigned: false });
+          }}
+        />
+      )}
       <AssistantChat />
     </div>
   );

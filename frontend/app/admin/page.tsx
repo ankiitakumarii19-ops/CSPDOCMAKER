@@ -10,7 +10,8 @@ import DocumentTemplates from "./DocumentTemplates";
 import AccessControl from "./AccessControl";
 import Sheets from "./Sheets";
 import Database from "./Database";
-import CspSearch from "./CspSearch";
+import { CspSummaryPanel } from "./CspSearch";
+import GlobalSearch from "../components/GlobalSearch";
 import Agents from "./Agents";
 import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
@@ -85,11 +86,14 @@ export default function AdminDashboard() {
   // bookmark or Back stays on it (No. 171). Leaving a section closes what
   // was open inside it (a CSP's chat, a message).
   const [adminRoute] = useUrlParam("section", "overview");
-  const setAdminRoute = useCallback(
-    (route: string) =>
-      setUrlParams({ section: route === "overview" ? null : route, chat: null, message: null }),
-    []
-  );
+  // The side menu as a drawer on a small screen (No. 175).
+  const [navMenu, setNavMenu] = useState(false);
+  // A CSP chosen in the header's search (No. 175): its summary.
+  const [summaryCsp, setSummaryCsp] = useState<string | null>(null);
+  const setAdminRoute = useCallback((route: string) => {
+    setNavMenu(false);
+    setUrlParams({ section: route === "overview" ? null : route, chat: null, message: null });
+  }, []);
   // What each role may do, deliberately separated. The server enforces the
   // same split; hiding a button here is for clarity, not security.
   //
@@ -252,7 +256,12 @@ export default function AdminDashboard() {
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
       {/* Admin Sidebar */}
-      <aside className="w-64 bg-navy-900 text-gray-300 hidden md:flex flex-col shrink-0">
+      {navMenu && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setNavMenu(false)}></div>
+      )}
+      {/* The side menu; a drawer below 1024px (No. 176: phones and tablets). */}
+      <aside className={`w-64 max-w-[85vw] bg-navy-900 text-gray-300 flex-col shrink-0 lg:flex lg:static pt-[env(safe-area-inset-top)] lg:pt-0 ${
+        navMenu ? "flex fixed inset-y-0 left-0 z-50 overflow-y-auto" : "hidden"}`}>
         {/* The name was being clipped by the sidebar's edge: the logo at
             36px plus the title at text-lg needed more room than w-56 left
             after its padding. */}
@@ -464,7 +473,7 @@ export default function AdminDashboard() {
             </>
           )}
         </nav>
-        <div className="px-6 py-4 text-[11px] text-gray-500 border-t border-gray-800">
+        <div className="px-6 py-4 text-xs text-gray-500 border-t border-gray-800">
           {isOwner
             ? "Workspace Owner — you also control who may sign in."
             : "Admin — dashboards, templates and messaging. Access, sheets, the database and agent actions are the Owner's."}
@@ -474,11 +483,20 @@ export default function AdminDashboard() {
       {/* Admin Main Content */}
       <main className="flex-grow flex flex-col h-full overflow-hidden relative">
         {/* Admin Top Nav */}
-        <header className="h-16 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between px-6 shrink-0">
-          <div className="flex items-center gap-4 w-1/3">
-            <CspSearch />
+        {/* No. 175: fixed groups, nothing overlapping; one sync indicator;
+            the side menu behind a button on a small screen. */}
+        <header className="h-[calc(4rem+env(safe-area-inset-top))] pt-[env(safe-area-inset-top)] bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 flex items-center gap-3 px-3 sm:px-6 shrink-0">
+          <button
+            onClick={() => setNavMenu(true)}
+            className="lg:hidden p-2 -ml-1 text-gray-600 dark:text-gray-300 shrink-0"
+            aria-label="Menu"
+          >
+            <i className="fas fa-bars"></i>
+          </button>
+          <div className="flex-1 min-w-0">
+            <GlobalSearch onOpenCsp={(cspId) => setSummaryCsp(cspId)} />
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <FreshnessBadges />
             <button
               onClick={toggleTheme}
@@ -497,7 +515,7 @@ export default function AdminDashboard() {
                 initials={user.name.slice(0, 2).toUpperCase()}
                 className="w-8 h-8 text-sm bg-blue-600"
               />
-              <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 hidden sm:block">
+              <span className="text-sm font-semibold text-gray-700 dark:text-gray-200 hidden lg:block whitespace-nowrap">
                 {user.name}
               </span>
               {photo.input}
@@ -516,9 +534,11 @@ export default function AdminDashboard() {
             </div>
           </div>
         </header>
+        {summaryCsp && <CspSummaryPanel cspId={summaryCsp} onClose={() => setSummaryCsp(null)} />}
 
         {/* Scrollable Area */}
-        <div className="flex-grow overflow-y-auto p-4 md:p-8">
+        {/* Room at the bottom for the chat button and the phone's bar (No. 176). */}
+        <div className="flex-grow overflow-y-auto px-3 sm:px-6 lg:px-8 pt-4 lg:pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))]">
           <div className="max-w-screen-2xl mx-auto space-y-8">
             {adminRoute.startsWith("dash:") && (
               <DashboardView
@@ -593,13 +613,13 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-10 gap-3">
                 <div className="col-span-2">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="block text-[11px] font-medium text-gray-500">
+                    <label className="block text-xs font-medium text-gray-500">
                       Documents made
                     </label>
                     {dateMode && (
                       <button
                         onClick={clearDates}
-                        className="text-[11px] text-eko hover:underline"
+                        className="text-xs text-eko hover:underline"
                       >
                         Clear filter
                       </button>
@@ -650,14 +670,14 @@ export default function AdminDashboard() {
                     </div>
                   )}
                   {rangeWrong && (
-                    <p className="mt-1 text-[11px] text-red-600 dark:text-red-400">
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400">
                       &ldquo;To&rdquo; is before &ldquo;From&rdquo;.
                     </p>
                   )}
                 </div>
                 {FILTERS.map(([key, label]) => (
                   <div key={key}>
-                    <label className="block text-[11px] font-medium text-gray-500 mb-1">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
                       {label}
                     </label>
                     <select
@@ -680,14 +700,14 @@ export default function AdminDashboard() {
               {anythingApplied && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {dateLabel && (
-                    <span className="text-[11px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                    <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
                       Documents made: {dateLabel}
                     </span>
                   )}
                   {activeFilters.map(([key, value]) => (
                     <span
                       key={key}
-                      className="text-[11px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                      className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                     >
                       {key.toUpperCase()}: {value}
                     </span>
@@ -737,7 +757,7 @@ export default function AdminDashboard() {
                     <div className="text-3xl font-bold text-gray-900 dark:text-white tabular-nums">
                       {metrics === null ? "—" : value ?? 0}
                     </div>
-                    <span className="text-[11px] text-gray-400 group-hover:text-eko transition-colors">
+                    <span className="text-xs text-gray-400 group-hover:text-eko transition-colors">
                       View <i className="fas fa-arrow-right"></i>
                     </span>
                   </div>
@@ -758,7 +778,45 @@ export default function AdminDashboard() {
                   is clickable — a zero opens an empty list.
                 </p>
               </div>
-              <div className="overflow-x-auto">
+              {/* Phones (No. 176): one card per document, every number a button. */}
+              <div className="sm:hidden divide-y divide-gray-200 dark:divide-gray-700">
+                {(metrics?.documents ?? []).map((doc) => (
+                  <div key={doc.document_type} className="px-4 py-3">
+                    <button
+                      onClick={() => openDrill(`${doc.label} — all CSPs in scope`, {})}
+                      className="text-sm font-medium text-gray-900 dark:text-white text-left"
+                    >
+                      <i className="fas fa-file-pdf text-red-500 mr-2"></i>
+                      {doc.label}
+                    </button>
+                    <div className="grid grid-cols-3 gap-2 mt-2">
+                      {(
+                        [
+                          ["New", doc.new, { view: "new" }, "text-gray-700 dark:text-gray-200"],
+                          ["Existing", doc.existing, { view: "existing" }, "text-gray-700 dark:text-gray-200"],
+                          ["Generated", doc.generated, {}, "text-gray-700 dark:text-gray-200"],
+                          ["Mailed", doc.mailed, { delivery: "mailed" }, "text-eko"],
+                          ["Pending", doc.pending, { delivery: "pending" }, "text-orange-600 dark:text-orange-400"],
+                          ["Failed", doc.failed, { delivery: "failed" }, "text-red-600 dark:text-red-400"],
+                        ] as Array<[string, number, Record<string, string>, string]>
+                      ).map(([title, value, params, tone]) => (
+                        <button
+                          key={title}
+                          onClick={() => openDrill(`${doc.label} — ${title.toLowerCase()}`, { document_type: doc.document_type, ...params })}
+                          className="rounded-lg bg-gray-50 dark:bg-gray-900/50 px-2 py-1.5 text-left"
+                        >
+                          <div className={`text-base font-bold tabular-nums ${value === 0 ? "text-gray-400" : tone}`}>{value}</div>
+                          <div className="text-xs text-gray-500">{title}</div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                {metrics !== null && metrics.documents.length === 0 && (
+                  <p className="px-4 py-8 text-center text-sm text-gray-500">Nothing matches these filters.</p>
+                )}
+              </div>
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 dark:text-gray-400 text-xs uppercase tracking-wider">
@@ -896,7 +954,7 @@ export default function AdminDashboard() {
                             {row.circle_head || "—"}
                           </td>
                           <td className="px-5 py-3">
-                            <span className="px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                            <span className="px-2 py-0.5 text-xs uppercase tracking-wider rounded font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                               {row.origin === "new" ? "New" : "Existing"}
                             </span>
                           </td>

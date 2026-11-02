@@ -151,6 +151,67 @@ async def _check_csp_tab(session: AsyncSession, user, source: DataSource,
             f"({', '.join(_configured_tabs(source))}).")
 
 
+def _is_csp_tab(spreadsheet: str, tab: str) -> bool:
+    s = get_settings()
+    return (spreadsheet == s.google_sheets_csp_sheet_id
+            and tab in (s.google_sheets_csp_sheet_name,
+                        s.google_sheets_subko_sheet_name))
+
+
+async def _check_row_owner(session: AsyncSession, user, source: DataSource,
+                           tab: str, row_number: int) -> Dict[str, str]:
+    """An RM changes only their own (and unowned) CSPs' rows (No. 175, the
+    owner's choice: the same rule as the Database page). Returns the row as
+    it was, for the edit log; {} when it is not a CSP tab."""
+    import asyncio
+
+    from app.models.csp_record import CSPRecord
+    from app.services import csp_access, csp_mapping
+
+    spreadsheet = _spreadsheet(source)
+    if not _is_csp_tab(spreadsheet, tab):
+        return {}
+    try:
+        before = await asyncio.to_thread(sheets.read_row, spreadsheet, tab,
+                                         row_number)
+    except SheetAdminError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    if ((user or {}).get("role") or "").lower() != "rm":
+        return before
+    code = csp_mapping.map_sheet_row(before).get(csp_mapping.IDENTITY_FIELD)
+    record = (await session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == code))).scalars().first() if code else None
+    if record is None or not csp_access.can_access(record, user):
+        logger.warning("sheet_router: RM %s refused %s row %d (CSP %s is "
+                       "another RM's)", _who(user), tab, row_number, code)
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            "This CSP belongs to another RM. You can see the "
+                            "row, not change it.")
+    return before
+
+
+async def _log_edits(session: AsyncSession, user, source: DataSource,
+                     tab: str, before: Dict[str, str],
+                     written: Dict[str, str]) -> None:
+    """Each changed cell of a CSP row, in the CSP's edit history (No. 175)."""
+    from app.services import csp_editor, csp_mapping
+
+    if not before or not written:
+        return
+    code = csp_mapping.map_sheet_row(before).get(csp_mapping.IDENTITY_FIELD)
+    if not code:
+        return
+    try:
+        await session.run_sync(lambda s: csp_editor.log_changes(
+            s, code, {c: (before.get(c, ""), v) for c, v in written.items()},
+            _who(user).lower(), "sheets_tab"))
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logger.error("sheet_router: %s row of %s saved, but the edit log was "
+                     "not: %s: %s", tab, code, type(e).__name__, e, exc_info=True)
+
+
 def _spreadsheet(source: DataSource) -> str:
     spreadsheet_id = (source.connection or {}).get("spreadsheet_id")
     if not spreadsheet_id:
@@ -380,11 +441,13 @@ async def update_row(
     """Change cells on one row. Written straight to the spreadsheet."""
     source = await _source(session, source_id)
     await _check_csp_tab(session, user, source, tab)
+    before = await _check_row_owner(session, user, source, tab, row_number)
     try:
         written, unknown = sheets.update_row(
             _spreadsheet(source), tab, row_number, body.cells)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    await _log_edits(session, user, source, tab, before, written)
 
     logger.info("sheet_router.update_row: %s row %d changed by %s (%s)",
                 tab, row_number, _who(user), ", ".join(sorted(written)))
@@ -466,6 +529,7 @@ async def remove_row(
     """
     source = await _source(session, source_id)
     await _check_csp_tab(session, user, source, tab)
+    await _check_row_owner(session, user, source, tab, row_number)
     try:
         removed = sheets.delete_row(_spreadsheet(source), tab, row_number)
     except SheetAdminError as e:

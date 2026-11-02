@@ -657,6 +657,24 @@ def harness(session, settings, now: Optional[datetime] = None) -> List[dict]:
         "attention" if again["failed"] > again["sent"] else
         "ok" if again["sent"] else "empty")
 
+    # No. 173: the Super Admins are emailed about failures.
+    from app.models.audit_log import AuditLog
+    from app.services import alerts
+    still_open = alerts.open_keys(session)
+    last_alert = session.execute(select(func.max(AuditLog.created_at)).where(
+        AuditLog.action == alerts.SENT)).scalar()
+    row("alerts", "Alerts to the Super Admins",
+        "A sheet read stuck or failing, an agent failing again and again, "
+        "WhatsApps failing",
+        f"Emailed once per problem, again every "
+        f"{getattr(settings, 'alert_repeat_hours', 4)} h "
+        "while it lasts, and once fixed; 8 am – 8 pm, server only",
+        (f"{len(still_open)} open: {', '.join(still_open)}" if still_open
+         else f"none open; last alert {_ago(last_alert, now)}" if last_alert
+         else "no alert sent yet"),
+        "attention" if still_open else
+        "ok" if getattr(settings, "alerts_enabled", True) else "empty")
+
     from app.services import documents_feedback
     fb = documents_feedback.summary(session, limit=0)
     row("feedback", "Feedback after documents (loop 5)",

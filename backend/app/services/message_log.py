@@ -139,7 +139,8 @@ def _listed(answer: dict, *keys: str) -> List[dict]:
 def record(session: Session, *, kind: str, mobile: str, outcome: dict,
            csp_id: Optional[str] = None, csp_name: Optional[str] = None,
            data_request_id=None, processing_job_id=None,
-           is_test: bool = False) -> Optional[WhatsAppMessage]:
+           is_test: bool = False, body_text: Optional[str] = None,
+           sent_by: Optional[str] = None) -> Optional[WhatsAppMessage]:
     """Put one send on the record. The caller commits.
 
     `outcome` is what whatsapp_platform.send returned. Never raises: a
@@ -163,6 +164,8 @@ def record(session: Session, *, kind: str, mobile: str, outcome: dict,
                 template_name=outcome.get("template_name"),
                 sent_at=_now(),
                 sent_because=send_reason.current(),
+                body_text=body_text,
+                sent_by=sent_by,
             )
             session.add(row)
             session.flush()
@@ -653,8 +656,11 @@ def build_conversation(ours: List[WhatsAppMessage], replies: List[dict],
             continue
         items.append({
             "at": m.sent_at.isoformat(), "from": "us",
-            "text": KIND_LABEL.get(m.kind, "Message")
+            # A person's own words when there are some (No. 174).
+            "text": (getattr(m, "body_text", None)
+                     or KIND_LABEL.get(m.kind, "Message"))
             + ("" if m.send_status == SEND_SENT else " — not sent"),
+            "sent_by": getattr(m, "sent_by", None),
             "automatic": False, "type": "template"})
     for r in replies:
         at = _parse_time(r.get("sent_at"))

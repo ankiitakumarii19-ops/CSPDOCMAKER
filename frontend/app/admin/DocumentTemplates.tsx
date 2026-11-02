@@ -291,7 +291,7 @@ export default function DocumentTemplates() {
                     {t.name}
                   </div>
                   {t.is_builtin && (
-                    <span className="text-[11px] text-gray-500">supplied</span>
+                    <span className="text-xs text-gray-500">supplied</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
@@ -318,7 +318,7 @@ export default function DocumentTemplates() {
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       t.active
                         ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                         : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"
@@ -418,7 +418,7 @@ export default function DocumentTemplates() {
                         &ldquo;{p.text}&rdquo;
                       </code>
                       {p.guessed && mapping[p.text] && (
-                        <span className="ml-2 text-[11px] text-gray-500">
+                        <span className="ml-2 text-xs text-gray-500">
                           matched automatically
                         </span>
                       )}
@@ -466,7 +466,7 @@ export default function DocumentTemplates() {
               <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
                 {selected.paragraphs.map((p) => (
                   <div key={p.index} className="flex gap-2 items-start">
-                    <span className="text-[11px] text-gray-400 w-8 pt-2 text-right tabular-nums shrink-0">
+                    <span className="text-xs text-gray-400 w-8 pt-2 text-right tabular-nums shrink-0">
                       {p.index}
                     </span>
                     <textarea

@@ -11,14 +11,19 @@
 #     (127.0.0.1:8088) and that web server forwards BASE_PATH to it
 #     (deploy/Caddyfile.behind-proxy, DEPLOY.md).
 # The database and Redis are never exposed.
+#
+# A TEST COPY (No. 173) runs from this same file as a second project, with
+# its own settings, database, images and documents folder (DEPLOY.md):
+#   docker compose -p cspdocmaker-test -f docker-compose.prod.yml \
+#     --env-file deploy/.env.test up -d --build
 
 # One image for api, worker and beat. Only "api" builds it: three services
 # building the same image at once collide ("image ... already exists").
 x-backend: &backend
-  image: cspdocmaker-backend
+  image: ${IMAGE_PREFIX:-cspdocmaker}-backend
   pull_policy: never
   restart: unless-stopped
-  env_file: deploy/.env.production
+  env_file: ${ENV_FILE:-deploy/.env.production}
   environment:
     DATABASE_HOST: postgres
     DATABASE_PORT: "5432"
@@ -40,7 +45,7 @@ x-backend: &backend
     DOCUMENTS_ARCHIVE_DIR: /app/documents
   volumes:
     - ./backend/credentials:/app/backend/credentials:ro
-    - ../CSP_Documents:/app/documents
+    - ${DOCUMENTS_ARCHIVE_HOST:-../CSP_Documents}:/app/documents
     - documents:/app/backend/generated_documents
     - logs:/app/backend/logs
     - models:/app/backend/app/assets/models
@@ -118,7 +123,7 @@ services:
       dockerfile: frontend/Dockerfile
       args:
         NEXT_PUBLIC_BASE_PATH: ${BASE_PATH:-}
-    image: cspdocmaker-frontend
+    image: ${IMAGE_PREFIX:-cspdocmaker}-frontend
     restart: unless-stopped
     depends_on:
       - api

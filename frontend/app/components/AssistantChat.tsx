@@ -614,15 +614,15 @@ export default function AssistantChat() {
         <button
           onClick={() => setOpen(true)}
           title="Ask about any CSP"
-          className="fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-eko hover:bg-eko-dark text-white shadow-lg flex items-center justify-center"
+          className="fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-[calc(1.25rem+env(safe-area-inset-right))] z-40 w-14 h-14 rounded-full bg-eko hover:bg-eko-dark text-white shadow-lg flex items-center justify-center"
         >
           <i className="fas fa-comments text-xl"></i>
         </button>
       )}
 
       {open && (
-        <div className="fixed z-50 bottom-0 right-0 sm:bottom-5 sm:right-5 w-full sm:w-[420px] h-[85vh] sm:h-[620px] max-h-screen flex flex-col rounded-t-2xl sm:rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shadow-2xl">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-t-2xl">
+        <div className="fixed z-50 inset-0 sm:inset-auto sm:bottom-5 sm:right-5 w-full sm:w-[420px] h-dvh sm:h-[620px] sm:max-h-[calc(100dvh-2.5rem)] flex flex-col sm:rounded-2xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 shadow-2xl pb-[env(safe-area-inset-bottom)]">
+          <div className="flex items-center gap-2 px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))] sm:pt-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 sm:rounded-t-2xl">
             <i className="fas fa-comments text-eko"></i>
             <div className="flex-1">
               <div className="text-sm font-bold text-gray-900 dark:text-white">Ask about any CSP</div>

@@ -171,12 +171,20 @@ async def _set_workspace(request, call_next):
     if any(path.startswith(prefix) for prefix in _UNSCOPED_PATHS):
         return await call_next(request)
 
-    header = request.headers.get("authorization") or ""
-    if not header.lower().startswith("bearer "):
+    from app import session_cookie
+
+    # A Bearer header, else the browser's sign-in cookie (No. 173).
+    token, via = session_cookie.token_from(request)
+    if token is None:
         return await call_next(request)
+    if session_cookie.forged(request, via):
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=403, content={
+            "detail": "This request did not come from the app. Please "
+                      "reload the page."})
 
     try:
-        claims = jwt_service.decode_token(header.split(" ", 1)[1].strip())
+        claims = jwt_service.decode_token(token)
         email = (claims or {}).get("sub") or (claims or {}).get("email")
     except Exception as e:
         # An invalid token is the router's business to reject (it answers
@@ -257,6 +265,7 @@ async def _trace_request(request, call_next):
 # ---- API Routers ----
 from app.routers.auth_router import router as auth_router
 from app.routers.profile_router import router as profile_router
+from app.routers.search_router import router as search_router
 from app.routers.csp_router import router as csp_router
 from app.routers.document_router import router as document_router
 from app.routers.alert_router import router as alert_router
@@ -274,6 +283,7 @@ from app.routers.admin_router import router as admin_router
 
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(profile_router)   # /api/profile — your own profile picture (No. 171)
+app.include_router(search_router)    # /api/search — the header's search across the app (No. 175)
 app.include_router(csp_router, prefix="/api/csps", tags=["CSP"])
 app.include_router(document_router)  # already has /api/documents prefix
 app.include_router(workflow_router)  # already has /api/workflows prefix

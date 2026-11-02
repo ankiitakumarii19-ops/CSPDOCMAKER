@@ -22,6 +22,8 @@ Each entry below declares:
   may         what it is allowed to change by itself
   proposes    what it must ask a Super Admin about
   trigger     scheduled, on demand, or both
+  risk        low / medium / high / critical, and why (No. 173 — standards
+              C1: a higher class needs stronger controls)
 """
 
 import logging
@@ -47,6 +49,12 @@ class Agent:
     # Minutes between automatic runs; None for on-demand only.
     every_minutes: Optional[int] = None
     enabled_by_default: bool = True
+    # Risk class (No. 173): what the worst thing it could do by itself is.
+    risk: str = "low"
+    risk_why: str = ""
+
+
+RISKS = ("low", "medium", "high", "critical")
 
 
 _REGISTRY: Dict[str, Agent] = {}
@@ -88,6 +96,7 @@ def describe() -> List[dict]:
             "key": a.key, "name": a.name, "owns": a.owns, "does": a.does,
             "may": a.may, "proposes": a.proposes, "trigger": a.trigger,
             "every_minutes": a.every_minutes,
+            "risk": a.risk, "risk_why": a.risk_why,
         }
         for a in all_agents()
     ]
@@ -118,6 +127,8 @@ SETUP = register(Agent(
         "Activating a template once everything it needs is mapped",
     ],
     trigger=ON_DEMAND,
+    risk="low",
+    risk_why="Reads configuration and reports; changes nothing.",
 ))
 
 DATA = register(Agent(
@@ -141,6 +152,8 @@ DATA = register(Agent(
     ],
     trigger=BOTH,
     every_minutes=15,
+    risk="medium",
+    risk_why="Fills a blank field from INFO by itself and raises RM alerts; never overwrites a value.",
 ))
 
 VERIFICATION = register(Agent(
@@ -163,6 +176,8 @@ VERIFICATION = register(Agent(
     proposes=[],
     trigger=BOTH,
     every_minutes=30,
+    risk="high",
+    risk_why="Writes a CSP's answer to the CSP sheet by itself (No. 171); every decision logged.",
 ))
 
 DOCUMENT = register(Agent(
@@ -184,6 +199,8 @@ DOCUMENT = register(Agent(
     ],
     trigger=BOTH,
     every_minutes=3,
+    risk="medium",
+    risk_why="Starts document generation for a complete record; the checks themselves stay fixed code.",
 ))
 
 COMMUNICATION = register(Agent(
@@ -211,6 +228,8 @@ COMMUNICATION = register(Agent(
     # Super Admin has turned it on. An agent that starts messaging real
     # people the moment it is deployed is not a feature.
     enabled_by_default=False,
+    risk="high",
+    risk_why="Messages real people (CSPs); off until a workspace switches it on.",
 ))
 
 MONITORING = register(Agent(
@@ -232,4 +251,6 @@ MONITORING = register(Agent(
     ],
     trigger=BOTH,
     every_minutes=10,
+    risk="low",
+    risk_why="Reads run records and reports; changes nothing.",
 ))

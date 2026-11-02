@@ -47,6 +47,9 @@ class CSPDetailResponse(BaseModel):
     rm_resolution: Optional[str] = None
     # Why nothing may be sent to this CSP now (No. 121), or None.
     send_hold: Optional[str] = None
+    # Whether this person may act on it (No. 175: an RM finds every CSP but
+    # acts only on their own and unowned ones). None where not worked out.
+    can_act: Optional[bool] = None
 
     model_config = {"from_attributes": True}
 

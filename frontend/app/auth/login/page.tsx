@@ -260,7 +260,7 @@ export default function AuthPage() {
         setSelectionToken(res.selection_token ?? "");
         return;
       }
-      if (!res.verified || !res.access_token) {
+      if (!res.verified || !res.signed_in) {
         setError("That code was not accepted.");
         return;
       }
@@ -287,7 +287,7 @@ export default function AuthPage() {
         setSelectionToken(res.selection_token ?? "");
         return;
       }
-      if (!res.access_token) {
+      if (!res.signed_in) {
         setError("Google sign-in was not accepted.");
         return;
       }
@@ -307,7 +307,7 @@ export default function AuthPage() {
         selection_token: selectionToken,
         workspace_id: chosen,
       });
-      if (!res.access_token) {
+      if (!res.signed_in) {
         setError("Could not open that workspace.");
         return;
       }
@@ -325,11 +325,11 @@ export default function AuthPage() {
   };
 
   const finishSignIn = (res: SignInResult) => {
-    api.setToken(res.access_token!);
+    // The sign-in itself came as a protected cookie (No. 173); only who
+    // is signed in is kept here, for the screens.
     try {
-      if (res.refresh_token) {
-        localStorage.setItem("refresh_token", res.refresh_token);
-      }
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
       localStorage.setItem(
         "user",
         JSON.stringify({

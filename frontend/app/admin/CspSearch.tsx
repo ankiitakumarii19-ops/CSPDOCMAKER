@@ -48,7 +48,7 @@ function SourceNote({ source }: { source?: FieldSource }) {
     (source.status === "corrected" ? `\nThe app had filled: ${source.auto_value}` : "") +
     (source.checked_at ? `\n${CHECKED[source.status]} ${new Date(source.checked_at).toLocaleString("en-IN")}` : "");
   return (
-    <span className={`block text-[11px] leading-tight ${tone}`} title={title}>
+    <span className={`block text-xs leading-tight ${tone}`} title={title}>
       <i className="fas fa-circle-info mr-1"></i>
       From {source.source_label} · {CHECKED[source.status]}
       {how}
@@ -79,8 +79,6 @@ export default function CspSearch() {
   const [open, setOpen] = useState(false);
 
   const [selected, setSelected] = useState<string | null>(null);
-  const [summary, setSummary] = useState<Summary | null>(null);
-  const [summaryError, setSummaryError] = useState("");
 
   const boxRef = useRef<HTMLDivElement | null>(null);
   // Only the newest search may fill the list: typing fires several, and an
@@ -124,26 +122,14 @@ export default function CspSearch() {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const close = () => {
-    setSelected(null);
-    setSummary(null);
-    setSummaryError("");
-  };
+  const close = () => setSelected(null);
 
-  const choose = async (cspId: string) => {
+  const choose = (cspId: string) => {
     setOpen(false);
     setSelected(cspId);
-    setSummary(null);
-    setSummaryError("");
-    try {
-      setSummary(await api.cspSummary(cspId));
-    } catch (e) {
-      setSummaryError((e as ApiError).detail || "Could not open this CSP.");
-    }
   };
 
   const text = query.trim();
-  const csp = summary?.csp;
 
   return (
     <>
@@ -200,120 +186,147 @@ export default function CspSearch() {
         )}
       </div>
 
-      {selected && (
-        <div
-          className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center p-4 overflow-y-auto"
-          onMouseDown={(e) => e.target === e.currentTarget && close()}
-          onKeyDown={(e) => e.key === "Escape" && close()}
-        >
-          <div className="w-full max-w-2xl mt-12 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-            <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
-              <h2 className="font-bold text-gray-900 dark:text-white">
-                {csp ? csp.name : selected}
-                <span className="ml-2 text-sm font-normal text-gray-500">{selected}</span>
-                {csp && (
-                  <span className="ml-2 px-2 py-0.5 text-[10px] uppercase tracking-wider rounded font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
-                    {csp.origin === "new" ? "New" : "Existing"}
-                  </span>
-                )}
-              </h2>
-              <button
-                autoFocus
-                onClick={close}
-                className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
-              >
-                <i className="fas fa-xmark"></i> Close
-              </button>
-            </div>
+      {selected && <CspSummaryPanel cspId={selected} onClose={close} />}
+    </>
+  );
+}
 
-            {summaryError && (
-              <p className="px-5 py-4 text-sm text-red-600 dark:text-red-400">
-                <i className="fas fa-circle-exclamation mr-2"></i>
-                {summaryError}
+/**
+ * One CSP's read-only summary (No. 101): details, where each value came
+ * from, and where each document stands. Opened from this search and from
+ * the header's search (No. 175).
+ */
+export function CspSummaryPanel({ cspId, onClose }: { cspId: string; onClose: () => void }) {
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [summaryError, setSummaryError] = useState("");
+  const selected = cspId;
+  const close = onClose;
+
+  useEffect(() => {
+    let current = true;
+    api
+      .cspSummary(cspId)
+      .then((r) => current && setSummary(r))
+      .catch((e) => current && setSummaryError((e as ApiError).detail || "Could not open this CSP."));
+    return () => {
+      current = false;
+    };
+  }, [cspId]);
+
+  const csp = summary?.csp;
+  return (
+    <div
+      className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center sm:p-4 overflow-y-auto"
+      onMouseDown={(e) => e.target === e.currentTarget && close()}
+      onKeyDown={(e) => e.key === "Escape" && close()}
+    >
+      {/* Full screen on a phone (No. 176). */}
+      <div className="w-full max-w-2xl min-h-dvh sm:min-h-0 sm:mt-12 bg-white dark:bg-gray-800 sm:rounded-xl shadow-xl sm:border border-gray-200 dark:border-gray-700 overflow-hidden pt-[env(safe-area-inset-top)] sm:pt-0">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+          <h2 className="font-bold text-gray-900 dark:text-white">
+            {csp ? csp.name : selected}
+            <span className="ml-2 text-sm font-normal text-gray-500">{selected}</span>
+            {csp && (
+              <span className="ml-2 px-2 py-0.5 text-xs uppercase tracking-wider rounded font-bold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                {csp.origin === "new" ? "New" : "Existing"}
+              </span>
+            )}
+          </h2>
+          <button
+            autoFocus
+            onClick={close}
+            className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
+            <i className="fas fa-xmark"></i> Close
+          </button>
+        </div>
+
+        {summaryError && (
+          <p className="px-5 py-4 text-sm text-red-600 dark:text-red-400">
+            <i className="fas fa-circle-exclamation mr-2"></i>
+            {summaryError}
+          </p>
+        )}
+        {!summary && !summaryError && (
+          <p className="px-5 py-8 text-center text-sm text-gray-500">Loading…</p>
+        )}
+
+        {csp && summary && (
+          <>
+            <div className="px-5 pt-4 flex items-center gap-4">
+              <CspPhoto cspId={csp.csp_id} />
+              <p className="text-xs text-gray-500">
+                Passport-size photo, as printed on the documents.
+              </p>
+            </div>
+            <dl className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              {(
+                [
+                  ["Branch", [csp.branch_name, csp.branch_code].filter(Boolean).join(", "), []],
+                  ["Location", [csp.district, csp.state].filter(Boolean).join(", "), ["state"]],
+                  ["LHO", csp.lho, ["lho"]],
+                  ["AO", csp.ao, ["ao"]],
+                  ["RBO", csp.rbo_name, ["rbo_name"]],
+                  ["Mobile", csp.mobile, []],
+                  ["Email", csp.email, ["email"]],
+                  ["Address", csp.address, ["address"]],
+                  ["DC", csp.dc, ["dc"]],
+                  ["ASM", csp.asm_name, ["asm_name"]],
+                  ["Assigned RM", csp.rm_name, ["rm_name"]],
+                ] as [string, string | null | undefined, string[]][]
+              ).map(([label, value, fields]) => (
+                <div key={label} className="flex justify-between gap-3">
+                  <dt className="text-gray-500">{label}</dt>
+                  <dd className="text-gray-900 dark:text-white text-right break-all">
+                    {value || <span className="text-gray-400">—</span>}
+                    {fields.map((f) => (
+                      <SourceNote key={f} source={summary.sources?.[f]} />
+                    ))}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+            {summary.sources === null && (
+              <p className="px-5 pb-3 text-xs text-amber-600 dark:text-amber-400">
+                Where these values came from could not be read just now.
               </p>
             )}
-            {!summary && !summaryError && (
-              <p className="px-5 py-8 text-center text-sm text-gray-500">Loading…</p>
-            )}
 
-            {csp && summary && (
-              <>
-                <div className="px-5 pt-4 flex items-center gap-4">
-                  <CspPhoto cspId={csp.csp_id} />
-                  <p className="text-xs text-gray-500">
-                    Passport-size photo, as printed on the documents.
-                  </p>
-                </div>
-                <dl className="px-5 py-4 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  {(
-                    [
-                      ["Branch", [csp.branch_name, csp.branch_code].filter(Boolean).join(", "), []],
-                      ["Location", [csp.district, csp.state].filter(Boolean).join(", "), ["state"]],
-                      ["LHO", csp.lho, ["lho"]],
-                      ["AO", csp.ao, ["ao"]],
-                      ["RBO", csp.rbo_name, ["rbo_name"]],
-                      ["Mobile", csp.mobile, []],
-                      ["Email", csp.email, ["email"]],
-                      ["Address", csp.address, ["address"]],
-                      ["DC", csp.dc, ["dc"]],
-                      ["ASM", csp.asm_name, ["asm_name"]],
-                      ["Assigned RM", csp.rm_name, ["rm_name"]],
-                    ] as [string, string | null | undefined, string[]][]
-                  ).map(([label, value, fields]) => (
-                    <div key={label} className="flex justify-between gap-3">
-                      <dt className="text-gray-500">{label}</dt>
-                      <dd className="text-gray-900 dark:text-white text-right break-all">
-                        {value || <span className="text-gray-400">—</span>}
-                        {fields.map((f) => (
-                          <SourceNote key={f} source={summary.sources?.[f]} />
-                        ))}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-                {summary.sources === null && (
-                  <p className="px-5 pb-3 text-xs text-amber-600 dark:text-amber-400">
-                    Where these values came from could not be read just now.
-                  </p>
-                )}
-
-                <table className="w-full text-left border-collapse border-t border-gray-200 dark:border-gray-700">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 text-xs uppercase tracking-wider">
-                      <th className="px-5 py-2.5 font-semibold">Document</th>
-                      <th className="px-5 py-2.5 font-semibold">Made</th>
-                      <th className="px-5 py-2.5 font-semibold">Delivery</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                    {summary.documents.map((d) => (
-                      <tr key={d.document_type}>
-                        <td className="px-5 py-2.5 text-sm font-medium text-gray-900 dark:text-white">
-                          {d.label}
-                        </td>
-                        <td className="px-5 py-2.5 text-sm text-gray-600 dark:text-gray-300">
-                          {d.generated
-                            ? `${day(d.generated_at)}${d.version && d.version > 1 ? ` (v${d.version})` : ""}`
-                            : d.applies
-                            ? "Not yet"
-                            : "—"}
-                        </td>
-                        <td className="px-5 py-2.5">
-                          <span
-                            className={`px-2 py-0.5 text-xs rounded font-medium ${DELIVERY[d.delivery].className}`}
-                          >
-                            {DELIVERY[d.delivery].text}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </>
-            )}
-          </div>
-        </div>
-      )}
-    </>
+            <table className="w-full text-left border-collapse border-t border-gray-200 dark:border-gray-700">
+              <thead>
+                <tr className="bg-gray-50 dark:bg-gray-900/50 text-gray-500 text-xs uppercase tracking-wider">
+                  <th className="px-5 py-2.5 font-semibold">Document</th>
+                  <th className="px-5 py-2.5 font-semibold">Made</th>
+                  <th className="px-5 py-2.5 font-semibold">Delivery</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {summary.documents.map((d) => (
+                  <tr key={d.document_type}>
+                    <td className="px-5 py-2.5 text-sm font-medium text-gray-900 dark:text-white">
+                      {d.label}
+                    </td>
+                    <td className="px-5 py-2.5 text-sm text-gray-600 dark:text-gray-300">
+                      {d.generated
+                        ? `${day(d.generated_at)}${d.version && d.version > 1 ? ` (v${d.version})` : ""}`
+                        : d.applies
+                        ? "Not yet"
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-2.5">
+                      <span
+                        className={`px-2 py-0.5 text-xs rounded font-medium ${DELIVERY[d.delivery].className}`}
+                      >
+                        {DELIVERY[d.delivery].text}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+    </div>
   );
 }

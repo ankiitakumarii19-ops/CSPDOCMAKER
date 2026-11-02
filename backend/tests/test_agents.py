@@ -75,6 +75,16 @@ async def test_every_agent_says_what_it_owns_and_may_do():
         assert agent.proposes or agent.key == "verification", agent.key
 
 
+async def test_every_agent_has_a_risk_class_and_says_why():
+    """Standards C1 (No. 173): low / medium / high / critical."""
+    for agent in reg.all_agents():
+        assert agent.risk in reg.RISKS, agent.key
+        assert agent.risk_why, agent.key
+    # Anything that writes CSP data or messages people is at least high.
+    assert reg.get("verification").risk in ("high", "critical")
+    assert reg.get("communication").risk in ("high", "critical")
+
+
 async def test_the_communication_agent_is_off_until_switched_on():
     """It messages real people. It must not start the day it deploys."""
     assert reg.get("communication").enabled_by_default is False

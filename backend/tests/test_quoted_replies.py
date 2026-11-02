@@ -71,10 +71,13 @@ async def test_the_send_endpoint_takes_a_quote(client, rdb, monkeypatch):
 @on_loop
 async def test_a_csps_chat_opens_by_their_code(client, rdb, monkeypatch):
     from app.services import message_log
+    from datetime import datetime, timedelta, timezone
     reply = _draft(rdb)
+    # Older than our first message on record: the whole chat still shows it.
+    older = (datetime.now(timezone.utc) - timedelta(days=40)).isoformat()
     monkeypatch.setattr(message_log, "replies_from", lambda wa, phone: [
         {"from_phone": phone, "body": "Ye link nahi open hota hai",
-         "msg_type": "text", "sent_at": "2026-10-31T13:06:00+00:00"}])
+         "msg_type": "text", "sent_at": older}])
     r = await client.get(
         f"/api/admin/whatsapp-messages/csp/{reply.csp_id}/conversation",
         headers=_auth("admin"))

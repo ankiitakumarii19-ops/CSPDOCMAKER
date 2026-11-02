@@ -178,6 +178,11 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
     Returns {"status": SENT|PENDING|REJECTED|FAILED, "reason": str,
              "job_id": str|None, "template_name": str|None}.
     """
+    if _settings().test_copy:
+        # The one place every WhatsApp goes through (No. 173).
+        logger.info("whatsapp_platform.send: not sent — this is a test copy "
+                    "(TEST_COPY=true)")
+        return _result(FAILED, "TEST_COPY: nothing is sent from the test copy")
     phone = phone_for_whatsapp(to_mobile)
     if not phone:
         return _result(FAILED, f"not a usable mobile number: {to_mobile!r}")

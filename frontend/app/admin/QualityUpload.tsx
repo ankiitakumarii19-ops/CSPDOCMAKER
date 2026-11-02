@@ -172,7 +172,7 @@ export default function QualityUpload({ onSaved }: { onSaved: () => void }) {
             <div className={section}>
               <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Context</h4>
               {context.map((c, i) => (
-                <div key={c.key} className="flex gap-2 items-start">
+                <div key={c.key} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <input type="checkbox" className={tick} checked={c.keep}
                     onChange={(e) => setContext(context.map((x, j) => j === i ? { ...x, keep: e.target.checked } : x))} />
                   <input className={`${input} md:w-1/4`} value={c.label}
@@ -188,7 +188,7 @@ export default function QualityUpload({ onSaved }: { onSaved: () => void }) {
             <div className={section}>
               <h4 className="text-sm font-semibold text-gray-900 dark:text-white">Harness</h4>
               {harness.map((h, i) => (
-                <div key={h.key} className="flex gap-2 items-start">
+                <div key={h.key} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <input type="checkbox" className={tick} checked={h.keep}
                     onChange={(e) => setHarness(harness.map((x, j) => j === i ? { ...x, keep: e.target.checked } : x))} />
                   <input className={`${input} md:w-1/4`} value={h.name}
@@ -218,7 +218,7 @@ export default function QualityUpload({ onSaved }: { onSaved: () => void }) {
                 </div>
               </div>
               {rules.map((g, i) => (
-                <div key={i} className="flex gap-2 items-start">
+                <div key={i} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <input type="checkbox" className={tick} checked={g.keep}
                     onChange={(e) => setRules(rules.map((x, j) => j === i ? { ...x, keep: e.target.checked } : x))} />
                   <input className={`${input} md:w-1/3`} value={g.title}
@@ -236,7 +236,7 @@ export default function QualityUpload({ onSaved }: { onSaved: () => void }) {
                 Knowledge Base <span className="font-normal text-xs text-gray-500">— added as new answers</span>
               </h4>
               {answers.map((a, i) => (
-                <div key={i} className="flex gap-2 items-start">
+                <div key={i} className="flex flex-col sm:flex-row gap-2 sm:items-start">
                   <input type="checkbox" className={tick} checked={a.keep}
                     onChange={(e) => setAnswers(answers.map((x, j) => j === i ? { ...x, keep: e.target.checked } : x))} />
                   <div className="flex-1 grid gap-1 md:grid-cols-[1fr_2fr_10rem]">
@@ -263,7 +263,7 @@ export default function QualityUpload({ onSaved }: { onSaved: () => void }) {
             </details>
           )}
 
-          <div className="flex gap-2">
+          <div className="sticky bottom-0 flex gap-2 py-3 bg-white dark:bg-gray-800">
             <button
               onClick={save}
               disabled={saving || !!nothing}

@@ -22,6 +22,7 @@ import Avatar from "../components/Avatar";
 import CspChat from "./CspChat";
 import ReplyLearning from "./ReplyLearning";
 import { api } from "../lib/api";
+import { DESKTOP, useMedia } from "../lib/useMedia";
 import { useUrlParam } from "../lib/useUrlParam";
 import type { ApiError, CspReplyRow } from "../lib/api";
 
@@ -65,6 +66,9 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
   // it open (No. 171); the quoted message to mark is not.
   const [chatCsp, setChatCsp] = useUrlParam("chat");
   const [highlight, setHighlight] = useState<string | undefined>();
+  // Desktop (No. 176): the list and the open chat side by side.
+  const desktop = useMedia(DESKTOP);
+  const sideBySide = desktop && !!chatCsp;
   const setChat = (c: { csp: string; highlight?: string } | null) => {
     setHighlight(c?.highlight);
     setChatCsp(c?.csp ?? null);
@@ -159,7 +163,8 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
       </div>
       <ReplyLearning version={rows?.length ?? 0} />
       {error && <p className="px-5 py-3 text-sm text-red-600 dark:text-red-400">{error}</p>}
-      <div className="divide-y divide-gray-100 dark:divide-gray-700">
+      <div className={sideBySide ? "grid grid-cols-[minmax(0,1fr)_minmax(22rem,28rem)] gap-4 p-4" : ""}>
+      <div className="divide-y divide-gray-100 dark:divide-gray-700 min-w-0">
         {rows?.map((r) => (
           <div key={r.id} className="px-5 py-3 grid gap-3 md:grid-cols-2 text-sm">
             <div>
@@ -167,11 +172,11 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                 <button
                   onClick={() => setChat({ csp: r.csp_id })}
                   title="Open this CSP's WhatsApp chat"
-                  className="flex items-center gap-2 hover:underline decoration-eko"
+                  className="flex items-center gap-2 text-left hover:underline decoration-eko"
                 >
                   <span className="text-gray-900 dark:text-white font-medium">{r.csp_name || "—"}</span>
                   <span className="text-xs font-mono text-gray-500">{r.csp_id}</span>
-                  <i className="fas fa-comments text-[11px] text-eko"></i>
+                  <i className="fas fa-comments text-xs text-eko"></i>
                 </button>
                 <span className={`px-2 py-0.5 rounded-full text-xs ${STATUS[r.status].cls}`}>
                   {STATUS[r.status].label}
@@ -186,13 +191,13 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   >
                     <span className="flex-1">
                       {m.text || `(${m.type})`}
-                      <span className="ml-2 text-[11px] text-gray-400">{when(m.at)}</span>
+                      <span className="ml-2 text-xs text-gray-400">{when(m.at)}</span>
                     </span>
                     {(r.status === "draft" || r.status === "failed") && m.text && (
                       <button
                         onClick={() => setQuotes({ ...quotes, [r.id]: m.text })}
                         title="Reply to this message"
-                        className="shrink-0 text-[11px] text-gray-400 hover:text-eko sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
+                        className="shrink-0 text-xs text-gray-400 hover:text-eko sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
                       >
                         <i className="fas fa-reply mr-1"></i>Reply
                       </button>
@@ -202,7 +207,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
               </div>
               <div className="mt-2 flex flex-wrap gap-1">
                 {r.intents.map((i) => (
-                  <span key={i.key} className="px-2 py-0.5 rounded text-[11px] bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                  <span key={i.key} className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300">
                     {i.label}
                   </span>
                 ))}
@@ -218,7 +223,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                         title="Open this message in the CSP's chat"
                         className="flex-1 text-left"
                       >
-                        <div className="text-[11px] font-semibold text-eko">
+                        <div className="text-xs font-semibold text-eko">
                           Replying to {r.csp_name || r.csp_id}
                         </div>
                         <div className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">{quotes[r.id]}</div>
@@ -271,7 +276,7 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
                   <div className="px-3 py-2 rounded-lg bg-green-50/50 dark:bg-green-900/10 text-gray-800 dark:text-gray-200">
                     <SentText text={r.reply_text} onOpen={(q) => setChat({ csp: r.csp_id, highlight: q })} />
                     {r.status === "sent" && r.edited !== null && (
-                      <span className={`ml-2 px-1.5 py-0.5 rounded text-[11px] ${
+                      <span className={`ml-2 px-1.5 py-0.5 rounded text-xs ${
                         r.edited ? "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300"
                                  : "bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300"}`}>
                         {r.edited ? "changed from the draft" : "sent as drafted"}
@@ -317,7 +322,13 @@ export default function CspReplies({ canSwitch }: { canSwitch: boolean }) {
           </p>
         )}
       </div>
-      {chatCsp && <CspChat cspId={chatCsp} highlight={highlight} onClose={() => setChat(null)} />}
+      {sideBySide && (
+        <div className="sticky top-0 h-[calc(100dvh-10rem)] min-h-[24rem]">
+          <CspChat inline cspId={chatCsp} highlight={highlight} onClose={() => setChat(null)} />
+        </div>
+      )}
+      </div>
+      {chatCsp && !sideBySide && <CspChat cspId={chatCsp} highlight={highlight} onClose={() => setChat(null)} />}
     </section>
   );
 }

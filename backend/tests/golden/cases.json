@@ -259,6 +259,15 @@
      "expect": {"decision": "wrote_answer", "value": "8475"}},
     {"id": "VER-06", "kind": "verify", "rule": "No. 171", "title": "Answer never reached the sheet, sheet changed since: the sheet's value stays",
      "input": {"field": "branch_code", "answered": "8475", "current": "8476", "reached": false, "before": "8474"},
-     "expect": {"decision": "kept_sheet", "value": "8476"}}
+     "expect": {"decision": "kept_sheet", "value": "8476"}},
+
+    {"id": "MSG-01", "kind": "message", "rule": "No. 174", "title": "A person's own message may go to an existing CSP",
+     "input": {"on_hold": "", "existing": true, "kind": "custom"}, "expect": {"allowed": true}},
+    {"id": "MSG-02", "kind": "message", "rule": "No. 174", "title": "The details form never goes to an existing CSP",
+     "input": {"on_hold": "", "existing": true, "kind": "details_form"}, "expect": {"allowed": false, "says": "existing CSP"}},
+    {"id": "MSG-03", "kind": "message", "rule": "No. 174", "title": "Nothing goes to a CSP on hold, even a person's own message",
+     "input": {"on_hold": "Not live yet", "existing": false, "kind": "custom"}, "expect": {"allowed": false, "says": "on hold"}},
+    {"id": "MSG-04", "kind": "message", "rule": "No. 174", "title": "An old CSP from the Calling sheet may get the details form",
+     "input": {"on_hold": "", "existing": false, "kind": "details_form"}, "expect": {"allowed": true}}
   ]
 }

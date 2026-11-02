@@ -86,6 +86,9 @@ class OTPVerifyResponse(BaseModel):
     # The account's address: after Log in with Google the page has not
     # been told it (No. 171).
     email: Optional[str] = None
+    # Signed in (No. 173): true even when the token went into the browser's
+    # cookie instead of this reply.
+    signed_in: bool = False
     # Set instead of the tokens when the person belongs to more than one
     # workspace: they choose, then exchange selection_token for real tokens.
     choose_workspace: bool = False

@@ -92,8 +92,8 @@ export default function WhatsAppMessageDetails({
   return (
     <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
       <div className="absolute inset-0 bg-black/40" onClick={onClose}></div>
-      <aside className="relative w-full max-w-2xl h-full overflow-y-auto bg-white dark:bg-gray-800 shadow-xl">
-        <div className="sticky top-0 flex items-start justify-between gap-4 px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+      <aside className="relative w-full max-w-2xl h-full overflow-y-auto bg-white dark:bg-gray-800 shadow-xl pb-[env(safe-area-inset-bottom)]">
+        <div className="sticky top-0 flex items-start justify-between gap-4 px-4 sm:px-6 py-4 pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
           <div>
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {m ? `${m.csp_id || "—"} ${m.csp_name ? `· ${m.csp_name}` : ""}` : "Message"}
@@ -162,14 +162,14 @@ export default function WhatsAppMessageDetails({
                             : "bg-white text-gray-900 dark:bg-gray-700 dark:text-gray-100 border border-gray-200 dark:border-gray-600"
                       }`}>
                         {c.automatic && (
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                          <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                             Automatic reply — not counted as a response
                           </div>
                         )}
                         <div className="whitespace-pre-wrap break-words">
                           {c.text || <span className="italic">({c.type})</span>}
                         </div>
-                        <div className="text-[10px] text-gray-500 mt-1 text-right">
+                        <div className="text-xs text-gray-500 mt-1 text-right">
                           {c.from === "us" ? "Sent by us · " : ""}{when(c.at)}
                         </div>
                       </div>

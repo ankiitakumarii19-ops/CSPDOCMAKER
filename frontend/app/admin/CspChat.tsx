@@ -24,11 +24,14 @@ export default function CspChat({
   cspId,
   highlight,
   onClose,
+  inline = false,
 }: {
   cspId: string;
   /** A message to scroll to and mark — the one that was quoted. */
   highlight?: string;
   onClose: () => void;
+  /** Beside a list on a desktop (No. 176) rather than over the page. */
+  inline?: boolean;
 }) {
   const [chat, setChat] = useState<Chat | null>(null);
   const [error, setError] = useState("");
@@ -36,7 +39,8 @@ export default function CspChat({
   useEffect(() => {
     let current = true;
     api
-      .cspChat(cspId)
+      // The CSP-side address works for RMs (own CSPs) and Admins (No. 174).
+      .cspConversation(cspId)
       .then((c) => current && setChat(c))
       .catch((e) => current && setError((e as ApiError).detail || "Could not load the chat."));
     return () => {
@@ -62,18 +66,25 @@ export default function CspChat({
   const marked = (text: string) =>
     !!highlight && !!norm(highlight) && norm(text).startsWith(norm(highlight));
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose}></div>
-      <aside className="relative w-full max-w-2xl h-full overflow-y-auto bg-white dark:bg-gray-800 shadow-xl">
-        <div className="sticky top-0 z-10 flex items-start justify-between gap-4 px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
-          <div>
+  const body = (
+      <aside className={inline
+        ? "w-full h-full overflow-y-auto bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700"
+        : "relative w-full max-w-2xl h-full overflow-y-auto bg-white dark:bg-gray-800 shadow-xl pb-[env(safe-area-inset-bottom)]"}>
+        <div className={`sticky top-0 z-10 flex items-start justify-between gap-4 px-4 sm:px-6 py-4 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 ${inline ? "" : "pt-[calc(1rem+env(safe-area-inset-top))] sm:pt-4"}`}>
+          <div className="flex items-start min-w-0">
+            {!inline && (
+              <button onClick={onClose} aria-label="Back" className="sm:hidden -ml-2 mr-1 px-2 text-gray-500 dark:text-gray-300">
+              <i className="fas fa-arrow-left"></i>
+            </button>
+            )}
+          <div className="min-w-0">
             <h3 className="text-lg font-bold text-gray-900 dark:text-white">
               {cspId} {chat?.csp_name ? `· ${chat.csp_name}` : ""}
             </h3>
             <p className="text-sm text-gray-500 dark:text-gray-400">
               WhatsApp chat{chat?.phones.length ? ` · ${chat.phones.join(", ")}` : ""}
             </p>
+          </div>
           </div>
           <button
             onClick={onClose}
@@ -84,7 +95,7 @@ export default function CspChat({
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-3">
+        <div className="px-4 sm:px-6 py-5 space-y-3">
           {error && (
             <div className="px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
               {error}
@@ -113,14 +124,14 @@ export default function CspChat({
                           : "bg-white text-gray-900 dark:bg-gray-700 dark:text-gray-100 border border-gray-200 dark:border-gray-600"
                     } ${hit ? "ring-2 ring-eko" : ""}`}>
                       {c.automatic && (
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-1">
+                        <div className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                           Automatic reply — not counted as a response
                         </div>
                       )}
                       <div className="whitespace-pre-wrap break-words">
                         {c.text || <span className="italic">({c.type})</span>}
                       </div>
-                      <div className="text-[10px] text-gray-500 mt-1 text-right">
+                      <div className="text-xs text-gray-500 mt-1 text-right">
                         {c.from === "us" ? "Sent by us · " : ""}{when(c.at)}
                       </div>
                     </div>
@@ -131,6 +142,12 @@ export default function CspChat({
           )}
         </div>
       </aside>
+  );
+  if (inline) return body;
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose}></div>
+      {body}
     </div>
   );
 }

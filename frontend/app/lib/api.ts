@@ -28,6 +28,9 @@ export interface AgentInfo {
   proposes: string[];
   trigger: string;
   every_minutes: number | null;
+  /** Risk class (No. 173): low / medium / high / critical, and why. */
+  risk?: "low" | "medium" | "high" | "critical";
+  risk_why?: string;
   implemented: boolean;
   enabled: boolean;
   last_run_at: string | null;
@@ -167,6 +170,84 @@ export interface WhatsAppMessageDetail {
   } | null;
 }
 
+/** The header's search, grouped (No. 175). */
+export interface GlobalSearchResult {
+  query: string;
+  csps: Array<{
+    csp_id: string; name: string; district: string; state: string;
+    mobile: string; rm_name: string; can_act: boolean;
+  }>;
+  documents: Array<{
+    id: string; csp_id: string; name: string; label: string; version: number;
+    created_at: string | null;
+  }>;
+  chats: Array<{ csp_id: string; name: string; snippet: string; at: string | null }>;
+  action_items: ActionItem[];
+}
+
+/** An Action Required card, in a list or in History (No. 174). */
+export interface ActionItem {
+  id: string;
+  csp_id: string;
+  name: string;
+  missing: string[];
+  status: "pending" | "fixed";
+  flagged_at: string | null;
+  fixed_at: string | null;
+  fixed_via: string | null;
+  fixed_via_label: string;
+  fixed_note: string | null;
+}
+
+/** A way to message a CSP, and whether it can send now (No. 174). */
+export interface SendChannel {
+  kind: "whatsapp" | "email" | "sms" | "in_app";
+  label: string;
+  can_send: boolean;
+  why_not: string;
+}
+
+/** One card opened: everything needed to act (No. 174). */
+export interface ActionDetail extends ActionItem {
+  rm_name: string;
+  mobile: string;
+  email: string;
+  on_hold: string;
+  existing: boolean;
+  asked: Array<{
+    at: string | null; channel: string; to: string; status: string;
+    fields: string[]; answered_at: string | null; expires_at: string | null;
+    error: string;
+  }>;
+  whatsapp: Array<{
+    at: string | null; what: string; stage: string; why: string;
+    sent_by: string | null; error: string;
+  }>;
+  emails: Array<{
+    at: string | null; kind: string; subject: string; status: string;
+    to: string; opened_at: string | null; bounced: boolean;
+  }>;
+  replies: Array<{
+    messages: { at: string; text: string; type: string }[];
+    status: string; answer: string; sent_at: string | null; by: string | null;
+  }>;
+  sent_by_people: Array<{
+    at: string | null; by: string | null; channel: string | null;
+    kind: string | null; text: string | null; sent: boolean; reason: string | null;
+  }>;
+  channels: SendChannel[];
+}
+
+/** What one send to one CSP did (No. 174). */
+export interface CspSendResult {
+  csp_id: string;
+  sent: boolean;
+  reason: string;
+  channel: string;
+  kind: string;
+  text: string;
+}
+
 /** One CSP's whole WhatsApp chat (No. 171). */
 export interface CspChat {
   csp_id: string;
@@ -207,6 +288,8 @@ export interface MessagingOverview {
   channel_kinds: string[];
   providers: string[];
   purposes: string[];
+  /** What a person can send through now, and why not (No. 174). */
+  send_channels?: SendChannel[];
 }
 
 export interface SendCandidate {
@@ -216,7 +299,13 @@ export interface SendCandidate {
   email: string;
   mobile: string;
   already_asked: boolean;
+  /** When they were last asked (No. 174). */
+  asked_at?: string | null;
   reachable: boolean;
+  /** Why nothing may be sent to them now; "" = not on hold. */
+  on_hold?: string;
+  /** In CSPDATA before the import: never the details form. */
+  existing?: boolean;
 }
 
 export interface SendResult {
@@ -381,6 +470,8 @@ export interface SignInResult {
   workspace_name?: string;
   /** The account's address (needed after Log in with Google, No. 171). */
   email?: string;
+  /** Signed in: the sign-in is now in a protected cookie (No. 173). */
+  signed_in?: boolean;
   choose_workspace?: boolean;
   workspaces?: WorkspaceChoice[];
   selection_token?: string;
@@ -458,10 +549,34 @@ export interface DatabaseField {
   value: string | number | boolean | null;
 }
 
+/** One column of a CSP's sheet row, in the edit form (No. 175). */
+export interface CspEditColumn {
+  column: string;
+  field: string | null;
+  value: string;
+  kind: "phone" | "email" | "text";
+  required: boolean;
+  locked: boolean;
+}
+
+/** One change to a CSP, in its edit history (No. 175). */
+export interface CspEdit {
+  at: string | null;
+  by: string | null;
+  via: string | null;
+  column: string | null;
+  field: string | null;
+  old: string | null;
+  new: string | null;
+}
+
 export interface DatabaseRecord {
   csp_id: string;
   name: string | null;
   level: string;
+  /** This person may edit it (No. 175: RMs their own CSPs). */
+  can_edit?: boolean;
+  edit_history?: CspEdit[];
   sheet: DatabaseField[];
   app: DatabaseField[];
   photos: { kind: string; filename: string; size: number; updated_at: string | null }[];
@@ -474,6 +589,8 @@ export interface DatabaseRecord {
 
 export interface CSPDetail {
   csp_id: string;
+  /** May this person act on it (No. 175: an RM only on their own). */
+  can_act?: boolean | null;
   csp_code?: string | null;
   name: string;
   email?: string | null;
@@ -969,32 +1086,27 @@ export interface AssistantSendResult {
 
 class ApiClient {
   // Only a fallback for browsers that refuse storage (some private modes).
-  private accessToken: string | null = null;
-
-  // The sign-in is kept in localStorage, not sessionStorage (No. 100): it
-  // survives closing the tab or the browser, and lasts until the person logs
-  // out or the server's 24 hours run out. Read from storage on every call,
-  // so logging out in one tab logs out every tab.
-  setToken(token: string) {
-    this.accessToken = token;
-    try {
-      localStorage.setItem("access_token", token);
-    } catch {
-      /* storage refused: the in-memory copy serves this tab */
-    }
+  // The sign-in itself is a protected cookie the server sets (No. 173):
+  // HttpOnly, so no script on the page can read it, and every request
+  // carries it by itself. Only the person's name, email and role are kept
+  // in localStorage ("user"), for the screens. A sign-in from before this
+  // ("access_token" in localStorage) is no longer sent: the first request
+  // answers 401 and the person signs in once more.
+  getToken(): string | null {
+    return null;
   }
 
-  getToken(): string | null {
-    if (typeof window === "undefined") return null;
+  /** Someone is signed in, as far as this browser knows. */
+  private signedIn(): boolean {
+    if (typeof window === "undefined") return false;
     try {
-      return localStorage.getItem("access_token");
+      return localStorage.getItem("user") !== null;
     } catch {
-      return this.accessToken;
+      return false;
     }
   }
 
   clearToken() {
-    this.accessToken = null;
     try {
       for (const key of ["access_token", "refresh_token", "user"]) {
         localStorage.removeItem(key);
@@ -1009,8 +1121,14 @@ class ApiClient {
   /** fetch, but a network failure becomes an ApiError the screens can show
    *  instead of a bare "Failed to fetch". */
   private async send(url: string, init: RequestInit): Promise<Response> {
+    // Every request says it is the app's own (the server refuses a change
+    // signed in by the cookie without it — another site cannot add it) and
+    // asks for the sign-in as a cookie (No. 173).
+    const headers = new Headers(init.headers);
+    headers.set("X-Requested-With", "CSPDocMaker");
+    headers.set("X-Session-Cookie", "1");
     try {
-      return await fetch(url, init);
+      return await fetch(url, { ...init, headers, credentials: "same-origin" });
     } catch {
       throw {
         detail: "Cannot reach the server. Check your connection and try again.",
@@ -1050,7 +1168,7 @@ class ApiClient {
     }
     // A login lasts a limited time. When the server no longer accepts it,
     // start again at sign-in rather than leaving every screen failing.
-    if (response.status === 401 && !path.startsWith("/auth/") && this.getToken()) {
+    if (response.status === 401 && !path.startsWith("/auth/") && this.signedIn()) {
       this.clearToken();
       if (typeof window !== "undefined") {
         // A full page load on purpose: it drops every screen's in-memory
@@ -1100,6 +1218,8 @@ class ApiClient {
       allowed_email_domains_text: string;
       /** Blank = no "Log in with Google" button (No. 171). */
       google_client_id?: string;
+      /** A test copy of the app: every screen says so (No. 173). */
+      test_copy?: boolean;
     }>("/auth/config");
   }
 
@@ -1183,12 +1303,13 @@ class ApiClient {
   }
 
   // ---- CSP ----
-  async searchCSP(query: string) {
+  /** Part of a code, name, phone, email, district, state or RM (No. 175). */
+  async searchCSP(query: string, limit = 20) {
     return this.request<{
       results: CSPDetail[];
       total: number;
       query: string;
-    }>(`/csps/search?q=${encodeURIComponent(query)}`);
+    }>(`/csps/search?q=${encodeURIComponent(query)}&limit=${limit}`);
   }
 
   async getCSP(cspId: string) {
@@ -1220,6 +1341,40 @@ class ApiClient {
       }>;
       total: number;
     }>("/alerts");
+  }
+
+  /** The header's search across the app (No. 175), grouped. */
+  async globalSearch(q: string, limit = 6) {
+    return this.request<GlobalSearchResult>(
+      `/search?q=${encodeURIComponent(q)}&limit=${limit}`
+    );
+  }
+
+  // ---- Action Required (No. 174) ----
+  async alertHistory(show: "all" | "fixed" | "pending" = "all", q = "") {
+    return this.request<{ items: ActionItem[]; total: number }>(
+      `/alerts/history?show=${show}&q=${encodeURIComponent(q)}`
+    );
+  }
+
+  async alertDetail(id: string) {
+    return this.request<ActionDetail>(`/alerts/${encodeURIComponent(id)}`);
+  }
+
+  /** Message one CSP now (RMs: their own CSPs only). */
+  async messageCsp(
+    cspId: string,
+    body: { kind: "custom" | "details_form"; channel: string; text?: string }
+  ) {
+    return this.request<CspSendResult>(`/csps/${encodeURIComponent(cspId)}/message`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  /** One CSP's WhatsApp chat — works for RMs (own CSPs) and Admins. */
+  async cspConversation(cspId: string) {
+    return this.request<CspChat>(`/csps/${encodeURIComponent(cspId)}/conversation`);
   }
 
   /** Upload a CSP's photo. Sent as multipart, so the JSON content type the
@@ -1446,6 +1601,21 @@ class ApiClient {
     return this.request<DatabaseRecord>(
       `/admin/database/${encodeURIComponent(cspId)}`
     );
+  }
+
+  /** The CSP's whole sheet row, read now, for the edit form (No. 175). */
+  async databaseEditForm(cspId: string) {
+    return this.request<{ csp_id: string; level: string; tab: string; row_number: number; columns: CspEditColumn[] }>(
+      `/admin/database/${encodeURIComponent(cspId)}/edit`
+    );
+  }
+
+  /** Write the changed columns; `seen` = what the form showed for them. */
+  async databaseSave(cspId: string, body: { changes: Record<string, string>; seen: Record<string, string> }) {
+    return this.request<{ saved: string[] }>(`/admin/database/${encodeURIComponent(cspId)}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    });
   }
 
   /** A stored photo or PDF, fetched with the login so it can be shown. */
@@ -2030,6 +2200,36 @@ class ApiClient {
         }),
       }
     );
+  }
+
+  /** A saved message (No. 174): purpose "custom". */
+  async addMessageTemplate(body: { name: string; body: string; purpose?: string; channel_kind?: string }) {
+    return this.request<{ id: string; name: string }>("/admin/messaging/templates", {
+      method: "POST",
+      body: JSON.stringify({
+        name: body.name, purpose: body.purpose ?? "custom",
+        channel_kind: body.channel_kind ?? "whatsapp", body: body.body,
+        languages: [], active: true,
+      }),
+    });
+  }
+
+  async deleteMessageTemplate(id: string) {
+    return this.request<{ deleted: boolean }>(
+      `/admin/messaging/templates/${encodeURIComponent(id)}`, { method: "DELETE" });
+  }
+
+  /** At most 50 CSPs a call — the screen sends a big selection in parts. */
+  async sendMessage(body: {
+    csp_ids: string[];
+    kind: "custom" | "details_form";
+    channel: string;
+    text?: string;
+    template_id?: string | null;
+    name?: string;
+  }) {
+    return this.request<{ asked: number; sent: number; failed: number; results: CspSendResult[] }>(
+      "/admin/messaging/send-message", { method: "POST", body: JSON.stringify(body) });
   }
 
   /** Reaches real people and cannot be taken back. Recipients are named. */

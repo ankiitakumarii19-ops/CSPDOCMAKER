@@ -15,7 +15,7 @@ API endpoints for user authentication:
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
@@ -63,6 +63,8 @@ async def auth_config():
         "allowed_email_domains_text": "any",
         # Blank = no "Log in with Google" button (No. 171).
         "google_client_id": settings.google_client_id.strip(),
+        # Every screen says so on a test copy (No. 173).
+        "test_copy": bool(settings.test_copy),
     }
 
 
@@ -223,8 +225,24 @@ async def login(
     }
 
 
+def _deliver(result: OTPVerifyResponse, http_request: Request,
+             response: Response) -> OTPVerifyResponse:
+    """The browser (X-Session-Cookie: 1) gets the sign-in as a protected
+    cookie and no token in the body (No. 173); scripts get the body."""
+    from app import session_cookie
+
+    if result.access_token and session_cookie.wants_cookie(http_request):
+        claims = jwt_service.decode_token(result.access_token) or {}
+        seconds = int(claims.get("exp", 0) - datetime.now(timezone.utc).timestamp())
+        session_cookie.set_on(response, result.access_token, seconds)
+        result.access_token = None
+        result.refresh_token = None
+    return result
+
+
 @router.post("/verify-otp", response_model=OTPVerifyResponse)
 async def verify_otp(request: OTPVerifyRequest, http_request: Request,
+                     response: Response,
                      db: AsyncSession = Depends(get_db)):
     """Verify OTP and issue JWT tokens.
 
@@ -258,7 +276,9 @@ async def verify_otp(request: OTPVerifyRequest, http_request: Request,
             detail="User not found. Please sign up first.",
         )
 
-    return await _finish_sign_in(db, user, http_request, method="email_code")
+    return _deliver(
+        await _finish_sign_in(db, user, http_request, method="email_code"),
+        http_request, response)
 
 
 async def _finish_sign_in(db: AsyncSession, user, http_request: Request,
@@ -375,11 +395,13 @@ def _issue_tokens(user, member, ws) -> OTPVerifyResponse:
         workspace_id=str(ws.id),
         workspace_name=ws.name,
         email=user.email,
+        signed_in=True,
     )
 
 
 @router.post("/google", response_model=OTPVerifyResponse)
 async def google_sign_in(request: GoogleSignInRequest, http_request: Request,
+                         response: Response,
                          db: AsyncSession = Depends(get_db)):
     """Log in with Google (No. 171): the ID token from Google's button
     replaces the password and the emailed code. Same email = same account;
@@ -393,11 +415,14 @@ async def google_sign_in(request: GoogleSignInRequest, http_request: Request,
         await db.rollback()
         raise HTTPException(status_code=e.status_code, detail=e.message)
     logger.info("auth_router.google_sign_in: %s proved by Google", email)
-    return await _finish_sign_in(db, user, http_request, method="google")
+    return _deliver(
+        await _finish_sign_in(db, user, http_request, method="google"),
+        http_request, response)
 
 
 @router.post("/select-workspace", response_model=OTPVerifyResponse)
 async def select_workspace(request: WorkspaceSelectRequest,
+                           http_request: Request, response: Response,
                            db: AsyncSession = Depends(get_db)):
     """Second half of signing in for someone in several workspaces."""
     email = jwt_service.verify_selection_token(request.selection_token)
@@ -420,7 +445,7 @@ async def select_workspace(request: WorkspaceSelectRequest,
                             detail="Please log in again.")
     ws = next(w for m, w in await workspace_service.memberships(db, email)
               if m.id == member.id)
-    return _issue_tokens(user, member, ws)
+    return _deliver(_issue_tokens(user, member, ws), http_request, response)
 
 
 @router.post("/resend-otp")
@@ -497,12 +522,15 @@ async def resend_otp(
 
 
 @router.post("/logout")
-async def logout():
-    """Logout — client should discard tokens.
+async def logout(response: Response):
+    """Logout — the browser's sign-in cookie is removed (No. 173); a script
+    discards its own token.
 
     Server-side token invalidation would require a Redis blacklist.
-    For now, the client clears its session storage.
     """
+    from app import session_cookie
+
+    session_cookie.clear_on(response)
     return {"message": "Logged out successfully."}
 
 

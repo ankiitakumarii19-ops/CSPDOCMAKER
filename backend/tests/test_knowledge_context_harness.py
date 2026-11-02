@@ -145,7 +145,8 @@ def test_with_nothing_recorded_the_harness_says_so(qdb):
     rows = _rows(qdb)
     assert list(rows) == ["auto_fill", "corrections", "kept_rate", "checked",
                           "freshness", "sending", "mapping_loop",
-                          "contact_loop", "csp_replies", "resend", "feedback",
+                          "contact_loop", "csp_replies", "resend", "alerts",
+                          "feedback",
                           "chat", "golden", "tests"]
     assert rows["mapping_loop"]["state"] == rows["contact_loop"]["state"] == "empty"
     assert rows["resend"]["state"] == "empty"        # No. 164
@@ -153,7 +154,7 @@ def test_with_nothing_recorded_the_harness_says_so(qdb):
     assert rows["kept_rate"]["now"] == "no data yet"
     assert rows["sending"]["state"] == "ok"
     assert rows["chat"] == {**rows["chat"], "now": "none", "state": "ok"}
-    assert rows["golden"]["now"] == "66 cases in this version"   # +6 verify (No. 171)
+    assert rows["golden"]["now"] == "70 cases in this version"   # +6 verify (No. 171), +4 message (No. 174)
     assert rows["golden"]["state"] == rows["tests"]["state"] == "laptop"
     assert rows["freshness"]["state"] == "attention", "nothing read yet"
 

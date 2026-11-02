@@ -408,7 +408,33 @@ export default function WhatsAppMessages() {
               No messages here.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Phones (No. 176): one card per message; a tap opens it. */}
+            <div className="sm:hidden divide-y divide-gray-100 dark:divide-gray-700/60">
+              {rows.map((r) => {
+                const badge = STAGE_BADGE[r.stage];
+                return (
+                  <button key={r.id} onClick={() => setOpened(r.id)} className="w-full text-left px-4 py-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-sm text-gray-900 dark:text-white">{r.csp_id || "—"}</span>
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${badge.cls}`}>{badge.label}</span>
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-300">{r.csp_name || ""}</div>
+                    <div className="text-sm text-gray-700 dark:text-gray-300">
+                      {KIND_TITLE[r.kind] ?? "Message"} · {when(r.sent_at)}
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      {r.phone || "—"}
+                      {r.responded === true && " · replied"}
+                      {r.responded === false && " · no reply yet"}
+                      {r.sent_because && ` · ${r.sent_because_label}`}
+                    </div>
+                    {r.reason && <div className="text-xs text-gray-500 mt-0.5">{r.reason}</div>}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-wider text-gray-500 border-b border-gray-200 dark:border-gray-700">
@@ -434,7 +460,7 @@ export default function WhatsAppMessages() {
                           <div className="font-semibold text-gray-900 dark:text-white">
                             {r.csp_id || "—"}
                             {r.is_test && (
-                              <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
+                              <span className="ml-2 px-1.5 py-0.5 rounded text-xs font-bold bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300">
                                 TEST
                               </span>
                             )}
@@ -448,7 +474,7 @@ export default function WhatsAppMessages() {
                           {KIND_TITLE[r.kind] ?? "Message"}
                           {r.sent_because && (
                             <div className="mt-1">
-                              <span className="px-1.5 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
+                              <span className="px-1.5 py-0.5 rounded text-xs bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300">
                                 {r.sent_because_label}
                               </span>
                             </div>
@@ -507,6 +533,7 @@ export default function WhatsAppMessages() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </section>
       )}

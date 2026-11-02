@@ -90,8 +90,9 @@ async def overview(
              "last_used_at": c.last_used_at.isoformat()
                              if c.last_used_at else None,
              # Said plainly so nobody configures one and wonders why
-             # nothing arrives.
-             "can_send": c.kind == "email"}
+             # nothing arrives. WhatsApp sends through Eko's platform
+             # (D10) — it was wrongly shown as unable to (No. 174).
+             "can_send": c.kind in ("email", "whatsapp")}
             for c in channels
         ],
         "templates": [
@@ -110,6 +111,8 @@ async def overview(
              "created_at": c.created_at.isoformat()}
             for c in campaigns
         ],
+        # What a person can send through right now, and why not (No. 174).
+        "send_channels": _send_channels(),
         "channel_kinds": list(CHANNEL_KINDS),
         "providers": list(PROVIDERS),
         "purposes": list(PURPOSES),
@@ -219,22 +222,31 @@ async def candidates(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("admin", "super_admin")),
 ):
-    """Who could usefully be asked, and who cannot be reached at all."""
+    """Every CSP (No. 174: anyone can be messaged), with what they still
+    miss, whether and when they were asked, and what would stop a send —
+    on hold, unreachable, or (for the details form) an existing CSP."""
     from app.models.data_request import DataRequest
+    from app.models.source_sheet import SourceSheetState
     from app.services import field_ownership as fo
     from app.services.alert_composer import normalize_mobile
 
-    asked = {r.csp_id for r in (await session.execute(
-        select(DataRequest).where(DataRequest.status.in_(("open", "answered")))
-    )).scalars().all()}
+    asked = {}
+    for r in (await session.execute(
+            select(DataRequest).where(DataRequest.status.in_(("open", "answered")))
+    )).scalars().all():
+        if r.csp_id not in asked or r.created_at > asked[r.csp_id]:
+            asked[r.csp_id] = r.created_at
+    imported = set((await session.execute(
+        select(SourceSheetState.csp_code).where(
+            SourceSheetState.imported_as.isnot(None)))).scalars())
 
     rows = []
-    for record in (await session.execute(select(CSPRecord))).scalars().all():
+    for record in (await session.execute(
+            select(CSPRecord).order_by(CSPRecord.name))).scalars().all():
         missing = fo.missing(record)[fo.CSP]
-        if not missing:
-            continue
         reachable = bool(normalize_mobile(record.mobile or "")
                          or (record.email or "").strip())
+        code = record.csp_code or record.csp_id
         rows.append({
             "csp_id": record.csp_id,
             "name": record.name or "",
@@ -242,9 +254,88 @@ async def candidates(
             "email": record.email or "",
             "mobile": record.mobile or "",
             "already_asked": record.csp_id in asked,
+            "asked_at": asked[record.csp_id].isoformat()
+                        if record.csp_id in asked else None,
             "reachable": reachable,
+            "on_hold": record.send_hold or "",
+            # In CSPDATA before the import: never the details form (D14).
+            "existing": (record.origin or "") == "baseline" and code not in imported,
         })
     return {"candidates": rows, "total": len(rows)}
+
+
+def _send_channels() -> list:
+    from app.services import manual_messages
+    return manual_messages.channels()
+
+
+class MessageIn(BaseModel):
+    """A message to these CSPs (No. 174). The screen sends a big selection
+    in parts, so one request is at most 50 people."""
+
+    csp_ids: List[str] = Field(..., min_length=1, max_length=50)
+    kind: str = "custom"                   # custom | details_form
+    channel: str = "whatsapp"              # whatsapp | email
+    text: str = Field("", max_length=2000)
+    template_id: Optional[str] = None
+    name: Optional[str] = Field(None, max_length=200)
+
+
+@router.post("/send-message")
+async def send_message(
+    body: MessageIn,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Send each named CSP the message, and say per person what happened.
+    The rules are in services/manual_messages.py (on hold never; the details
+    form never to an existing CSP; server only). Logged per message and as
+    one campaign row."""
+    from app.services import manual_messages as mm
+
+    if body.kind not in (mm.CUSTOM, mm.DETAILS_FORM):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown message kind.")
+    if body.kind == mm.CUSTOM and not body.text.strip():
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The message is empty.")
+    who = _who(user).lower()
+
+    def _send(sync):
+        results = []
+        for csp_id in body.csp_ids:
+            record = sync.execute(select(CSPRecord).where(
+                CSPRecord.csp_id == csp_id)).scalars().first()
+            if record is None:
+                results.append({"csp_id": csp_id, "sent": False,
+                                "reason": "no such CSP"})
+                continue
+            results.append(mm.send(sync, record, kind=body.kind,
+                                   channel=body.channel, text=body.text, by=who))
+        sent = sum(1 for r in results if r.get("sent"))
+        failed = len(results) - sent
+        template_id = None
+        if body.template_id:
+            import uuid as _uuid
+            try:
+                template_id = _uuid.UUID(body.template_id)
+            except ValueError:
+                template_id = None
+        sync.add(MessageCampaign(
+            name=(body.name or f"Message to {len(body.csp_ids)} CSP(s)")[:200],
+            template_id=template_id, recipients=list(body.csp_ids),
+            status=SENT if failed == 0 else (PARTIAL if sent else FAILED),
+            sent_count=sent, failed_count=failed,
+            outcome={"kind": body.kind, "channel": body.channel,
+                     "text": body.text[:1000], "results": results},
+            started_by=who, finished_at=datetime.now(timezone.utc)))
+        return results, sent, failed
+
+    results, sent, failed = await session.run_sync(_send)
+    await session.commit()
+    logger.info("messaging_router.send_message: %s sent a %s %s message to "
+                "%d CSP(s): %d sent, %d not", who, body.kind, body.channel,
+                len(body.csp_ids), sent, failed)
+    return {"asked": len(body.csp_ids), "sent": sent, "failed": failed,
+            "results": results}
 
 
 @router.post("/send")
@@ -318,6 +409,25 @@ async def send_now(
                 _who(user), len(body.csp_ids), sent, failed)
     return {"asked": len(body.csp_ids), "sent": sent, "failed": failed,
             "results": results}
+
+
+@router.delete("/templates/{template_id}")
+async def delete_template(
+    template_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Remove a saved message (No. 174). A supplied one cannot be removed —
+    the app's own sends use it."""
+    template = await _template(session, template_id)
+    if template.is_builtin:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "A supplied wording cannot be deleted; edit it instead.")
+    await session.delete(template)
+    await session.commit()
+    logger.info("messaging_router.delete_template: %s deleted by %s",
+                template.name, _who(user))
+    return {"deleted": True}
 
 
 async def _channel(session: AsyncSession, channel_id: str) -> MessageChannel:

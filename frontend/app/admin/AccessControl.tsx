@@ -310,8 +310,9 @@ export default function AccessControl({
         </div>
       )}
 
-      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden">
-        <table className="w-full text-left border-collapse">
+      {/* Scrolls inside its box on a phone rather than cutting columns (No. 176). */}
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-x-auto">
+        <table className="w-full min-w-[40rem] text-left border-collapse">
           <thead className="bg-gray-50 dark:bg-gray-900/40 text-xs uppercase tracking-wider text-gray-500">
             <tr>
               <th className="px-4 py-3 font-semibold">Person</th>
@@ -350,7 +351,7 @@ export default function AccessControl({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase">
+                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 uppercase">
                     {p.role}
                   </span>
                 </td>
@@ -380,7 +381,7 @@ export default function AccessControl({
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                       p.active
                         ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
                         : "bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300"

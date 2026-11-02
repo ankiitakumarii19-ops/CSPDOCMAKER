@@ -81,6 +81,9 @@ async def list_agents(
             "proposes": agent.proposes,
             "trigger": agent.trigger,
             "every_minutes": agent.every_minutes,
+            # Risk class (No. 173, standards C1).
+            "risk": agent.risk,
+            "risk_why": agent.risk_why,
             "implemented": agent_runner.is_implemented(agent.key),
             "enabled": state.enabled if state else agent.enabled_by_default,
             "last_run_at": state.last_run_at.isoformat()

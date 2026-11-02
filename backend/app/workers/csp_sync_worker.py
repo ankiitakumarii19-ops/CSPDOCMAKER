@@ -256,6 +256,20 @@ def sync_csp_data(self):
                 "run: %s: %s", type(e).__name__,
                 str(e).splitlines()[0][:300], exc_info=True)
 
+        # No. 174: an alert whose missing details the sheet now has goes to
+        # Action Required's History at once, not when documents are made.
+        try:
+            with session.begin_nested():
+                from app.services import alert_service
+                moved = alert_service.recheck(session)
+            if moved:
+                logger.info("csp_sync_worker: %d Action Required item(s) "
+                            "found filled and moved to History", moved)
+        except Exception as e:
+            logger.error("csp_sync_worker: Action Required could not be "
+                         "re-checked this run: %s: %s", type(e).__name__, e,
+                         exc_info=True)
+
         run.status = "completed"
         run.rows_read = len(rows)
         run.created_count = created

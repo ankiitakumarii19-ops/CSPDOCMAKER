@@ -16,6 +16,7 @@ code — the same functions the sync, the jobs and the forms call:
   channel    message_sender    — WhatsApp or email (No. 7)
   go_live    source_sheets.run — old or new, over several runs (No. 121, 145)
   verify     verification_auto — which value wins a difference (No. 171)
+  message    manual_messages   — who may get a person's message (No. 174)
 
 Run before every deploy (DEPLOY.md):
 
@@ -56,7 +57,7 @@ def _cases(*kinds):
 # ---- the file itself ----------------------------------------------------
 
 RUNNERS = {"documents", "info", "rm", "hold", "mobile", "address", "ask",
-           "form", "channel", "go_live", "verify"}
+           "form", "channel", "go_live", "verify", "message"}
 
 
 def test_the_golden_file_is_well_formed():
@@ -148,6 +149,17 @@ def test_verify(case):
         assert d is None, d
     else:
         assert (d.kind, d.after) == (expect["decision"], expect["value"])
+
+
+@pytest.mark.parametrize("case", _cases("message"))
+def test_message(case):
+    from app.services import manual_messages
+
+    i, expect = case["input"], case["expect"]
+    why = manual_messages.refusal(i["on_hold"], i["existing"], i["kind"])
+    assert (why is None) == expect["allowed"], why
+    if not expect["allowed"]:
+        assert expect["says"] in why
 
 
 @pytest.mark.parametrize("case", _cases("address"))

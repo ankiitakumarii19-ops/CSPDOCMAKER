@@ -45,7 +45,20 @@ async def list_alerts(
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("rm", "admin", "super_admin")),
 ):
-    """Open alerts this user should act on, newest first."""
+    """Open alerts this user should act on, newest first.
+
+    Looked at again first (No. 174): a card whose details are all there now
+    goes to History, so the count is only what is still pending."""
+    from app.services import action_required, alert_service
+
+    def _recheck(sync):
+        mine = list(sync.execute(action_required.visible(
+            select(RMAlert).where(RMAlert.status == OPEN), user)).scalars())
+        return alert_service.recheck(sync, mine)
+
+    if await session.run_sync(_recheck):
+        await session.commit()
+
     query = select(RMAlert).where(RMAlert.status == OPEN)
 
     if not csp_access.is_admin(user):
@@ -74,3 +87,47 @@ async def list_alerts(
         ],
         total=len(alerts),
     )
+
+
+# ---- No. 174: History, and one card opened -------------------------------
+
+@router.get("/history", summary="Action Required: fixed and pending")
+async def alert_history(
+    show: str = "all",
+    q: str = "",
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("rm", "admin", "super_admin")),
+):
+    """Fixed (with when and how) / Pending / All, searchable by name, code,
+    phone or email."""
+    from app.services import action_required
+
+    if show not in ("all", "fixed", "pending"):
+        show = "all"
+    rows = await session.run_sync(
+        lambda s: action_required.history(s, user, show, q[:100]))
+    return {"items": rows, "total": len(rows)}
+
+
+@router.get("/{alert_id}", summary="One Action Required card, in full")
+async def alert_detail(
+    alert_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("rm", "admin", "super_admin")),
+):
+    import uuid as _uuid
+
+    from fastapi import HTTPException
+
+    from app.services import action_required
+
+    try:
+        key = _uuid.UUID(alert_id)
+    except ValueError:
+        raise HTTPException(404, "No such item.")
+    alert = await session.get(RMAlert, key)
+    if alert is None or not action_required.may_see(alert, user):
+        # The same answer whether it does not exist or is not theirs.
+        raise HTTPException(404, "No such item.")
+    return await session.run_sync(lambda s: action_required.detail(s, alert))
+

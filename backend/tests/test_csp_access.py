@@ -49,15 +49,20 @@ async def world(db):
     await db.commit()
 
 
-async def test_search_returns_own_and_unresolved_only(client, world):
+# Changed 2 Nov 2026 (No. 175, owner's choice): an RM's search finds every
+# CSP; they act only on their own and unresolved ones (can_act).
+
+async def test_search_finds_all_but_acts_on_own_and_unresolved_only(client, world):
     r = await client.get("/api/csps/search?q=Searchable", headers=_auth(OWNER))
     assert r.status_code == 200, r.text
-    assert {c["csp_id"] for c in r.json()["results"]} == {"OWNED", "UNOWNED"}
+    can = {c["csp_id"]: c["can_act"] for c in r.json()["results"]}
+    assert can == {"OWNED": True, "UNOWNED": True, "OTHERS": False}
 
 
-async def test_search_for_the_other_rm_shows_their_own_and_unresolved(client, world):
+async def test_search_for_the_other_rm_acts_on_their_own_and_unresolved(client, world):
     r = await client.get("/api/csps/search?q=Searchable", headers=_auth(OTHER))
-    assert {c["csp_id"] for c in r.json()["results"]} == {"OTHERS", "UNOWNED"}
+    can = {c["csp_id"]: c["can_act"] for c in r.json()["results"]}
+    assert can == {"OTHERS": True, "UNOWNED": True, "OWNED": False}
 
 
 async def test_admin_sees_every_csp(client, world):

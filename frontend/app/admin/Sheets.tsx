@@ -29,6 +29,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import CspPhoto from "../components/CspPhoto";
 import { api } from "../lib/api";
+import { matches } from "../lib/searchMatch";
 import type { ApiError, SheetSource, SheetTabData } from "../lib/api";
 import { withBase } from "../lib/basePath";
 
@@ -37,6 +38,7 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [rowQuery, setRowQuery] = useState("");
 
   const [open, setOpen] = useState<{ source: SheetSource; tab: string } | null>(
     null
@@ -157,6 +159,13 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
       setBusy(false);
     }
   }
+
+
+  // Search the open tab's rows, the one way every search box matches
+  // (No. 175): any column; a phone by its digits.
+  const shownRows = (data?.rows ?? []).filter((row) =>
+    matches(rowQuery, Object.values(row.cells), Object.values(row.cells))
+  );
 
   // The first two or three columns identify a row well enough to confirm a
   // deletion against, whatever the tab is.
@@ -305,7 +314,7 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
                     >
                       {t.title}
                       {isRead && (
-                        <span className="ml-1.5 text-[10px] opacity-70">
+                        <span className="ml-1.5 text-xs opacity-70">
                           ● read
                         </span>
                       )}
@@ -348,9 +357,18 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
                   {data.rows.length} row{data.rows.length === 1 ? "" : "s"},{" "}
                   {data.columns.length} columns
                   {data.truncated && " — showing the first 2000"}
+                  {rowQuery.trim() && ` — ${shownRows.length} match`}
                 </p>
               )}
             </div>
+            {data && data.rows.length > 0 && (
+              <input
+                value={rowQuery}
+                onChange={(e) => setRowQuery(e.target.value)}
+                placeholder="Search rows (any column, phone by digits)"
+                className="flex-1 min-w-[12rem] max-w-sm px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm dark:text-white"
+              />
+            )}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => {
@@ -387,6 +405,7 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
                       </span>
                       <input
                         value={draft[c] ?? ""}
+                        inputMode={inputModeFor(c)}
                         onChange={(e) =>
                           setDraft({ ...draft, [c]: e.target.value })
                         }
@@ -416,16 +435,97 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
               </div>
             )}
 
+            {/* Phones (No. 176): one card per row with its key columns; Edit
+                opens every column stacked, one per line. */}
             {data && data.rows.length > 0 && (
-              <div className="overflow-x-auto">
+              <div className="sm:hidden space-y-2">
+                {shownRows.map((row) => {
+                  const isEditing = editing === row.row_number;
+                  const key = keyColumns(data.columns);
+                  return (
+                    <div key={row.row_number} className="rounded-lg border border-gray-200 dark:border-gray-700 p-3">
+                      <div className="flex items-center justify-between gap-2 text-xs text-gray-400">
+                        <span>Row {row.row_number}</span>
+                      </div>
+                      {isEditing ? (
+                        <div className="mt-2 space-y-2">
+                          {data.columns.map((c) => (
+                            <label key={c} className="block text-xs text-gray-600 dark:text-gray-300">
+                              {c}
+                              <input
+                                value={draft[c] ?? ""}
+                                inputMode={inputModeFor(c)}
+                                onChange={(e) => setDraft({ ...draft, [c]: e.target.value })}
+                                className="mt-1 w-full px-2 py-1.5 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-900 dark:text-white"
+                              />
+                            </label>
+                          ))}
+                          <div className="sticky bottom-0 flex gap-2 pt-2 bg-white dark:bg-gray-800">
+                            <button
+                              onClick={() => saveRow(row.row_number)}
+                              disabled={busy}
+                              className="flex-1 px-3 py-2 text-sm rounded-lg bg-eko text-white font-medium disabled:opacity-50"
+                            >
+                              {busy ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              onClick={() => { setEditing(null); setDraft({}); }}
+                              className="px-3 py-2 text-sm text-gray-600 dark:text-gray-300"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {key.map((c, i) => (
+                            <div key={c} className={i === 0 ? "font-mono text-sm font-semibold text-gray-900 dark:text-white" : "text-sm text-gray-700 dark:text-gray-300"}>
+                              {i > 1 && <span className="text-xs text-gray-400">{c}: </span>}
+                              {row.cells[c] || "—"}
+                            </div>
+                          ))}
+                          {confirmDelete === row.row_number ? (
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                              <span className="text-red-700 dark:text-red-400">Delete {describe(row.cells)}?</span>
+                              <button onClick={() => removeRow(row.row_number)} disabled={busy}
+                                className="px-3 py-2 rounded bg-red-600 text-white disabled:opacity-50">Yes, delete</button>
+                              <button onClick={() => setConfirmDelete(null)} className="px-3 py-2 text-gray-500">Cancel</button>
+                            </div>
+                          ) : (
+                            <div className="mt-2 flex gap-2">
+                              <button
+                                onClick={() => { setEditing(row.row_number); setAdding(false); setDraft({ ...row.cells }); }}
+                                className="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200"
+                              >
+                                <i className="fas fa-pen text-xs mr-1"></i> Edit
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(row.row_number)}
+                                className="px-3 py-2 text-sm text-red-600"
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {data && data.rows.length > 0 && (
+              <div className="hidden sm:block overflow-x-auto">
                 <table className="w-full text-left text-sm">
                   <thead className="text-xs uppercase text-gray-500">
                     <tr>
-                      <th className="pb-2 pr-3 font-semibold">Row</th>
-                      {data.columns.map((c) => (
+                      <th className="pb-2 pr-3 font-semibold sticky left-0 z-10 w-12 min-w-[3rem] bg-white dark:bg-gray-800">Row</th>
+                      {data.columns.map((c, i) => (
                         <th
                           key={c}
-                          className="pb-2 pr-4 font-semibold whitespace-nowrap"
+                          className={`pb-2 pr-4 font-semibold whitespace-nowrap ${
+                            i === 0 ? "sticky left-12 z-10 bg-white dark:bg-gray-800" : ""}`}
                         >
                           {c}
                         </th>
@@ -434,18 +534,20 @@ export default function Sheets({ canManage = false }: { canManage?: boolean }) {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
-                    {data.rows.map((row) => {
+                    {shownRows.map((row) => {
                       const isEditing = editing === row.row_number;
                       return (
                         <tr key={row.row_number} className="align-top">
-                          <td className="py-2 pr-3 text-gray-400 tabular-nums">
+                          <td className="py-2 pr-3 text-gray-400 tabular-nums sticky left-0 z-10 w-12 min-w-[3rem] bg-white dark:bg-gray-800">
                             {row.row_number}
                           </td>
-                          {data.columns.map((c) => (
-                            <td key={c} className="py-2 pr-4">
+                          {data.columns.map((c, i) => (
+                            <td key={c} className={`py-2 pr-4 ${
+                              i === 0 ? "sticky left-12 z-10 bg-white dark:bg-gray-800" : ""}`}>
                               {isEditing ? (
                                 <input
                                   value={draft[c] ?? ""}
+                                  inputMode={inputModeFor(c)}
                                   onChange={(e) =>
                                     setDraft({ ...draft, [c]: e.target.value })
                                   }
@@ -778,4 +880,19 @@ function Banner({
       {children}
     </div>
   );
+}
+
+/** The columns a phone card shows (No. 176): the first two (code, name),
+ *  then district and RM when the tab has them. */
+function keyColumns(columns: string[]): string[] {
+  const extra = columns.filter((c, i) => i > 1 && /district|relationship manager|\brm\b/i.test(c));
+  return [...columns.slice(0, 2), ...extra.slice(0, 2)];
+}
+
+/** The phone keyboard for a column (No. 176): digits for phone numbers,
+ *  the email keyboard for emails. */
+function inputModeFor(column: string): "tel" | "email" | "text" {
+  if (/mail/i.test(column)) return "email";
+  if (/mobile|contact|phone|whatsapp/i.test(column)) return "tel";
+  return "text";
 }

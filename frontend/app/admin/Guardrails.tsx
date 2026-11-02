@@ -73,10 +73,10 @@ export default function Guardrails({ version = 0 }: { version?: number }) {
       {draft ? (
         <div className="p-5 space-y-2">
           {draft.map((g, i) => (
-            <div key={i} className="flex gap-2 items-start">
+            <div key={i} className="flex flex-wrap sm:flex-nowrap gap-2 items-start">
               <span className="pt-1.5 w-6 text-right text-sm text-gray-400 tabular-nums">{i + 1}.</span>
               <input
-                className={`${input} md:w-1/3`}
+                className={`${input} flex-1 min-w-[12rem] md:w-1/3 md:flex-none`}
                 placeholder="Rule"
                 value={g.title}
                 maxLength={200}

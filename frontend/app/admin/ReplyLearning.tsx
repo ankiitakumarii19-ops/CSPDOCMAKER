@@ -75,7 +75,7 @@ export default function ReplyLearning({ version }: { version: number }) {
                   <td className="py-2 pr-4 text-right tabular-nums">
                     {k.edited}
                     {k.avg_distance !== null && (
-                      <div className="text-[11px] text-gray-400">~{k.avg_distance} chars</div>
+                      <div className="text-xs text-gray-400">~{k.avg_distance} chars</div>
                     )}
                   </td>
                   <td className="py-2 pr-4 text-right tabular-nums">{k.skipped}</td>
