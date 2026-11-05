@@ -225,6 +225,9 @@ async def candidates(
     """Every CSP (No. 174: anyone can be messaged), with what they still
     miss, whether and when they were asked, and what would stop a send —
     on hold, unreachable, or (for the details form) an existing CSP."""
+    from sqlalchemy import func
+
+    from app.models.audit_log import AuditLog
     from app.models.data_request import DataRequest
     from app.models.source_sheet import SourceSheetState
     from app.services import field_ownership as fo
@@ -236,6 +239,15 @@ async def candidates(
     )).scalars().all():
         if r.csp_id not in asked or r.created_at > asked[r.csp_id]:
             asked[r.csp_id] = r.created_at
+    # A message a person sent (own words or a saved one) counts too, when
+    # it went out — otherwise the label kept the old details-form date.
+    for csp_id, at in (await session.execute(
+            select(AuditLog.csp_id, func.max(AuditLog.created_at))
+            .where(AuditLog.action == "csp_message",
+                   AuditLog.result == "success", AuditLog.csp_id.isnot(None))
+            .group_by(AuditLog.csp_id))).all():
+        if csp_id not in asked or at > asked[csp_id]:
+            asked[csp_id] = at
     imported = set((await session.execute(
         select(SourceSheetState.csp_code).where(
             SourceSheetState.imported_as.isnot(None)))).scalars())

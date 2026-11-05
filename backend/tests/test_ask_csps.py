@@ -116,6 +116,20 @@ async def test_a_custom_message_to_many_with_placeholders(client, db, csps, serv
     assert row.body_text.startswith("Hi Asha Devi") and row.sent_by == "admin.ask@eko.co.in"
 
 
+async def test_a_sent_message_shows_as_already_asked_today(client, csps, server):
+    rows = {c["csp_id"]: c for c in (await client.get(
+        "/api/admin/messaging/candidates", headers=_auth())).json()["candidates"]}
+    assert not rows["1A870001"]["already_asked"]
+    await client.post("/api/admin/messaging/send-message", headers=_auth(), json={
+        "csp_ids": ["1A870001", "1A870004"], "kind": "custom",
+        "channel": "whatsapp", "text": "Hi {name}"})
+    rows = {c["csp_id"]: c for c in (await client.get(
+        "/api/admin/messaging/candidates", headers=_auth())).json()["candidates"]}
+    assert rows["1A870001"]["already_asked"], "own words count as asked"
+    assert rows["1A870001"]["asked_at"]
+    assert not rows["1A870004"]["already_asked"], "a refused send does not count"
+
+
 async def test_the_details_form_never_goes_to_an_existing_csp(client, csps, server, monkeypatch):
     from app.services import message_sender
     asked = []
