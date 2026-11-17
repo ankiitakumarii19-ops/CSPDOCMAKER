@@ -137,6 +137,94 @@ def test_the_platform_being_down_is_a_failure_not_a_crash(monkeypatch):
     assert out["status"] == wa.FAILED and "unreachable" in out["reason"]
 
 
+# ---- the platform cannot find a template it made (No. 189) -------------------
+
+_ALREADY = ("Error executing tool smart_send_template: There is already "
+            "English (US) content for this template. You can create a new "
+            "template and try again.")
+
+
+@pytest.fixture
+def lookup_missed(monkeypatch):
+    """smart_send_template refuses with Meta's 'already exists'; script
+    what send_template_message answers."""
+    calls = []
+    script = {"by_name": _tool({"sent": 1, "failed": 0, "skipped": 0}),
+              "smart": {"content": [{"type": "text", "text": _ALREADY}],
+                        "isError": True}}
+
+    def post(url, json, headers, timeout):
+        calls.append(json)
+        name = json["params"]["name"]
+        if name == "upload_contacts":
+            return _Reply(_tool({"job_id": "job-1"}))
+        return _Reply(script["smart" if name == "smart_send_template"
+                             else "by_name"])
+
+    import httpx
+    monkeypatch.setattr(httpx, "post", post)
+    return calls, script
+
+
+def test_the_platform_names_a_wording_the_way_it_does():
+    """Names seen on Eko's account on 17 Nov 2026."""
+    from app.services import assistant_tools
+    body, _, _ = wa.to_template(assistant_tools.WHATSAPP_WORDING)
+    assert wa.platform_template_name(body) == "auto_e9c52b4a18ca16f9"
+    assert (wa.platform_template_name("Hi {{1}},\n\n  ok.")
+            == wa.platform_template_name("Hi {{1}}, ok."))
+
+
+def test_a_template_the_platform_cannot_find_is_sent_by_its_name(
+        lookup_missed):
+    calls, _ = lookup_missed
+    out = wa.send("9876543210", "Namaste {name}, see {link} now.",
+                  {"name": "R", "link": "https://x.in/a"}, source_name="t")
+    assert out["status"] == wa.SENT and out["reason"] == ""
+    name = wa.platform_template_name("Namaste {{1}}, see {{2}} now.")
+    assert out["template_name"] == name
+    assert [c["params"]["name"] for c in calls] == [
+        "upload_contacts", "smart_send_template", "send_template_message"]
+    args = calls[2]["params"]["arguments"]
+    assert args["template_name"] == name and args["job_id"] == "job-1"
+    assert "body" not in args and "force" not in args
+    assert args["mapping"] == {"1": {"type": "column", "value": "name"},
+                               "2": {"type": "column", "value": "link"}}
+
+
+def test_when_sending_by_name_also_fails_both_reasons_are_kept(
+        lookup_missed):
+    _, script = lookup_missed
+    script["by_name"] = {"content": [{"type": "text",
+                                      "text": "template not approved"}],
+                         "isError": True}
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.FAILED
+    assert "already English (US) content" in out["reason"]
+    assert "template not approved" in out["reason"]
+
+
+def test_sending_by_name_that_sends_nobody_is_a_failure(lookup_missed):
+    _, script = lookup_missed
+    script["by_name"] = _tool({"sent": 0, "failed": 1})
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.FAILED and "sent 0" in out["reason"]
+
+
+def test_any_other_platform_error_is_not_sent_by_name(lookup_missed):
+    calls, script = lookup_missed
+    script["smart"] = {"content": [{"type": "text",
+                                    "text": "Could not reach Meta API"}],
+                       "isError": True}
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.FAILED
+    assert "send_template_message" not in [c["params"]["name"]
+                                           for c in calls]
+
+
 # ---- documents ready: the private link ---------------------------------------
 
 def test_the_documents_link_is_signed_and_scoped():

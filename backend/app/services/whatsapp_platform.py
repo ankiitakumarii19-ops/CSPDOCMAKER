@@ -206,7 +206,12 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
         if document_url:
             arguments.update(header_type="document",
                              header_media_url=document_url)
-        answer = call_tool("smart_send_template", arguments)
+        try:
+            answer = call_tool("smart_send_template", arguments)
+        except WhatsAppPlatformError as e:
+            if not _template_lookup_missed(e):
+                raise
+            return _send_by_name(job_id, arguments, template, e)
     except WhatsAppPlatformError as e:
         logger.warning("whatsapp_platform.send: %s", e)
         return _result(FAILED, str(e))
@@ -227,6 +232,61 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
                        f"{answer.get('reason', '')}", job_id, name)
     return _result(FAILED, f"unexpected answer: {str(answer)[:300]}",
                    job_id, name)
+
+
+# ---- when the platform cannot find a template it made (No. 189) ------------
+#
+# smart_send_template looks for an existing template among the first 100 on
+# Eko's Meta account only. Once other teams' templates push this app's
+# approved ones past that, it does not find them, tries to create them again
+# under the same name, and Meta answers "There is already English (US)
+# content for this template". The template exists (usually approved), so it
+# is sent by its name instead. Remove once the platform reads every page.
+
+_ALREADY_EXISTS = re.compile(r"already .{0,40}content for this template", re.I)
+
+
+def _template_lookup_missed(error: Exception) -> bool:
+    return bool(_ALREADY_EXISTS.search(str(error)))
+
+
+def platform_template_name(template_body: str) -> str:
+    """The name the platform gives a wording it submits: "auto_" + the first
+    16 hex characters of the MD5 of the wording with runs of spaces / line
+    breaks made one space. Checked 17 Nov 2026 against every auto_ template
+    on the account (data verification = auto_e72d2d9e338ad3c9)."""
+    import hashlib
+
+    squeezed = " ".join(template_body.split())
+    return "auto_" + hashlib.md5(squeezed.encode("utf-8")).hexdigest()[:16]
+
+
+def _send_by_name(job_id: str, arguments: dict, template_body: str,
+                  first_error: Exception) -> dict:
+    """Send the existing template by its name. Never raises.
+
+    Only reached when smart_send_template refused before sending anything,
+    so this cannot send the same message twice.
+    """
+    name = platform_template_name(template_body)
+    logger.warning(
+        "whatsapp_platform.send: the platform did not find template %s "
+        "(Meta: already exists) — sending it by name instead (No. 189)",
+        name, extra={"failure_kind": "platform_template_lookup"})
+    by_name = {k: v for k, v in arguments.items()
+               if k not in ("body", "category")}
+    by_name["template_name"] = name
+    try:
+        answer = call_tool("send_template_message", by_name)
+    except WhatsAppPlatformError as e:
+        logger.warning("whatsapp_platform.send: sending %s by name failed "
+                       "too: %s", name, e)
+        return _result(FAILED, f"{first_error} — then sending the existing "
+                       f"template {name} by name failed: {e}", job_id, name)
+    if int(answer.get("sent", 0) or 0) >= 1:
+        return _result(SENT, "", job_id, name)
+    return _result(FAILED, f"sending the existing template {name} by name "
+                   f"sent 0: {str(answer)[:300]}", job_id, name)
 
 
 def _result(status, reason="", job_id=None, template_name=None) -> dict:

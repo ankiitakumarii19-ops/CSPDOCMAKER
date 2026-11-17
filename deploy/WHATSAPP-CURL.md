@@ -103,6 +103,14 @@ The app itself uses `smart_send_template` (same arguments but `body` instead
 of `template_name`): the platform finds an approved template matching the
 wording, or submits it for approval and answers `pending`.
 
+**Known platform gap (No. 189, 17 Nov 2026):** the platform reads only the
+first 100 templates on the account. When ours fall beyond that,
+`smart_send_template` answers "There is already English (US) content for this
+template". The app then sends by the template's name with
+`send_template_message` (3b above). The name is `auto_` + the first 16
+characters of the MD5 of the wording with spaces squeezed, e.g. the data
+verification message is `auto_e72d2d9e338ad3c9`.
+
 ## 4. Was it delivered / read?
 
 ```bash
