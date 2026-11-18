@@ -21,6 +21,9 @@ bcrypt==4.2.1
 # ---- Redis & Celery ----
 redis==5.2.1
 celery[redis]==5.4.0
+# Pinned 18 Nov 2026: celery leaves kombu open, and kombu 5.7.0 demands
+# redis-py >= 6.1 — a fresh build crashed the worker and beat on start.
+kombu==5.6.2
 
 # ---- Google APIs ----
 google-api-python-client==2.159.0
