@@ -25,6 +25,7 @@ still without one. Every CSP's result is written to a CSV report.
 """
 import argparse
 import csv
+import logging
 import os
 import sys
 import time
@@ -91,8 +92,9 @@ def main() -> int:
     report = a.report or os.path.join(
         csp_photo_service.photo_directory(),
         f"zoho_photo_report_{datetime.now():%Y%m%d_%H%M}.csv")
-    counts = {"found": 0, "not_found": 0, "skipped_has_photo": 0}
+    counts = {"found": 0, "not_found": 0, "skipped_has_photo": 0, "errors": 0}
     crm_errors_in_a_row = 0
+    errors_in_a_row = 0
     stopped_early = None
 
     with workspace(ws.id), Session(engine) as db, open(report, "w", newline="", encoding="utf-8") as fh:
@@ -123,7 +125,26 @@ def main() -> int:
 
         print(f"Trying {len(todo)} on Zoho...\n")
         for n, csp in enumerate(todo, 1):
-            result = csp_photo_service.fetch_photo(csp)
+            try:
+                result = csp_photo_service.fetch_photo(csp)
+            except Exception as e:
+                # Never hidden: printed with its type, kept in the report and
+                # the log (with the traceback). One CSP's failure must not
+                # stop the rest; the same failure 5 times in a row does.
+                db.rollback()
+                logging.getLogger(__name__).exception(
+                    "fetch_zoho_photos: CSP %s failed", csp.csp_id)
+                counts["errors"] += 1
+                message = f"ERROR {type(e).__name__}: {e}"
+                out.writerow([csp.csp_id, csp.name, "error", message, "", ""])
+                print(f"[{n}/{len(todo)}] {csp.csp_id} {csp.name}: {message}")
+                errors_in_a_row += 1
+                if errors_in_a_row >= STOP_AFTER_CRM_ERRORS:
+                    stopped_early = message
+                    break
+                fh.flush()
+                continue
+            errors_in_a_row = 0
             if result.ok:
                 crm_errors_in_a_row = 0
                 csp.photo_url = result.path
@@ -152,9 +173,9 @@ def main() -> int:
             time.sleep(a.pause)
 
     print(f"\nPhotos saved: {counts['found']}   No photo: {counts['not_found']}   "
-          f"Already had one: {counts['skipped_has_photo']}")
+          f"Already had one: {counts['skipped_has_photo']}   Errors: {counts['errors']}")
     if stopped_early:
-        print(f"STOPPED: Zoho failed {STOP_AFTER_CRM_ERRORS} times in a row "
+        print(f"STOPPED: {STOP_AFTER_CRM_ERRORS} failures in a row "
               f"({stopped_early}). Run again later; it carries on from where it stopped.")
     print(f"Report: {report}")
     return 2 if stopped_early else 0

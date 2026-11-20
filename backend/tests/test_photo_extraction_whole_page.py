@@ -48,6 +48,28 @@ def test_a_full_page_photograph_is_still_taken(tmp_path, monkeypatch):
     assert (tmp_path / "out.png").exists()
 
 
+def test_the_photo_saves_across_disks(tmp_path, monkeypatch):
+    """On the server /tmp and the photo folder are different filesystems:
+    a plain rename fails there with Errno 18, so the save must not rely on
+    it (found on the first live run)."""
+    import errno
+    import os
+
+    pdf = tmp_path / "Photo.pdf"
+    _full_page_scan_pdf(pdf)
+    monkeypatch.setattr(photo_extraction, "contains_face", lambda image: True)
+    monkeypatch.setattr(photo_extraction, "face_fraction", lambda image: 0.3)
+
+    def no_cross_device(src, dst, *a, **k):
+        raise OSError(errno.EXDEV, "Invalid cross-device link")
+    monkeypatch.setattr(os, "rename", no_cross_device)
+    monkeypatch.setattr(os, "replace", no_cross_device)
+
+    out = tmp_path / "photos" / "1A000001.png"
+    photo_extraction.extract_best_photo([str(pdf)], str(out))
+    assert out.exists()
+
+
 def test_best_photo_refuses_when_every_pdf_is_a_document(tmp_path):
     pdf = tmp_path / "Character Certificate.pdf"
     _full_page_scan_pdf(pdf)

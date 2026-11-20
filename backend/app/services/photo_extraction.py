@@ -535,9 +535,15 @@ def extract_best_photo(pdf_paths, output_path: str):
             + ". The RM must supply one."
         )
 
+    import shutil
+
     fraction, candidate, scratch, source = best
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    os.replace(scratch, output_path)
+    # No. 191: shutil.move, not os.replace. On the server the scratch file is
+    # in the container's /tmp and the photo folder is a Docker volume — two
+    # filesystems — and os.replace cannot cross them (Errno 18), so every
+    # photo found on Zoho failed to save there.
+    shutil.move(scratch, output_path)
     logger.info(
         "photo_extraction: chose %s (face %.0f%% of the crop) out of %d document(s)",
         os.path.basename(source), fraction * 100, len(list(pdf_paths)),
