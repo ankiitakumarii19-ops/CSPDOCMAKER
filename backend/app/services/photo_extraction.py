@@ -445,11 +445,13 @@ def extract_photo(pdf_path: str, output_path: str) -> Candidate:
     import pymupdf
     from PIL import Image
 
+    whole_page = False
     try:
         candidate = find_photo(pdf_path)
     except PhotoNotFound:
         # No photo-shaped block — the page may be the photograph itself.
         candidate = whole_page_candidate(pdf_path)
+        whole_page = True
 
     document = pymupdf.open(pdf_path)
     try:
@@ -462,6 +464,15 @@ def extract_photo(pdf_path: str, output_path: str) -> Candidate:
                                        int(x1 * width), int(y1 * height))))
     finally:
         document.close()
+
+    # No. 191: a full-page scan of any document (a police certificate, an
+    # Aadhaar copy) is also "a single image covering the sheet". It is only
+    # the photograph when a face dominates it, as the region path already
+    # requires. Without this, a whole certificate page became a CSP's photo.
+    if whole_page and not contains_face(crop):
+        raise PhotoNotFound(
+            f"{os.path.basename(pdf_path)} is a full-page scan with no face "
+            f"filling it — a document, not a photograph.")
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     crop.save(output_path, "PNG", optimize=True)
