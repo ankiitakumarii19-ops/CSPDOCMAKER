@@ -181,9 +181,12 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
         phone = whatsapp_platform.phone_for_whatsapp(record.mobile or "")
         if not phone:
             return refuse("no usable WhatsApp number")
+        # No. 195: a person pressed Send — sent even if the same words went
+        # to this number in the last 15 minutes.
         outcome = wa.send(phone, assistant_tools.WHATSAPP_WORDING,
                           {"name": record.name or "CSP", "message": one_line},
-                          source_name=message_log.source_name("chat", record.csp_id))
+                          source_name=message_log.source_name("chat", record.csp_id),
+                          force=True)
         with send_reason.because(send_reason.MANUAL):
             message_log.record(session, kind=KIND_OTHER, mobile=phone,
                                outcome=outcome, csp_id=record.csp_id,

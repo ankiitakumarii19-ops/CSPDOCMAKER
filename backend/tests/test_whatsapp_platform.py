@@ -373,3 +373,19 @@ async def test_the_link_serves_that_deliverys_pdfs_merged(client, db):
     other = dw.link_for(DEFAULT_WORKSPACE_ID, uuid.uuid4(), "1A850999").rsplit("/", 1)[1]
     assert (await client.get(f"/api/public/documents/{other}")).status_code == 404
     assert (await client.get("/api/public/documents/not-a-link")).status_code == 404
+
+
+def test_a_message_a_person_sends_skips_the_15_minute_duplicate_block(platform):
+    """No. 195: the platform refuses the same words to the same number within
+    15 minutes. A person pressing Send means it, so it is sent anyway; the
+    app's own messages keep that protection."""
+    from app.services import send_reason
+    calls, _ = platform
+    wa.send("9876543210", "Namaste {name}, ok now.", {"name": "R"}, source_name="t")
+    assert "force" not in calls[-1]["params"]["arguments"], "automatic: protected"
+    with send_reason.sent_by("rm.one@eko.co.in"):
+        wa.send("9876543210", "Namaste {name}, ok now.", {"name": "R"}, source_name="t")
+    assert calls[-1]["params"]["arguments"]["force"] is True
+    wa.send("9876543210", "Namaste {name}, ok now.", {"name": "R"},
+            source_name="t", force=True)
+    assert calls[-1]["params"]["arguments"]["force"] is True

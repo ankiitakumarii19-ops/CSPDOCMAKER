@@ -172,7 +172,7 @@ def phone_for_whatsapp(mobile: str) -> str:
 
 def send(to_mobile: str, body: str, values: Dict[str, str], *,
          source_name: str, document_url: Optional[str] = None,
-         category: str = "UTILITY") -> dict:
+         category: str = "UTILITY", force: bool = False) -> dict:
     """Send one person one message. Never raises.
 
     Returns {"status": SENT|PENDING|REJECTED|FAILED, "reason": str,
@@ -206,6 +206,13 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
         if document_url:
             arguments.update(header_type="document",
                              header_media_url=document_url)
+        # No. 195: the platform refuses the same text to the same number
+        # within 15 minutes ("duplicate blast"). A message a PERSON sends
+        # (Admin, Super Admin, RM — send_reason.sent_by) is meant, so it is
+        # sent anyway; the app's own messages keep that protection.
+        from app.services import send_reason
+        if force or send_reason.current_person():
+            arguments["force"] = True
         try:
             answer = call_tool("smart_send_template", arguments)
         except WhatsAppPlatformError as e:
