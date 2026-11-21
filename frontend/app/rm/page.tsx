@@ -11,6 +11,7 @@ import ActionRequiredDetail from "../components/ActionRequiredDetail";
 import FreshnessBadges from "../components/FreshnessBadges";
 import AssistantChat from "../components/AssistantChat";
 import CspPhoto from "../components/CspPhoto";
+import RmMessages from "../components/RmMessages";
 import Database from "../admin/Database";
 import Sheets from "../admin/Sheets";
 import { api, DOCUMENT_TYPES } from "../lib/api";
@@ -95,9 +96,10 @@ export default function RMDashboard() {
   // The tab and the CSP open are in the address (?view=…&csp=…), so a
   // refresh comes back to them instead of an empty Documents tab (No. 171).
   const [view, setView] = useUrlParam("view", "documents");
-  const rmView = (["sheets", "database"].includes(view) ? view : "documents") as
-    "documents" | "sheets" | "database";
-  const setRmView = (next: "documents" | "sheets" | "database") => setView(next);
+  // "messages" (No. 192): send a CSP their verification link, any number of times.
+  const rmView = (["sheets", "database", "messages"].includes(view) ? view : "documents") as
+    "documents" | "sheets" | "database" | "messages";
+  const setRmView = (next: "documents" | "sheets" | "database" | "messages") => setView(next);
   const [cspParam, setCspParam] = useUrlParam("csp");
   const [theme, toggleTheme] = useTheme();
   const [alertsMenu, setAlertsMenu] = useState(false);
@@ -411,6 +413,7 @@ export default function RMDashboard() {
             {(
               [
                 ["documents", "fa-file-signature", "Documents"],
+                ["messages", "fa-paper-plane", "Messages"],
                 ["sheets", "fa-table", "Sheets"],
                 ["database", "fa-database", "Database"],
               ] as const
@@ -543,6 +546,7 @@ export default function RMDashboard() {
           {(
             [
               ["documents", "fa-file-signature", "Documents"],
+              ["messages", "fa-paper-plane", "Messages"],
               ["sheets", "fa-table", "Sheets"],
               ["database", "fa-database", "Database"],
             ] as const
@@ -575,6 +579,11 @@ export default function RMDashboard() {
         {rmView === "database" && (
           <div className="max-w-6xl mx-auto">
             <Database />
+          </div>
+        )}
+        {rmView === "messages" && (
+          <div className="max-w-5xl mx-auto">
+            <RmMessages />
           </div>
         )}
         <div className={`max-w-5xl mx-auto space-y-6 ${rmView === "documents" ? "" : "hidden"}`}>

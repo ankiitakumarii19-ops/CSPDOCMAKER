@@ -270,3 +270,37 @@ def test_a_skipped_run_says_why_in_the_log(db, monkeypatch):
         w.logger.removeHandler(handler)
     assert ("verify_old_csps: nothing sent — off, or the Calling sheet is "
             "not connected") in lines
+
+
+async def test_a_new_link_every_3_days_until_answered_then_never_again(db):
+    """No. 192: the link lasts 3 days; unanswered, a new one is sent; once
+    the CSP answers, the verification is never sent again (one time)."""
+    from app.models.data_request import ANSWERED, DataRequest
+    s = db.session
+    _old(s, "1A960091")
+    s.commit()
+    assert get_settings().data_request_expiry_days == 3
+    assert w.run_batch(s, now=NOON_IST)["sent"] == ["1A960091"]
+    first = s.execute(select(DataRequest)).scalar_one()
+    left = first.expires_at - first.created_at
+    assert abs(left - timedelta(days=3)) < timedelta(minutes=1)
+
+    s.execute(text("UPDATE data_requests SET created_at = created_at - "
+                   "interval '2 days', expires_at = expires_at - interval '2 days'"))
+    s.commit()
+    assert w.run_batch(s, now=NOON_IST)["sent"] == [], "link still open"
+
+    s.execute(text("UPDATE data_requests SET created_at = created_at - "
+                   "interval '1 day 1 minute', expires_at = expires_at - "
+                   "interval '1 day 1 minute'"))
+    s.commit()
+    assert w.run_batch(s, now=NOON_IST)["sent"] == ["1A960091"], \
+        "the link ran out unanswered: a new one is sent"
+    rows = s.execute(select(DataRequest).order_by(DataRequest.created_at)).scalars().all()
+    assert len(rows) == 2 and rows[0].token_hash != rows[1].token_hash
+
+    rows[1].status = ANSWERED
+    s.execute(text("UPDATE data_requests SET created_at = created_at - "
+                   "interval '30 days', expires_at = expires_at - interval '30 days'"))
+    s.commit()
+    assert w.run_batch(s, now=NOON_IST)["sent"] == [], "answered: never again"

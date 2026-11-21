@@ -94,6 +94,20 @@ async def report(
         return True
 
     rows = [message_log.as_row(m, now) for m in messages if wanted(m)]
+    # No. 194: who sent each one — the app (automatic), you, or which RM /
+    # Admin — with their name from the access list.
+    me = (user.get("sub") or user.get("email") or "").lower()
+    names = await _names(session, {m.sent_by for m in messages if m.sent_by})
+    for row in rows:
+        row.update(_sender(row.get("sent_by"), row.get("sent_because"), me, names))
+    senders: dict = {}
+    for m in messages:
+        who = _sender(m.sent_by, m.sent_because, me, names)
+        entry = senders.setdefault(who["sender_key"], {
+            "key": who["sender_key"], "label": who["sender_label"],
+            "role": who["sender_role"], "me": who["sender_key"] == me,
+            "count": 0})
+        entry["count"] += 1
     last_checked = (await session.execute(
         select(func.max(WhatsAppMessage.checked_at)))).scalar()
     # Why messages were sent, other than the usual flow (No. 156).
@@ -104,6 +118,9 @@ async def report(
             reasons[m.sent_because] = reasons.get(m.sent_because, 0) + 1
     return {
         "summary": summary,
+        # Automatic first, then you, then everyone else by how many (No. 194).
+        "senders": sorted(senders.values(), key=lambda e: (
+            e["key"] != AUTOMATIC, not e["me"], -e["count"])),
         "sent_because": [{"key": k, "label": send_reason.label(k), "count": n}
                          for k, n in sorted(reasons.items(), key=lambda kv: -kv[1])],
         "contact_fixes": await session.run_sync(_contact_status),
@@ -115,6 +132,41 @@ async def report(
         "last_checked_at": last_checked.isoformat() if last_checked else None,
         "status_days": _settings().whatsapp_status_days,
     }
+
+
+AUTOMATIC = "automatic"
+UNRECORDED = "person"
+
+
+async def _names(session: AsyncSession, emails: set) -> dict:
+    """email -> (name, role) from the access list, for the people who sent."""
+    if not emails:
+        return {}
+    from app.models.authorization_record import AuthorizationRecord
+    rows = (await session.execute(select(AuthorizationRecord).where(
+        func.lower(AuthorizationRecord.email).in_([e.lower() for e in emails])
+    ))).scalars().all()
+    return {r.email.lower(): (r.name, getattr(r.role, "value", str(r.role)))
+            for r in rows}
+
+
+def _sender(sent_by, sent_because, me: str, names: dict) -> dict:
+    """How the WhatsApp messages screen names who sent a message (No. 194):
+    Automatic (the app), You, or the person by name (and role)."""
+    from app.services import send_reason
+    person = (sent_by or "").lower()
+    if person:
+        name, role = names.get(person, (person, ""))
+        label = "You" if person == me else name
+        return {"sender_key": person, "sender_label": label,
+                "sender_role": role}
+    if sent_because == send_reason.MANUAL:
+        # Sent by hand before the sender was recorded (before No. 194).
+        return {"sender_key": UNRECORDED,
+                "sender_label": "A person (who was not recorded)",
+                "sender_role": ""}
+    return {"sender_key": AUTOMATIC, "sender_label": "Automatic",
+            "sender_role": ""}
 
 
 @router.get("/{message_id}")

@@ -113,6 +113,22 @@ export interface WhatsAppMessageRow {
   /** Why it was sent (No. 156); null = the usual flow. */
   sent_because: string | null;
   sent_because_label: string;
+  /** No. 194: who sent it — email of the person, or null = the app. */
+  sent_by: string | null;
+  /** "automatic", "person" (by hand, not recorded) or the sender's email. */
+  sender_key: string;
+  /** "Automatic", "You", or the person's name. */
+  sender_label: string;
+  sender_role: string;
+}
+
+/** Who sent the messages, with how many each (No. 194). */
+export interface WhatsAppSender {
+  key: string;
+  label: string;
+  role: string;
+  me: boolean;
+  count: number;
 }
 
 /** Contact fixes (bounced emails / unreachable WhatsApp) in one line (No. 158). */
@@ -135,6 +151,8 @@ export interface WhatsAppReport {
   summary: Record<"data_request" | "missing_data" | "documents_ready" | "feedback", WhatsAppCounts>;
   /** No. 160: how CSPs answered the feedback question. */
   feedback_answers: { answers: { "1": number; "2": number; "3": number }; no_answer: number };
+  /** No. 194: Automatic, You, and each person who sent messages. */
+  senders: WhatsAppSender[];
   rows: WhatsAppMessageRow[];
   total_rows: number;
   truncated: boolean;
@@ -236,6 +254,33 @@ export interface ActionDetail extends ActionItem {
     kind: string | null; text: string | null; sent: boolean; reason: string | null;
   }>;
   channels: SendChannel[];
+}
+
+/** One verification / details link sent to a CSP (No. 192). */
+export interface VerificationLink {
+  sent_at: string | null;
+  valid_until: string | null;
+  answered_at: string | null;
+  via: string;
+  to: string;
+  error: string;
+  /** waiting | filled | ran out | replaced | not delivered */
+  state: string;
+}
+
+/** RM portal → Messages: one CSP and every link sent to them (No. 192). */
+export interface VerificationLinks {
+  csp_id: string;
+  name: string;
+  mobile: string;
+  email: string;
+  on_hold: string;
+  existing: boolean;
+  valid_days: number;
+  channels: SendChannel[];
+  /** Why the link cannot be sent to this CSP, or "". */
+  refusal: string;
+  links: VerificationLink[];
 }
 
 /** What one send to one CSP did (No. 174). */
@@ -1370,6 +1415,13 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(body),
     });
+  }
+
+  /** Every verification link sent to one CSP (RMs: their own CSPs). */
+  async cspVerificationLinks(cspId: string) {
+    return this.request<VerificationLinks>(
+      `/csps/${encodeURIComponent(cspId)}/verification-links`
+    );
   }
 
   /** One CSP's WhatsApp chat — works for RMs (own CSPs) and Admins. */

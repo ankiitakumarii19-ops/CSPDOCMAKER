@@ -171,7 +171,18 @@ def _ask_csp(session, csp) -> dict:
     """Zoho first, then the CSP on WhatsApp (message_sender.ask_for_details).
     Never stops the run: no channel / wording, or any failure, is the answer
     and is logged; the RM alert still goes up."""
+    from app.config import get_settings
     from app.services import message_sender
+    from app.workers.verify_old_csps_worker import in_hours
+
+    # No. 192: this runs every few minutes for as long as details are
+    # missing, and asks again (a new link) each time the last one runs out
+    # after 3 days — so it keeps to 8 am - 8 pm like every other message.
+    s = get_settings()
+    if not in_hours(datetime.now(timezone.utc), s.verify_start_hour,
+                    s.verify_end_hour):
+        return {"csp_id": csp.csp_id, "sent": False,
+                "reason": "outside sending hours (8 am - 8 pm); asked then"}
     try:
         return message_sender.ask_for_details(session, csp)
     except (message_sender.NoChannel, message_sender.NoTemplate) as e:

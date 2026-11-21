@@ -255,6 +255,7 @@ def ask_for_details(session: Session, record, *,
                     manual: bool = False,
                     allow_email: bool = False,
                     mobile: Optional[str] = None,
+                    fresh: bool = False,
                     ) -> dict:
     """Send one CSP a link to confirm their own details.
 
@@ -268,6 +269,11 @@ def ask_for_details(session: Session, record, *,
     Reuses an open request rather than issuing a second link: being asked
     twice with two different links is confusing, and the first one would
     silently stop working.
+
+    fresh (No. 192): a person sending the link again (RM portal → Messages)
+    always gets a NEW link, valid DATA_REQUEST_EXPIRY_DAYS (3), however
+    often. The earlier link is closed only once the new one has reached the
+    CSP, so a failed send never leaves them without a working link.
     """
     if getattr(record, "send_hold", None):
         # Inactive / not live yet (No. 121): nothing is sent to this CSP.
@@ -293,6 +299,9 @@ def ask_for_details(session: Session, record, *,
                 "reason": "waiting for WhatsApp — CSPs are not asked by email"}
 
     existing = drs.open_request_for(session, record.csp_id)
+    replaced = None
+    if fresh and existing is not None:
+        replaced, existing = existing, None
     if existing is not None and existing.sent_to:
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": "already asked and waiting for a reply"}
@@ -351,7 +360,10 @@ def ask_for_details(session: Session, record, *,
     if not link_is_reachable(link):
         # Close the request rather than leaving them "asked" with a link
         # that was never going to work.
-        drs.cancel(session, record.csp_id, "the link is not publicly reachable")
+        if replaced is not None:
+            request.status = drs.CANCELLED    # the earlier link stays open
+        else:
+            drs.cancel(session, record.csp_id, "the link is not publicly reachable")
         session.commit()
         return {"csp_id": record.csp_id, "sent": False,
                 "reason": why_unreachable(link)}
@@ -391,10 +403,23 @@ def ask_for_details(session: Session, record, *,
     request.sent_via = via
     request.sent_to = to
     request.delivery_error = None if sent else why
-    if not sent:
+    if not sent and replaced is not None:
+        # The new link did not reach them: close only it; the earlier one
+        # keeps working.
+        request.status = drs.CANCELLED
+    elif not sent:
         # An undelivered ask is not an ask. Close it so the next attempt
         # issues a fresh link rather than pointing at a dead one.
         drs.cancel(session, record.csp_id, "delivery failed")
+    elif replaced is not None:
+        from app.models.data_request import DataRequest
+        for older in session.execute(select(DataRequest).where(
+                DataRequest.csp_id == record.csp_id,
+                DataRequest.status == drs.OPEN,
+                DataRequest.id != request.id)).scalars():
+            older.status = drs.CANCELLED
+        logger.info("message_sender.ask_for_details: CSP %s — earlier link "
+                    "closed, a new one was sent", record.csp_id)
     channel.last_used_at = datetime.now(timezone.utc)
     channel.last_error = None if sent else why
     session.commit()

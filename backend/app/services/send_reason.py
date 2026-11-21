@@ -44,6 +44,25 @@ USUAL = "Usual flow"
 
 _current: ContextVar[Optional[str]] = ContextVar("send_reason", default=None)
 
+# No. 194: the person who sent it (their email), for every message a person
+# sends — a typed message, the details form / verification link, a reply
+# from the Replies screen, an RM's request. None = sent by the app itself.
+_person: ContextVar[Optional[str]] = ContextVar("sent_by", default=None)
+
+
+def current_person() -> Optional[str]:
+    return _person.get()
+
+
+@contextmanager
+def sent_by(person: Optional[str]):
+    """Every WhatsApp recorded inside carries this person as its sender."""
+    token = _person.set((person or "").strip().lower() or None)
+    try:
+        yield
+    finally:
+        _person.reset(token)
+
 
 def current() -> Optional[str]:
     return _current.get()

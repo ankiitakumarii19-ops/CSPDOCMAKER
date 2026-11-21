@@ -336,8 +336,11 @@ class Settings(BaseSettings):
         default="http://localhost:3000", alias="PUBLIC_APP_URL",
         description="Public base URL of the frontend, used to build CSP links",
     )
+    # No. 192: 3 days (was 7). An unanswered link that runs out is replaced
+    # by a new one, sent again, until the CSP fills it and their documents
+    # go (new CSPs: new_csp_worker; old CSPs: verify_old_csps_worker).
     data_request_expiry_days: int = Field(
-        default=7, alias="DATA_REQUEST_EXPIRY_DAYS",
+        default=3, alias="DATA_REQUEST_EXPIRY_DAYS",
         description="How long a CSP's fill-in link stays usable",
     )
 

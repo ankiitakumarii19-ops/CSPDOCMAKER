@@ -231,3 +231,28 @@ async def test_the_chat_opens_for_the_rm(client, db, monkeypatch):
     assert body["items"][0]["text"] == "Hello there"
     assert (await client.get(f"/api/csps/{alert.csp_id}/conversation",
                              headers=_auth(OTHER_RM))).status_code == 404
+
+
+async def test_the_rm_sees_every_verification_link_of_their_csp_only(client, db):
+    """No. 192 (RM portal → Messages): every link sent, with its state."""
+    from app.models.data_request import ANSWERED, CANCELLED, OPEN as LINK_OPEN
+    alert = await _card(db)
+    now = datetime.now(timezone.utc)
+    for token, status_, expires, extra in (
+            ("t1", ANSWERED, now - timedelta(days=8), {"answered_at": now - timedelta(days=9)}),
+            ("t2", LINK_OPEN, now - timedelta(hours=1), {}),
+            ("t3", CANCELLED, now + timedelta(days=2), {"delivery_error": "not on WhatsApp"}),
+            ("t4", LINK_OPEN, now + timedelta(days=3), {})):
+        db.add(DataRequest(csp_id=alert.csp_id, token_hash=token, fields=["name"],
+                           status=status_, sent_via="whatsapp", sent_to="919812345601",
+                           expires_at=expires, **extra))
+    await db.commit()
+    r = await client.get(f"/api/csps/{alert.csp_id}/verification-links", headers=_auth(RM))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["valid_days"] == 3 and body["refusal"] == ""
+    assert sorted(l["state"] for l in body["links"]) == [
+        "filled", "not delivered", "ran out", "waiting"]
+    other = await client.get(f"/api/csps/{alert.csp_id}/verification-links",
+                             headers=_auth(OTHER_RM))
+    assert other.status_code == 404

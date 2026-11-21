@@ -609,3 +609,53 @@ async def test_the_chat_comes_from_the_platform_or_says_why_not(
     r = await client.get(f"/api/admin/whatsapp-messages/{m.id}/conversation",
                          headers=_auth("rm"))
     assert r.status_code == 403
+
+
+# ---- who sent it (No. 194) ---------------------------------------------------
+
+def test_a_send_made_by_a_person_records_who(db):
+    from app.services import send_reason
+    _csp(db)
+    with send_reason.sent_by("RM.One@eko.co.in"):
+        log.record(db, kind=log.KIND_DATA_REQUEST, mobile="9812345670",
+                   outcome={**SENT_OK, "job_id": "by-rm"}, csp_id="1A850001")
+    log.record(db, kind=log.KIND_DATA_REQUEST, mobile="9812345670",
+               outcome={**SENT_OK, "job_id": "by-app"}, csp_id="1A850001")
+    db.commit()
+    by = [m.sent_by for m in db.execute(
+        select(WhatsAppMessage).order_by(WhatsAppMessage.sent_at)).scalars()]
+    assert by == ["rm.one@eko.co.in", None], "outside it: the app itself"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_the_screen_says_automatic_you_or_which_rm(client, db):
+    from app.models.authorization_record import AuthorizationRecord
+    from app.models.enums import UserRole
+    from app.services import send_reason
+    from tests.test_role_separation import _auth
+    db.execute(text("DELETE FROM authorization_records WHERE email = 'rm.sent@eko.co.in'"))
+    db.add(AuthorizationRecord(email="rm.sent@eko.co.in", name="Rekha Sinha",
+                               mobile="9812345698", role=UserRole.RM, active=True,
+                               source="google_sheet"))
+    db.commit()
+    recent = datetime.now(timezone.utc) - timedelta(hours=1)
+    _message(db, job_id="auto", sent_at=recent)
+    _message(db, job_id="rm", sent_at=recent, sent_by="rm.sent@eko.co.in",
+             sent_because=send_reason.MANUAL)
+    _message(db, job_id="me", sent_at=recent, sent_by="super_admin@eko.co.in",
+             sent_because=send_reason.MANUAL)
+    _message(db, job_id="old", sent_at=recent, sent_because=send_reason.MANUAL)
+    try:
+        r = await client.get("/api/admin/whatsapp-messages", headers=_auth("super_admin"))
+        assert r.status_code == 200, r.text
+        body = r.json()
+        label = {row["job_id"]: row["sender_label"] for row in body["rows"]}
+        assert label == {"auto": "Automatic", "rm": "Rekha Sinha", "me": "You",
+                         "old": "A person (who was not recorded)"}
+        senders = [(s["label"], s["count"]) for s in body["senders"]]
+        assert senders[0] == ("Automatic", 1) and senders[1] == ("You", 1)
+        rm = next(s for s in body["senders"] if s["label"] == "Rekha Sinha")
+        assert rm["role"] == "rm" and rm["key"] == "rm.sent@eko.co.in"
+    finally:
+        db.execute(text("DELETE FROM authorization_records WHERE email = 'rm.sent@eko.co.in'"))
+        db.commit()

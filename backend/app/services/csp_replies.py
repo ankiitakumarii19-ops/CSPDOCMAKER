@@ -66,7 +66,7 @@ FEEDBACK = {"1": "CSP reply: feedback — got the documents",
 # always be written. Same wording as the migration's starting set.
 DEFAULTS = {
     LINK: ("Link ki pareshani ke liye khed hai. Hum aapko abhi ek naya link "
-           "bhej rahe hain - use 7 din ke andar ek baar bharein."),
+           "bhej rahe hain - use 3 din ke andar ek baar bharein."),
     RECEIVED: ("Aapki details {date} ko humein mil chuki hain, dhanyavaad. Ab "
                "kuch aur bharne ki zaroorat nahi hai."),
     DOCS_SENT: ("Aapke documents {date} ko {email} par email kiye gaye the. "
@@ -501,6 +501,18 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
 def send(session, reply: CspReply, by: str, text: Optional[str] = None,
          wa=None, send_link: Optional[bool] = None,
          quote: Optional[str] = None) -> CspReply:
+    """No. 194: everything this sends (the reply, a new link, the documents
+    again) is shown as sent by the person who pressed Send — or by the app
+    when the reply went automatically."""
+    from app.services import send_reason
+    with send_reason.sent_by(None if by == "automatic" else by):
+        return _send(session, reply, by, text=text, wa=wa,
+                     send_link=send_link, quote=quote)
+
+
+def _send(session, reply: CspReply, by: str, text: Optional[str] = None,
+          wa=None, send_link: Optional[bool] = None,
+          quote: Optional[str] = None) -> CspReply:
     """Send this reply (edited text if given), then do what it promised.
     send_link (No. 161): the person's choice whether the data verification
     link goes too — None keeps the agent's own plan. quote (No. 171): the
@@ -585,6 +597,12 @@ def send_verification_link(session, record) -> str:
             else f"new link NOT sent: {out.get('reason', '')}")
 
 
+def is_feedback_only(reply: CspReply) -> bool:
+    """Whether this draft only answers the feedback question."""
+    intents = list(reply.intents or [])
+    return bool(intents) and all(i.startswith("feedback_") for i in intents)
+
+
 def run(session, now: Optional[datetime] = None, wa=None,
         sending_hours: bool = True) -> Dict[str, int]:
     """One pass: read the inbox; in auto mode, send what is ready."""
@@ -597,11 +615,17 @@ def run(session, now: Optional[datetime] = None, wa=None,
         return {"mode": mode}
     counts = {"mode": mode, **collect(session, wa, now), "sent": 0}
     session.commit()
-    if mode != "auto" or not sending_hours:
+    if not sending_hours:
         return counts
     ready = session.execute(select(CspReply).where(
         CspReply.status == "draft", CspReply.last_in_at <= now - QUIET)
         .order_by(CspReply.last_in_at)).scalars().all()
+    if mode != "auto":
+        # No. 192: an answer to "did you get your documents?" (1 / 2 / 3) is
+        # answered straight away even in Drafts mode — its reply and what it
+        # does are fixed (No. 152). A reply that also answers something else
+        # still waits for a person.
+        ready = [r for r in ready if is_feedback_only(r)]
     for reply in ready:
         today = session.execute(select(func.count()).select_from(CspReply).where(
             CspReply.csp_id == reply.csp_id, CspReply.status == "sent",

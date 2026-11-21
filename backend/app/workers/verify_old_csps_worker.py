@@ -32,7 +32,14 @@ from app.workers.workspace_runner import for_configured_workspace
 logger = logging.getLogger(__name__)
 
 IST = timezone(timedelta(hours=5, minutes=30))
-RECENTLY = timedelta(days=3)
+
+
+def ask_again_after() -> timedelta:
+    """No. 192: an old CSP who has not answered is asked again once their
+    link has run out — the link's own life (3 days), never sooner. Once
+    they answer they are never sent the verification again (one time)."""
+    from app.config import get_settings
+    return timedelta(days=get_settings().data_request_expiry_days)
 LOCK_KEY = 7261126   # a fixed number: the Postgres lock for one batch at a time
 
 
@@ -67,7 +74,7 @@ def to_verify(session, limit: int) -> list:
     # Only an ask that actually reached the CSP counts (22 Oct 2026, No. 136):
     # one the WhatsApp platform failed or held back is retried next batch.
     recently = select(DataRequest.csp_id).where(
-        DataRequest.created_at > datetime.now(timezone.utc) - RECENTLY,
+        DataRequest.created_at > datetime.now(timezone.utc) - ask_again_after(),
         DataRequest.sent_to.isnot(None),
         DataRequest.delivery_error.is_(None))
     from app.services.message_sender import RETRY_FAILED_AFTER

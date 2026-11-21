@@ -135,7 +135,7 @@ async def send_draft(draft_id: str,
                             f"Not sent: {csp.send_hold}")
 
     if draft["channel"] == assistant_tools.WHATSAPP:
-        outcome = await _send_whatsapp(session, draft, csp)
+        outcome = await _send_whatsapp(session, draft, csp, by=_who(user))
     else:
         outcome = await _send_email(draft)
 
@@ -158,7 +158,8 @@ async def send_draft(draft_id: str,
             "to": draft["to"], **outcome}
 
 
-async def _send_whatsapp(session: AsyncSession, draft: dict, csp) -> dict:
+async def _send_whatsapp(session: AsyncSession, draft: dict, csp,
+                         by: str = "") -> dict:
     from app.models.whatsapp_message import KIND_OTHER
     from app.services import message_log, whatsapp_platform as wa
 
@@ -168,7 +169,7 @@ async def _send_whatsapp(session: AsyncSession, draft: dict, csp) -> dict:
         source_name=message_log.source_name("chat", csp.csp_id))
     await session.run_sync(lambda s: message_log.record(
         s, kind=KIND_OTHER, mobile=draft["to"], outcome=result,
-        csp_id=csp.csp_id, csp_name=csp.name))
+        csp_id=csp.csp_id, csp_name=csp.name, sent_by=by or None))
     await session.commit()
 
     if result["status"] == wa.SENT:

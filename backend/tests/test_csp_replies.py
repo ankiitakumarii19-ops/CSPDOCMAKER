@@ -438,3 +438,24 @@ async def test_the_link_can_be_sent_after_the_reply(client, rdb, monkeypatch):
     assert r.status_code == 200, r.text
     assert asked == [{"verify": True, "manual": True}]
     assert "new link sent" in r.json()["note"]
+
+
+def test_a_reply_says_who_sent_it(rdb, monkeypatch):
+    """No. 194: a reply sent from the Replies screen is shown as sent by
+    that person; one sent automatically, as the app's."""
+    from app.models.whatsapp_message import WhatsAppMessage
+    from app.services import message_sender
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, r, **kw: {"sent": True})
+    reply = _draft(rdb)
+    cr.send(rdb, reply, "Admin@eko.co.in", wa=FakeWhatsApp())
+    rdb.commit()
+    row = rdb.execute(select(WhatsAppMessage).where(
+        WhatsAppMessage.kind == "other")).scalars().one()
+    assert row.sent_by == "admin@eko.co.in"
+    reply.status = "draft"
+    cr.send(rdb, reply, "automatic", wa=FakeWhatsApp())
+    rdb.commit()
+    rows = rdb.execute(select(WhatsAppMessage.sent_by).where(
+        WhatsAppMessage.kind == "other").order_by(WhatsAppMessage.sent_at)).scalars().all()
+    assert rows == ["admin@eko.co.in", None]

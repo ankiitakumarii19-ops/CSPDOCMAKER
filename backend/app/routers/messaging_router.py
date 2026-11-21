@@ -393,9 +393,14 @@ async def send_now(
                                     "reason": "no such CSP"})
                     failed += 1
                     continue
-                outcome = sender.ask_for_details(
-                    sync, record, channel=channel, template=template,
-                    manual=True)
+                from app.services import send_reason
+                # No. 194: on the WhatsApp messages screen as sent by this
+                # person, not the app.
+                person = _who(user)
+                with send_reason.because(send_reason.MANUAL), send_reason.sent_by(person):
+                    outcome = sender.ask_for_details(
+                        sync, record, channel=channel, template=template,
+                        manual=True)
                 results.append(outcome)
                 if outcome.get("sent"):
                     sent += 1

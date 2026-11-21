@@ -126,6 +126,8 @@ export default function WhatsAppMessages() {
   const [focus, setFocus] = useState<{ kind: Kind; tile: Tile } | null>(null);
   // Why it was sent (No. 156): shows only the messages sent for that reason.
   const [because, setBecause] = useState("");
+  // Who sent it (No. 194): "automatic", a person's email, or "person".
+  const [sender, setSender] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [refreshed, setRefreshed] = useState<WhatsAppRefreshResult | null>(null);
 
@@ -174,12 +176,15 @@ export default function WhatsAppMessages() {
 
   const rows = useMemo(() => {
     const all = data?.rows ?? [];
+    if (sender) return all.filter((r) => r.sender_key === sender);
     if (because) return all.filter((r) => r.sent_because === because);
     if (!focus) return all.filter((r) => r.kind !== "other");
     return all.filter((r) => r.kind === focus.kind && matches(r, focus.tile));
-  }, [data, focus, because]);
+  }, [data, focus, because, sender]);
 
-  const focusLabel = because
+  const focusLabel = sender
+    ? `Sent by: ${data?.senders.find((s) => s.key === sender)?.label ?? sender}`
+    : because
     ? `Sent because: ${data?.sent_because.find((b) => b.key === because)?.label ?? because}`
     : focus
     ? `${KIND_TITLE[focus.kind]} — ${TILES.find((t) => t.key === focus.tile)?.label}`
@@ -272,6 +277,42 @@ export default function WhatsAppMessages() {
 
       {loading && !data && <p className="text-sm text-gray-500 py-8">Loading…</p>}
 
+      {/* Who sent them: the app by itself, you, or which RM / Admin (No. 194). */}
+      {data && (
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-3">
+          <div className="text-sm font-semibold text-gray-900 dark:text-white mb-2">
+            Who sent them
+          </div>
+          {data.senders.length === 0 ? (
+            <p className="text-xs text-gray-500">No messages in this period.</p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {data.senders.map((s) => (
+                <button
+                  key={s.key}
+                  onClick={() => {
+                    setFocus(null);
+                    setBecause("");
+                    setSender(sender === s.key ? "" : s.key);
+                  }}
+                  title={s.key === "automatic" || s.key === "person" ? "" : s.key}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
+                    sender === s.key
+                      ? "bg-eko/10 text-eko border-eko"
+                      : "border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  <i className={`fas ${s.key === "automatic" ? "fa-robot" : "fa-user"} mr-1.5 text-gray-400`}></i>
+                  {s.label}
+                  {s.role && <span className="ml-1 text-gray-400 uppercase">{s.role.replace("_", " ")}</span>}
+                  <span className="font-bold tabular-nums ml-1">{s.count}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Why messages were sent, besides the usual flow (No. 156). */}
       {data && (
         <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-5 py-3">
@@ -290,6 +331,7 @@ export default function WhatsAppMessages() {
                   key={b.key}
                   onClick={() => {
                     setFocus(null);
+                    setSender("");
                     setBecause(because === b.key ? "" : b.key);
                   }}
                   className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
@@ -335,6 +377,7 @@ export default function WhatsAppMessages() {
                         key={t.key}
                         onClick={() => {
                           setBecause("");
+                          setSender("");
                           setFocus(active ? null : { kind: k.key, tile: t.key });
                         }}
                         className={`text-left rounded-lg border px-3 py-2 transition-colors ${
@@ -385,11 +428,12 @@ export default function WhatsAppMessages() {
                 Click a message to see what the CSP changed
               </span>
             </h3>
-            {(focus || because) && (
+            {(focus || because || sender) && (
               <button
                 onClick={() => {
                   setFocus(null);
                   setBecause("");
+                  setSender("");
                 }}
                 className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
               >
@@ -429,6 +473,7 @@ export default function WhatsAppMessages() {
                       {r.responded === false && " · no reply yet"}
                       {r.sent_because && ` · ${r.sent_because_label}`}
                     </div>
+                    <div className="text-xs text-gray-500">Sent by: {r.sender_label}</div>
                     {r.reason && <div className="text-xs text-gray-500 mt-0.5">{r.reason}</div>}
                   </button>
                 );
@@ -442,6 +487,7 @@ export default function WhatsAppMessages() {
                     <th className="px-4 py-2">Mobile</th>
                     <th className="px-4 py-2">Message</th>
                     <th className="px-4 py-2">Sent</th>
+                    <th className="px-4 py-2">Sent by</th>
                     <th className="px-4 py-2">Status</th>
                     <th className="px-4 py-2">Responded</th>
                   </tr>
@@ -482,6 +528,25 @@ export default function WhatsAppMessages() {
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap text-gray-700 dark:text-gray-300">
                           {when(r.sent_at)}
+                        </td>
+                        <td className="px-4 py-2 text-gray-700 dark:text-gray-300">
+                          {r.sender_key === "automatic" ? (
+                            <span className="text-gray-500">
+                              <i className="fas fa-robot mr-1 text-xs"></i>Automatic
+                            </span>
+                          ) : (
+                            <span title={r.sent_by ?? ""}>
+                              <i className="fas fa-user mr-1 text-xs text-gray-400"></i>
+                              <span className={r.sender_label === "You" ? "font-semibold text-eko" : ""}>
+                                {r.sender_label}
+                              </span>
+                              {r.sender_role && (
+                                <span className="block text-xs text-gray-400 uppercase">
+                                  {r.sender_role.replace("_", " ")}
+                                </span>
+                              )}
+                            </span>
+                          )}
                         </td>
                         <td className="px-4 py-2">
                           <span className={`px-2 py-0.5 rounded text-xs font-semibold ${badge.cls}`}>

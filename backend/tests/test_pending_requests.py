@@ -141,3 +141,37 @@ def test_the_job_is_scheduled():
     from app.celery_app import celery_app
     names = {e["task"] for e in celery_app.conf.beat_schedule.values()}
     assert "workers.complete_pending_requests" in names
+
+
+def test_a_waiting_request_asks_the_csp_again(db, sent, ready_pipeline,
+                                              monkeypatch):
+    """No. 192: while details are missing the CSP is asked again (the open
+    link reused; a new one once it runs out after 3 days)."""
+    from app.workers import new_csp_worker
+    asked = []
+    monkeypatch.setattr(new_csp_worker, "_ask_csp",
+                        lambda s, csp: asked.append(csp.csp_id) or {"sent": True})
+    make_csp(db, "OLD9", complete=False, origin="baseline",
+             photo=ready_pipeline)
+    _pending(db, "OLD9")
+    assert pending_request_worker.finish_ready(db)["waiting"] == 1
+    assert asked == ["OLD9"]
+
+
+def test_asking_keeps_to_sending_hours(db, monkeypatch):
+    """No. 192: the new-CSP / waiting-request ask runs every few minutes, so
+    it never goes outside 8 am - 8 pm."""
+    from types import SimpleNamespace
+
+    from app.services import message_sender
+    from app.workers import new_csp_worker, verify_old_csps_worker
+    called = []
+    monkeypatch.setattr(message_sender, "ask_for_details",
+                        lambda s, c: called.append(c) or {"sent": True})
+    csp = SimpleNamespace(csp_id="NIGHT1")
+    monkeypatch.setattr(verify_old_csps_worker, "in_hours", lambda *a: False)
+    out = new_csp_worker._ask_csp(db, csp)
+    assert out["sent"] is False and "8 am - 8 pm" in out["reason"]
+    assert called == []
+    monkeypatch.setattr(verify_old_csps_worker, "in_hours", lambda *a: True)
+    assert new_csp_worker._ask_csp(db, csp)["sent"] is True

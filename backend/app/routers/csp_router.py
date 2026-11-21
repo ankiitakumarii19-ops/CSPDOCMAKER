@@ -335,6 +335,57 @@ async def csp_conversation(
     return await chat_for_csp(session, csp_id)
 
 
+@router.get("/{csp_id}/verification-links",
+            summary="Every verification / details link sent to this CSP")
+async def csp_verification_links(
+    csp_id: str,
+    session: AsyncSession = Depends(get_db),
+    user=Depends(require_any_role),
+):
+    """No. 192 (RM portal → Messages): what an RM needs before sending the
+    link again — the CSP, whether it can be sent, and every link so far:
+    when, how, valid until, and whether it was filled, ran out or was
+    replaced. RMs for their own (and unowned) CSPs, like /message."""
+    from app.models.data_request import (ANSWERED, CANCELLED, OPEN,
+                                         DataRequest)
+    from app.services import manual_messages as mm
+
+    record = await _my_csp(session, csp_id, user)
+    existing = await session.run_sync(lambda s: mm.is_existing(s, record))
+    rows = (await session.execute(
+        select(DataRequest).where(DataRequest.csp_id == csp_id)
+        .order_by(DataRequest.created_at.desc()).limit(50))).scalars().all()
+    now = datetime.now(timezone.utc)
+
+    def state(r) -> str:
+        expires = r.expires_at if r.expires_at.tzinfo else r.expires_at.replace(
+            tzinfo=timezone.utc)
+        if r.status == ANSWERED:
+            return "filled"
+        if r.status == CANCELLED:
+            return "not delivered" if r.delivery_error else "replaced"
+        if r.status == OPEN and expires > now:
+            return "waiting"
+        return "ran out"
+
+    from app.config import get_settings
+    return {
+        "csp_id": record.csp_id, "name": record.name or "",
+        "mobile": record.mobile or "", "email": record.email or "",
+        "on_hold": record.send_hold or "", "existing": existing,
+        "valid_days": get_settings().data_request_expiry_days,
+        "channels": mm.channels(),
+        "refusal": mm.refusal(record.send_hold, existing, mm.DETAILS_FORM) or "",
+        "links": [{
+            "sent_at": r.created_at.isoformat() if r.created_at else None,
+            "valid_until": r.expires_at.isoformat() if r.expires_at else None,
+            "answered_at": r.answered_at.isoformat() if r.answered_at else None,
+            "via": r.sent_via or "", "to": r.sent_to or "",
+            "error": r.delivery_error or "", "state": state(r),
+        } for r in rows],
+    }
+
+
 @router.post("/{csp_id}/message", summary="Send this CSP a message now")
 async def message_csp(
     csp_id: str,

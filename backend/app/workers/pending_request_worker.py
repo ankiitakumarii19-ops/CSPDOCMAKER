@@ -57,7 +57,7 @@ def finish_ready(session) -> dict:
     from app.models.enums import DocumentType, JobState
     from app.models.processing_job import ProcessingJob
     from app.services.missing_data_service import check_missing_data
-    from app.workers.new_csp_worker import _process_one, _try_photo
+    from app.workers.new_csp_worker import _ask_csp, _process_one, _try_photo
 
     pending = session.execute(
         select(ProcessingJob)
@@ -114,6 +114,14 @@ def finish_ready(session) -> dict:
             from app.services import studio_photo
             studio_photo.prepare_for(csp)   # No. 72
             if check_missing_data(csp, types).has_missing_data:
+                # No. 192: asked again until they fill it — the open link is
+                # reused; once it runs out (3 days) a new one is sent, 8 am -
+                # 8 pm only. Never raises (the request keeps waiting).
+                asked = _ask_csp(session, csp)
+                if asked.get("sent"):
+                    logger.info("pending_request_worker: CSP %s asked again "
+                                "for their details (job %s)", csp.csp_id,
+                                job.job_id)
                 waiting += 1
                 continue
             from app.services import email_service

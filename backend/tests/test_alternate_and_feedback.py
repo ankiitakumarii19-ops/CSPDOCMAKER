@@ -373,3 +373,27 @@ async def test_the_whatsapp_page_counts_the_feedback_question(client, fdb):
     assert body["summary"]["feedback"]["total"] == 1
     assert body["feedback_answers"] == {
         "answers": {"1": 0, "2": 1, "3": 0}, "no_answer": 0}
+
+
+def test_a_feedback_answer_is_replied_to_automatically_in_drafts_mode(
+        fdb, monkeypatch):
+    """No. 192: the CSP answers the feedback question and the reply goes by
+    itself, even in Drafts mode; anything else still waits for a person."""
+    from tests.test_csp_replies import _csp as reply_csp
+    _asked(fdb)
+    reply_csp(fdb, code="1A997002", mobile="9812345622", rm=False)
+    assert cr.get_mode(fdb) == "draft"
+    wa = FakeWhatsApp([_in("1", 30),
+                       _in("certificate kab milega", 30, phone="919812345622")])
+    from app.models.whatsapp_message import WhatsAppMessage
+    fdb.add(WhatsAppMessage(csp_id="1A997002", phone="919812345622",
+                            kind="data_request", source="t",
+                            send_status="sent", sent_at=NOW - timedelta(hours=10)))
+    fdb.commit()
+    out = cr.run(fdb, now=NOW, wa=wa)
+    assert out["sent"] == 1
+    by_csp = {r.csp_id: r for r in fdb.execute(select(cr.CspReply)).scalars()}
+    assert by_csp["1A997001"].status == "sent"
+    assert by_csp["1A997001"].decided_by == "automatic"
+    assert by_csp["1A997002"].status == "draft", "not feedback: a person sends it"
+    assert cr.run(fdb, now=NOW, wa=wa, sending_hours=False)["sent"] == 0

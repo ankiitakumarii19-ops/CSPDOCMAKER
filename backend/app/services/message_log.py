@@ -165,7 +165,7 @@ def record(session: Session, *, kind: str, mobile: str, outcome: dict,
                 sent_at=_now(),
                 sent_because=send_reason.current(),
                 body_text=body_text,
-                sent_by=sent_by,
+                sent_by=sent_by or send_reason.current_person(),
             )
             session.add(row)
             session.flush()
@@ -519,6 +519,8 @@ def as_row(m: WhatsAppMessage, now: Optional[datetime] = None) -> dict:
         "source": m.source,
         "sent_because": m.sent_because,
         "sent_because_label": send_reason.label(m.sent_because),
+        # No. 194: the person who sent it (email), or None = the app itself.
+        "sent_by": m.sent_by,
     }
 
 

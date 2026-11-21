@@ -58,7 +58,7 @@ router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 require_rm = require_role("rm")
 
 
-def _ask_csp_now(csp_id: str, workspace_id) -> dict:
+def _ask_csp_now(csp_id: str, workspace_id, by: str = "") -> dict:
     """Send this CSP the request for their missing details (WhatsApp).
 
     Runs in a worker thread with its own synchronous session, scoped to
@@ -82,7 +82,10 @@ def _ask_csp_now(csp_id: str, workspace_id) -> dict:
             ).scalars().first()
             if record is None:
                 return {"sent": False, "via": "", "reason": "CSP not found"}
-            outcome = sender.ask_for_details(sync, record, manual=True)
+            from app.services import send_reason
+            # No. 194: shown as sent by the RM who made the request.
+            with send_reason.sent_by(by):
+                outcome = sender.ask_for_details(sync, record, manual=True)
     except (sender.NoChannel, sender.NoTemplate) as e:
         logger.warning("workflow: CSP %s not asked: %s", csp_id, e)
         return {"sent": False, "via": "", "reason": str(e)}
@@ -225,8 +228,9 @@ async def process_workflow(
         await session.commit()
         # Ask the CSP now rather than on the next scheduled run, and tell the
         # RM what actually happened — never "will be asked" when it was not.
-        asked = await asyncio.to_thread(_ask_csp_now, csp_id,
-                                        current_workspace_id())
+        asked = await asyncio.to_thread(
+            _ask_csp_now, csp_id, current_workspace_id(),
+            (token_user.get("sub") or token_user.get("email") or ""))
         return {
             "job_id": job_id,
             "csp_id": csp_id,

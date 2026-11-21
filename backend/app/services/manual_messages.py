@@ -158,10 +158,12 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
         except message_sender.NoChannel:
             return refuse(f"no {channel} channel is set up on Messaging → "
                           f"Channels")
-        with send_reason.because(send_reason.MANUAL):
+        with send_reason.because(send_reason.MANUAL), send_reason.sent_by(by):
+            # No. 192: a new 3-day link every time a person sends it, as
+            # often as they like; the earlier one closes once this arrives.
             outcome = message_sender.ask_for_details(
                 session, record, channel=configured, manual=True,
-                verify=True, allow_email=channel == EMAIL)
+                verify=True, allow_email=channel == EMAIL, fresh=True)
         result["sent"] = bool(outcome.get("sent"))
         result["reason"] = outcome.get("reason") or ""
         result["text"] = "Details form (the usual wording, with a new link)"
