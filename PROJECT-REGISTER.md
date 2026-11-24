@@ -269,6 +269,7 @@ it — you said so.
 | 217 | 24 Nov | "Go on, implement all the stages" (24 Nov). | **Stage 10 (Eko as workspace 1, pilot) - the parts for you 24 Nov, tested on this laptop; not pushed, not on the server.** Eko already runs as workspace 1 on the standard (= its own) values; every golden case passes. Left for you, on the server: push, `update.sh test`, look at the new screens, `update.sh live`, watch a day (TK-075 - TK-077); a pilot company set up using only the guide / chat / settings sheet (TK-078) and its fixes (TK-079 - TK-080). |
 | 218 | 24 Nov | "Push it". | **Pushed 24 Nov**: GitHub main is now 8951f86 (all of Stages 0-9, No. 202-216; the golden check ran first: 124 passed). Found while pushing: another session's video commit f110b6b had already gone to GitHub and had picked up part of this work (whatsapp_platform.py calling send_guard) without the rest - alone it would have broken every WhatsApp send; 8951f86 (committed as "pro" before I could) completes it, so GitHub is whole again. Not on the server yet. **Next for you**: on the server `sh deploy/update.sh test`, look at the new screens on the test copy, then `sh deploy/update.sh live`. |
 | 219 | 24 Nov | "Fix it and push" (screenshot: push stopped, golden check "120 passed, 5 errors"). | **Fixed and pushed 24 Nov.** The golden cases themselves were fine (124 of 124 every time they ran alone); the 5 / 11 "errors" were set-up errors: the push check and another test run (the other session's) used the same test database at the same moment, and each run wipes it when it starts. GitHub is now complete (d01b20e, golden check passed). Fix: the push check now uses its own test database (cspdocmaker_pushcheck) and shows ERROR lines as well as FAILED ones - backend/scripts/git-hooks/pre-push, installed on this laptop. |
+| 220 | 24 Nov | "Push it". | **Answered 24 Nov**: nothing new to push - GitHub already had everything (9293c70); only this line was pushed. Next for you: on the server `sh deploy/update.sh test`, then `live`. |
 
 ---
 
@@ -555,3 +556,4 @@ it — you said so.
 | 24 Nov 2026 | Added No. 217: Stage 10 (Eko as workspace 1, pilot) - the parts for you - not pushed |
 | 24 Nov 2026 | Added No. 218: pushed Stages 0-9 to GitHub (8951f86) |
 | 24 Nov 2026 | Added No. 219: push check gets its own test database (no more clashes with other test runs) |
+| 24 Nov 2026 | Added No. 220: push check - already up to date |
