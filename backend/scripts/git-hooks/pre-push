@@ -17,12 +17,15 @@ if [ ! -x "$py" ]; then
 fi
 
 echo "golden check: running the golden cases before the push..."
-out=$(PYTHONPATH=. "$py" -m pytest -q -p no:cacheprovider tests/test_golden_cases.py 2>&1)
+# Its own test database (No. 219): the test suite drops and re-creates its
+# database when it starts, so a push made while any other test run is going
+# (e.g. another session's) used to fail with set-up "errors", not a rule.
+out=$(TEST_DATABASE_NAME=cspdocmaker_pushcheck PYTHONPATH=. "$py" -m pytest -q -p no:cacheprovider tests/test_golden_cases.py 2>&1)
 status=$?
 summary=$(echo "$out" | tail -1)
 
 if [ $status -ne 0 ]; then
-  echo "$out" | grep -E "^FAILED" | head -20
+  echo "$out" | grep -E "^(FAILED|ERROR)" | head -20
   echo "$summary"
   echo "golden check: a golden case FAILED — push stopped."
   echo "Either the change broke a business rule (fix the code), or the rule"
