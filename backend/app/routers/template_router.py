@@ -192,7 +192,10 @@ async def template_detail(
         **_summarise(template, info["placeholders"]),
         "placeholders": [
             {"text": p, "field": mapping[p],
-             "guessed": not stored.get(p) and bool(info["mapped"].get(p))}
+             "guessed": not stored.get(p) and bool(info["mapped"].get(p)),
+             # No. 212 (ZU-05): a suggestion for a blank with no exact match.
+             "suggestion": (info.get("suggested") or {}).get(p)
+             if not mapping[p] else None}
             for p in info["placeholders"]
         ],
         "paragraphs": info["paragraphs"],

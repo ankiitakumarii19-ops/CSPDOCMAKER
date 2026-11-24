@@ -412,11 +412,20 @@ PAUSED_REASON = ("Emails are paused (EMAILS_PAUSED=true) — nothing is "
                  "mailed until it is turned off. Sign-in codes still go out.")
 
 
+def paused_reason() -> str:
+    """Why emails are on hold, in plain words (No. 215)."""
+    from app.services import send_guard
+    return send_guard.refusal() or PAUSED_REASON
+
+
 def paused() -> bool:
-    """Whether emails other than sign-in codes are on hold (No. 133)."""
+    """Whether emails other than sign-in codes are on hold (No. 133).
+    No. 215: also while this workspace is paused or not live yet (test mode
+    sends to the test address instead)."""
     # A test copy never emails anyone but the sign-in code (No. 173).
+    from app.services import send_guard
     s = get_settings()
-    return bool(s.emails_paused or s.test_copy)
+    return bool(s.emails_paused or s.test_copy or send_guard.refusal())
 
 
 def send_documents_email(
@@ -440,6 +449,8 @@ def send_documents_email(
     from_email = (settings.smtp_from_email or settings.smtp_username
                   or settings.gmail_sender_email)
     track = email_log.tracker(from_email)
+    from app.services import send_guard
+    to_email = send_guard.email_to(to_email)       # No. 215: test mode
     ok = _send_documents_email(to_email, csp_name, csp_id, doc_names,
                                doc_filepaths, track)
     if settings.email_method.lower().strip() != "console":

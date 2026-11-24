@@ -150,6 +150,36 @@ def generate_document(
 
 
 @telemetry.traced("generate_documents", "document_service")
+def _check_daily_ceiling(asked: int) -> None:
+    """No. 216: a workspace's ceiling on documents made in a day (0 = none).
+    Raises RuntimeError — the caller's job fails and is tried again later —
+    rather than making more than its Super Admin allowed."""
+    from app.config import get_settings
+    ceiling = int(get_settings().max_documents_per_day or 0)
+    if not ceiling:
+        return
+    from datetime import timezone as _tz
+    from sqlalchemy import create_engine, text
+    from app.workers.verify_old_csps_worker import send_zone
+    from app.workspace_context import current_workspace_id
+    midnight = datetime.now(_tz.utc).astimezone(send_zone()).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    engine = create_engine(get_settings().database_url.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://"))
+    try:
+        with engine.connect() as conn:
+            made = int(conn.execute(text(
+                "SELECT count(*) FROM stored_documents WHERE created_at >= :t "
+                "AND workspace_id = :w"), {"t": midnight, "w": str(
+                    current_workspace_id())}).scalar() or 0)
+    finally:
+        engine.dispose()
+    if made + asked > ceiling:
+        raise RuntimeError(f"waiting: this workspace's ceiling of {ceiling} "
+                           f"documents a day is reached ({made} made today) "
+                           "— Settings → Going live")
+
+
 def generate_documents(
     csp: CSPRecord,
     document_types: List[DocumentType],
@@ -170,6 +200,8 @@ def generate_documents(
         RuntimeError: if any document could not be generated. Nothing is
             returned partially — the caller treats this as a failed job.
     """
+    document_types = list(document_types)
+    _check_daily_ceiling(len(document_types))
     output_dir = _ensure_output_dir(csp.csp_id)
     results: List[Tuple[DocumentType, str]] = []
 

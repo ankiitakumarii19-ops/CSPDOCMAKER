@@ -451,7 +451,9 @@ def stage(message: WhatsAppMessage, now: Optional[datetime] = None) -> str:
         return READ
     if message.delivery_status == DELIVERY_DELIVERED:
         return DELIVERED
-    if message.sent_at and now - message.sent_at > NOT_RECEIVED_AFTER:
+    from app.config import get_settings
+    after = timedelta(hours=get_settings().whatsapp_not_received_hours)
+    if message.sent_at and now - message.sent_at > after:
         return NOT_RECEIVED
     return SENT
 

@@ -134,15 +134,58 @@ def normalize_header(header: str) -> str:
 _NORMALIZED_COLUMNS = {normalize_header(k): v for k, v in SHEET_COLUMN_TO_FIELD.items()}
 
 
+def _squash(text: str) -> str:
+    return " ".join((text or "").split()).lower()
+
+
+def column_map() -> Dict[str, str]:
+    """This workspace's own column names: {field: sheet header}, only for
+    the fields it renamed (No. 211, Setup → Columns). {} = Eko's columns."""
+    from app.services import workspace_settings
+    from app.workspace_context import current_workspace_id
+    wid = current_workspace_id()
+    if wid is None:
+        return {}
+    own = workspace_settings.values_for(wid).get("column_map")
+    return dict(own) if isinstance(own, dict) else {}
+
+
+def columns() -> Dict[str, str]:
+    """Normalised sheet header -> field, in force in this workspace: Eko's
+    headers, with the workspace's own name in place of any it renamed."""
+    own = column_map()
+    if not own:
+        return _NORMALIZED_COLUMNS
+    out = {h: f for h, f in _NORMALIZED_COLUMNS.items() if f not in own}
+    for field, header in own.items():
+        out[normalize_header(header)] = field
+    return out
+
+
+def field_for_header(title: str) -> Optional[str]:
+    """The field a sheet column holds (spaces and case ignored)."""
+    cols = columns()
+    return cols.get(normalize_header(title)) or next(
+        (f for h, f in cols.items() if _squash(h) == _squash(title)), None)
+
+
+def header_for(field: str) -> Optional[str]:
+    """The sheet column a field is written to in this workspace."""
+    own = column_map()
+    return own.get(field) or FIELD_TO_SHEET_COLUMN.get(field)
+
+
 def map_sheet_row(row: Dict[str, str]) -> Dict[str, str]:
     """Map one sheet row (header → value) to CSPRecord field names.
 
     Unknown headers are ignored. Values are stripped. Empty cells are kept as
     empty strings so the sync can tell "cleared in the sheet" from "absent".
+    The workspace's own column names count (No. 211).
     """
     mapped: Dict[str, str] = {}
+    cols = columns()
     for header, value in row.items():
-        field = _NORMALIZED_COLUMNS.get(normalize_header(header))
+        field = cols.get(normalize_header(header))
         if field:
             mapped[field] = (value or "").strip()
     return mapped

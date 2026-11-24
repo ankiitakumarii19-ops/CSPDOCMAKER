@@ -113,7 +113,8 @@ def sync_csp_data(self):
         if info is not None:
             for mapped in mapped_rows:
                 why = {}
-                supplied = info.fill_missing(mapped, why=why)
+                supplied = (info.fill_missing(mapped, why=why)
+                            if settings.lookup_fill_enabled else {})   # No. 211
                 if supplied:
                     mapped.update(supplied)
                     enriched += 1

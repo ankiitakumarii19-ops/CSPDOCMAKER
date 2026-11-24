@@ -231,9 +231,12 @@ async def test_the_two_capabilities_are_named_apart_in_the_ui():
 
     assert 'const isOwner = user?.role === "super_admin"' in source
     assert "const canConfigure = isOwner" in source
-    # Templates and the builder are behind the shared flag.
-    assert 'canConfigure && adminRoute === "templates"' in source
-    assert 'canConfigure && adminRoute === "build"' in source
+    # Templates and the builder follow Feature access (No. 206): the menu
+    # asks the same decision the server enforces (GET /api/me/access), so
+    # a button is shown exactly when the route lets the person in.
+    assert 'can("templates") && adminRoute === "templates"' in source
+    assert 'can("dashboards") && adminRoute === "build"' in source
+    assert "useMyAccess" in source
     # Access: the Owner's, and an Admin's only when the Owner's workspace
     # rules allow it (No. 120) — the server checks the same rule, so the
     # button never 403s. The rules screen itself is the Owner's alone.

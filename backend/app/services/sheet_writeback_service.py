@@ -56,9 +56,7 @@ def find_columns(header: List[str]) -> Dict[str, int]:
     """Canonical field -> its column index in this sheet, as it is today."""
     columns: Dict[str, int] = {}
     for index, title in enumerate(header):
-        field = csp_mapping.SHEET_COLUMN_TO_FIELD.get(_norm(title)) or \
-            next((f for c, f in csp_mapping.SHEET_COLUMN_TO_FIELD.items()
-                  if _norm(c) == _norm(title)), None)
+        field = csp_mapping.field_for_header(title)   # own columns (No. 211)
         if field and field not in columns:
             columns[field] = index
     return columns

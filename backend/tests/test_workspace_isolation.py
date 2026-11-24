@@ -197,6 +197,12 @@ async def test_every_table_holding_customer_data_is_scoped():
         "DataSource", "DocumentTemplate", "EmailJob", "MessageCampaign",
         "MessageChannel", "MessageTemplate", "ProcessingJob", "RMAlert",
         "StoredDocument", "SyncRun", "User", "WhatsAppMessage", "WorkspaceMember",
+        # No. 204: each workspace's own settings and their history.
+        "WorkspaceSetting", "WorkspaceSettingChange",
+        # No. 206: who has which feature, and own roles.
+        "AccessRole", "FeatureAccess",
+        # No. 210: each workspace's locked passwords and keys.
+        "WorkspaceSecret",
     }
     # DashboardWidget is deliberately absent: it is reached only through the
     # dashboard that owns it, which is scoped. Denormalising the workspace

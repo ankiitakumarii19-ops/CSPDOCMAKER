@@ -46,9 +46,26 @@ logger = logging.getLogger(__name__)
 CATEGORY = "CSP replies"
 MODES = ("off", "draft", "auto")
 DEFAULT_MODE = "draft"
+# Eko's values; each workspace may set its own (No. 204):
+# REPLY_LOOKBACK_HOURS, REPLY_QUIET_MINUTES, REPLY_AUTO_PER_DAY.
 LOOKBACK = timedelta(hours=72)
 QUIET = timedelta(minutes=5)
 AUTO_PER_DAY = 3
+
+
+def _lookback() -> timedelta:
+    from app.config import get_settings
+    return timedelta(hours=get_settings().reply_lookback_hours)
+
+
+def _quiet() -> timedelta:
+    from app.config import get_settings
+    return timedelta(minutes=get_settings().reply_quiet_minutes)
+
+
+def _auto_per_day() -> int:
+    from app.config import get_settings
+    return get_settings().reply_auto_per_day
 MAX_CHARS = 900
 
 LINK = "CSP reply: the link does not open"
@@ -122,7 +139,15 @@ TECHNICAL_WORDS = (
 
 
 def is_technical(text: str) -> bool:
-    return _any(norm(text), TECHNICAL_WORDS)
+    """Eko's technical list, plus the workspace's own never-answer words
+    (No. 213, Settings → Replies)."""
+    if _any(norm(text), TECHNICAL_WORDS):
+        return True
+    from app.config import get_settings
+    own = [w.strip().lower() for w in str(
+        get_settings().reply_never_answer_words or "").split(",") if w.strip()]
+    padded = f" {norm(text)} "
+    return any(f" {w} " in padded for w in own)
 
 
 # ---- understanding a message --------------------------------------------
@@ -416,7 +441,7 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
     for r in inbox:
         phone = re.sub(r"\D", "", str(r.get("from_phone") or ""))
         at = message_log._parse_time(r.get("sent_at"))
-        if phone not in csp_of or at is None or at < now - LOOKBACK:
+        if phone not in csp_of or at is None or at < now - _lookback():
             continue
         if seen.get(phone) and at <= seen[phone]:
             continue
@@ -490,7 +515,7 @@ def collect(session, wa, now: Optional[datetime] = None) -> Dict[str, int]:
     # Drafts nobody sent in time are out of date.
     for old in session.execute(select(CspReply).where(
             CspReply.status == "draft",
-            CspReply.last_in_at < now - LOOKBACK)).scalars():
+            CspReply.last_in_at < now - _lookback())).scalars():
         old.status, old.note = "expired", "not sent within 3 days"
     session.flush()
     return counts
@@ -618,7 +643,7 @@ def run(session, now: Optional[datetime] = None, wa=None,
     if not sending_hours:
         return counts
     ready = session.execute(select(CspReply).where(
-        CspReply.status == "draft", CspReply.last_in_at <= now - QUIET)
+        CspReply.status == "draft", CspReply.last_in_at <= now - _quiet())
         .order_by(CspReply.last_in_at)).scalars().all()
     if mode != "auto":
         # No. 192: an answer to "did you get your documents?" (1 / 2 / 3) is
@@ -631,8 +656,8 @@ def run(session, now: Optional[datetime] = None, wa=None,
             CspReply.csp_id == reply.csp_id, CspReply.status == "sent",
             CspReply.decided_by == "automatic",
             CspReply.sent_at >= now - timedelta(days=1))).scalar() or 0
-        if today >= AUTO_PER_DAY:
-            reply.note = f"waiting: {AUTO_PER_DAY} automatic replies already today"
+        if today >= _auto_per_day():
+            reply.note = f"waiting: {_auto_per_day()} automatic replies already today"
             continue
         try:
             send(session, reply, "automatic", wa=wa)

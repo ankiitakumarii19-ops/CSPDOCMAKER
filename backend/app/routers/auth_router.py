@@ -85,6 +85,7 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             password=request.password,
             requested_role=request.requested_role.value,
             workspace_name=request.workspace_name,
+            starter=request.starter or "blank",
         )
     except Exception as e:
         logger.error(

@@ -17,6 +17,11 @@ code — the same functions the sync, the jobs and the forms call:
   go_live    source_sheets.run — old or new, over several runs (No. 121, 145)
   verify     verification_auto — which value wins a difference (No. 171)
   message    manual_messages   — who may get a person's message (No. 174)
+  access     csp_access        — which CSPs an RM may act on (No. 175)
+  edit       csp_editor        — what an edit of a CSP may save (No. 175)
+  link       message_sender    — the 3-day details link, by hand or not (No. 192-193)
+  force      whatsapp_platform — a person's message always goes (No. 195)
+  sender     WhatsApp screen   — who sent each message (No. 194)
 
 Run before every deploy (DEPLOY.md):
 
@@ -40,6 +45,7 @@ from app.services import (alert_composer, data_request_service,
 from app.services.info_directory import InfoDirectory
 from tests.test_source_sheets import (KO, _run, _state, calling_row,
                                       lead_row, world)  # noqa: F401
+from tests.test_verify_old_csps import _old, db  # noqa: F401
 
 GOLDEN = json.loads((Path(__file__).parent / "golden" / "cases.json")
                     .read_text(encoding="utf-8"))
@@ -57,7 +63,8 @@ def _cases(*kinds):
 # ---- the file itself ----------------------------------------------------
 
 RUNNERS = {"documents", "info", "rm", "hold", "mobile", "address", "ask",
-           "form", "channel", "go_live", "verify", "message"}
+           "form", "channel", "go_live", "verify", "message", "access", "edit",
+           "link", "force", "sender", "setting", "feature", "connection", "data"}
 
 
 def test_the_golden_file_is_well_formed():
@@ -162,6 +169,90 @@ def test_message(case):
         assert expect["says"] in why
 
 
+@pytest.mark.parametrize("case", _cases("access"))
+def test_access(case):
+    from app.services import csp_access
+
+    i = case["input"]
+    csp = SimpleNamespace(rm_email=i["csp_rm_email"], rm_resolution=i["rm_resolution"])
+    user = {"role": i["role"], "sub": i["user"]}
+    assert csp_access.can_access(csp, user) == case["expect"]["allowed"]
+
+
+@pytest.mark.parametrize("case", _cases("edit"))
+def test_edit(case):
+    from app.services import csp_editor
+
+    i, expect = case["input"], case["expect"]
+    if "locked" in expect:
+        assert (i["field"] in csp_editor.LOCKED) == expect["locked"]
+        return
+    assert csp_editor.check(i["column"], i["field"], i["value"]) == expect["problem"]
+
+
+@pytest.mark.parametrize("case", _cases("force"))
+def test_force(case, monkeypatch):
+    from app.services import send_reason, whatsapp_platform
+
+    calls = {}
+
+    def platform(name, arguments):
+        calls[name] = arguments
+        return {"job_id": "golden"} if name == "upload_contacts" else {"action": "sent", "sent": 1}
+
+    monkeypatch.setattr(whatsapp_platform, "call_tool", platform)
+    monkeypatch.setattr(whatsapp_platform, "_settings", lambda: SimpleNamespace(
+        test_copy=False, whatsapp_language="en_US"))
+    with send_reason.sent_by(case["input"]["sent_by"]):
+        out = whatsapp_platform.send("9812345678", "Namaste {name}", {"name": "Csp"},
+                                     source_name="golden")
+    assert out["status"] == whatsapp_platform.SENT, out
+    assert bool(calls["smart_send_template"].get("force")) == case["expect"]["force"]
+
+
+@pytest.mark.parametrize("case", _cases("sender"))
+def test_sender(case):
+    from app.routers.whatsapp_message_router import _sender
+
+    i, expect = case["input"], case["expect"]
+    names = {k: tuple(v) for k, v in i["names"].items()}
+    out = _sender(i["sent_by"], i["because"], i["me"], names)
+    assert (out["sender_label"], out["sender_role"]) == (expect["label"], expect["role"])
+
+
+@pytest.mark.parametrize("case", _cases("link"))
+def test_link(case, db):  # noqa: F811
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import select
+
+    from app.models.csp_record import CSPRecord
+    from app.models.data_request import DataRequest
+    from app.services import whatsapp_platform
+
+    i, expect = case["input"], case["expect"]
+    s = db.session
+    _old(s, i["code"])
+    s.commit()
+    csp = s.execute(select(CSPRecord).where(CSPRecord.csp_id == i["code"])).scalar_one()
+    sent = []
+    for send in i["sends"]:
+        db.status = whatsapp_platform.SENT if send["reaches"] else whatsapp_platform.FAILED
+        if send["by_hand"]:
+            out = message_sender.ask_for_details(s, csp, verify=True, manual=True, fresh=True)
+        else:
+            out = message_sender.ask_for_details(s, csp, verify=True)
+        sent.append(out["sent"])
+    assert sent == expect["sent"]
+    links = s.execute(select(DataRequest).where(DataRequest.csp_id == i["code"])
+                      .order_by(DataRequest.created_at)).scalars().all()
+    assert [r.status for r in links] == expect["links"]
+    newest_open = [r for r in links if r.status == "open"][-1]
+    left = newest_open.expires_at - datetime.now(timezone.utc)
+    days = timedelta(days=expect["valid_days"])
+    assert days - timedelta(minutes=5) < left <= days
+
+
 @pytest.mark.parametrize("case", _cases("address"))
 def test_address(case):
     assert zoho_client.lead_address(case["input"]) == case["expect"]["address"]
@@ -228,3 +319,105 @@ async def test_go_live(case, world):  # noqa: F811
         assert imported_new == expect["imported_new"]
     if "became_new" in expect:
         assert became_new == expect["became_new"]
+
+
+@pytest.mark.parametrize("case", _cases("setting"))
+def test_setting(case):
+    """No. 204: Eko's standard values stay what the code used before; the
+    chat reads a 'set ... to ...' command the same way every time."""
+    from app.config import Settings
+    from app.services import settings_catalog, settings_chat
+
+    i, expect = case["input"], case["expect"]
+    if "standard" in i:
+        assert [Settings.model_fields[k].default for k in i["standard"]] == expect["values"]
+        assert all(k in settings_catalog.KEYS for k in i["standard"])
+        return
+    if "together" in i:
+        with pytest.raises(settings_catalog.SettingError) as e:
+            settings_catalog.check_together(i["together"])
+        assert expect["problem"] in str(e.value)
+        return
+    parsed = settings_chat.parse(i["chat"])
+    assert parsed is not None
+    key = parsed.setting.key if parsed.setting else None
+    assert key == expect["key"]
+    if "value" in expect:
+        assert parsed.problem is None and parsed.value == expect["value"]
+    if "problem" in expect:
+        assert expect["problem"] in (parsed.problem or "")
+
+
+@pytest.mark.parametrize("case", _cases("feature"))
+def test_feature(case):
+    """No. 206: who may use which feature; the chat's give / take."""
+    from app.services import access_chat, feature_access, feature_catalog
+
+    i, expect = case["input"], case["expect"]
+    if "chat" in i:
+        p = access_chat.parse(i["chat"])
+        assert (p.feature.key, p.subject, p.allowed) == (
+            expect["feature"], expect["subject"], expect["allowed"])
+        return
+    if "routes" in i:
+        assert [feature_catalog.feature_for(m, path).key
+                for m, path in i["routes"]] == expect["features"]
+        return
+    data = {"grants": {tuple(k.split("|")): v for k, v in i["grants"].items()},
+            "roles": i.get("roles", {}), "members": i.get("members", {})}
+    user = {"role": i["role"], "sub": i["email"]}
+    for key in expect["has"]:
+        assert feature_access.allowed(key, user, data), key
+    for key in expect["not"]:
+        assert not feature_access.allowed(key, user, data), key
+    if "scope" in expect:
+        role = feature_access.own_role(user, data)
+        assert data["roles"][role]["scope"] == expect["scope"]
+
+
+@pytest.mark.parametrize("case", _cases("connection"))
+def test_connection(case):
+    """No. 210: each workspace's own connections; Eko's stay Eko's."""
+    from app.services import connection_catalog as cc, connection_chat
+
+    i, expect = case["input"], case["expect"]
+    if "eko_only" in i:
+        assert all(cc.BY_KEY[k].eko_only for k in i["eko_only"])
+        return
+    if "secret" in i:
+        assert set(i["secret"]) == set(cc.SECRET_KEYS)
+        return
+    if "chat" in i:
+        p = connection_chat.parse(i["chat"])
+        if expect.get("none"):
+            assert p is None
+        elif "tests" in expect:
+            assert p.tests == expect["tests"]
+        else:
+            assert expect["problem"] in (p.problem or "")
+        return
+    c = cc.BY_KEY[i["key"]]
+    if "value" in expect:
+        assert cc.parse(c, i["value"]) == expect["value"]
+    else:
+        with pytest.raises(cc.ConnectionError_) as e:
+            cc.parse(c, i["value"])
+        assert expect["problem"] in str(e.value)
+
+
+@pytest.mark.parametrize("case", _cases("data"))
+def test_data(case):
+    """No. 211: record types, and guessing a sheet's columns."""
+    from app.services import data_shape, ko_level
+
+    i, expect = case["input"], case["expect"]
+    if "codes" in i:
+        assert [ko_level.level_of(c) for c in i["codes"]] == expect["levels"]
+        return
+    if "store" in i:
+        assert data_shape.to_store(i["store"]) == expect["kept"]
+        return
+    got = data_shape.guess(i["headers"])
+    assert {f: v["header"] for f, v in got.items()} == expect["guess"]
+    if "score" in expect:
+        assert all(v["score"] == expect["score"] for v in got.values())

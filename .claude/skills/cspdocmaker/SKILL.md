@@ -176,13 +176,29 @@ class (Agents page; docs/COMPLIANCE.md).
 Admin menu: Dashboard Overview · Build a dashboard · Database · Sheets ·
 Document Templates · Messaging · **WhatsApp messages** (sent / rejected / not
 received / delivered / read / responded; feedback card with 1 / 2 / 3 counts) ·
-**Replies** · **Emails** · Knowledge Base · Agents · Access · Workspace Rules ·
+**Replies** · **Emails** · Knowledge Base · Agents · Access · **Settings** (No. 204: each
+workspace's own timings, limits and switches; Eko's value beside each; history + undo;
+also by chat "set X to Y") · **Feature access** (No. 206, Super Admin: which role / person
+has which screen or action, own roles, which CSPs; server-enforced; chat "give RMs the
+dashboard") · **Connections** (No. 210: own sheets, email, WhatsApp,
+Zoho; Test buttons; passwords locked; Eko's never another workspace's) ·
+**Columns** (No. 211: guessed from the sheet) · **Setup guide** (No. 215: test
+mode, dry run, go live, pause all, export / close) · Workspace Rules ·
 Setup → **Data quality**.
 
 The staff **chat** answers from records and the Knowledge Base by keyword rules
 (English / Hinglish / Hindi) — no AI.
 
 ---
+
+**Configurable product (No. 199 plan, built No. 202-216, not yet on the
+server):** every workspace sets its own settings (Settings; also as an Excel
+sheet), features per role / person (Feature access), connections, columns,
+record types and words, documents and photo size, sending days / holidays /
+limits, jobs on/off, alerts, weekly health email, name and colour. A new
+workspace sends nothing until it goes live (test mode first). Eko keeps its
+values: nothing changes for Eko unless its Super Admin changes it. Lists:
+docs/SETTINGS-LIST.md, docs/FEATURE-LIST.md, docs/GO-LIVE-CHECKLIST.md.
 
 ## 9. Where things are stored
 

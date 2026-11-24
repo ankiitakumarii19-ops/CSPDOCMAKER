@@ -46,6 +46,7 @@ set_value EMAILS_PAUSED true
 set_value ENV_FILE deploy/.env.test
 set_value IMAGE_PREFIX cspdocmaker-test
 set_value DOCUMENTS_ARCHIVE_HOST ../CSP_Documents_test
+set_value BACKUP_HOST ../CSP_Backups_test
 set_value BASE_PATH "${live_base%/}-test"
 set_value PUBLIC_APP_URL "${live_url%/}-test"
 set_value CADDYFILE Caddyfile.behind-proxy

@@ -506,7 +506,21 @@ def _adopt_placeholder_formatting(receiving, spanned, siblings=()) -> None:
     element.insert(0, merged)
 
 
-PASSPORT_ASPECT = PASSPORT_WIDTH_INCHES / PASSPORT_HEIGHT_INCHES   # 0.778
+PASSPORT_ASPECT = PASSPORT_WIDTH_INCHES / PASSPORT_HEIGHT_INCHES   # 0.778 (Eko's)
+
+
+def photo_inches() -> tuple:
+    """(width, height) in inches: the workspace's own photo size (No. 212,
+    Settings → Documents and photo), Eko's 35 x 45 mm by default."""
+    from app.config import get_settings
+    s = get_settings()
+    return (float(s.passport_photo_width_mm) / 25.4,
+            float(s.passport_photo_height_mm) / 25.4)
+
+
+def photo_aspect() -> float:
+    w, h = photo_inches()
+    return w / h
 
 # When a source is too tall it is trimmed mostly from the bottom, because the
 # head belongs near the top of a passport photograph.
@@ -592,17 +606,17 @@ def passport_crop(photo_path: str) -> str:
             return photo_path
 
         ratio = width / height
-        if abs(ratio - PASSPORT_ASPECT) < 0.01:
+        if abs(ratio - photo_aspect()) < 0.01:
             return photo_path
 
-        if ratio > PASSPORT_ASPECT:
+        if ratio > photo_aspect():
             # Too wide: trim the sides evenly.
-            new_width = max(1, int(round(height * PASSPORT_ASPECT)))
+            new_width = max(1, int(round(height * photo_aspect())))
             left = (width - new_width) // 2
             box = (left, 0, left + new_width, height)
         else:
             # Too tall: trim mostly from below, keeping head room.
-            new_height = max(1, int(round(width / PASSPORT_ASPECT)))
+            new_height = max(1, int(round(width / photo_aspect())))
             top = int((height - new_height) * PASSPORT_TOP_BIAS)
             box = (0, top, width, top + new_height)
 
@@ -612,18 +626,20 @@ def passport_crop(photo_path: str) -> str:
 
     logger.info(
         "template_service: cropped %s from %.3f to the passport ratio %.3f",
-        os.path.basename(photo_path), ratio, PASSPORT_ASPECT,
+        os.path.basename(photo_path), ratio, photo_aspect(),
     )
     return destination
 
 
 def passport_size() -> tuple:
-    """Exactly 35mm x 45mm, as python-docx lengths.
+    """Exactly the workspace's photo size (Eko: 35mm x 45mm), as
+    python-docx lengths.
 
     Not derived from the image: the image is cropped to this shape first,
     so every photo on every document comes out the same physical size.
     """
-    return Inches(PASSPORT_WIDTH_INCHES), Inches(PASSPORT_HEIGHT_INCHES)
+    width, height = photo_inches()
+    return Inches(width), Inches(height)
 
 
 # The containers a photo frame is built from. A template may use any of

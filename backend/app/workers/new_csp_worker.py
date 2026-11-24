@@ -72,12 +72,16 @@ def process_new_csps(self):
         #
         # A baseline CSP nobody enrolled is still never touched — that is
         # what stops a first sync emailing an entire organisation.
-        from sqlalchemy import or_
+        from sqlalchemy import false, or_
 
+        # No. 211: a workspace may switch off documents made by themselves
+        # for new records; an RM-started one still goes.
+        automatic = (CSPRecord.origin == "new"
+                     if settings.auto_documents_new else false())
         pending = session.execute(
             select(CSPRecord).where(
                 or_(
-                    CSPRecord.origin == "new",
+                    automatic,
                     CSPRecord.auto_enrolled_at.is_not(None),
                 ),
                 CSPRecord.new_csp_processed_at.is_(None),

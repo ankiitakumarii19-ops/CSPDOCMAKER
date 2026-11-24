@@ -32,8 +32,8 @@ def run_once(session, writer=None) -> dict:
     if not message_sender.link_is_reachable(s.public_app_url):
         return {"skipped": "not the server (PUBLIC_APP_URL is not public) — "
                            "only the server edits the shared INFO sheet"}
-    if not zoho_fill._is_eko(session):
-        return {"skipped": "INFO is the Eko workspace's sheet"}
+    if not get_settings().google_sheets_csp_sheet_id:
+        return {"skipped": "this workspace has no sheet connected"}
     lock = session.get_bind().connect()
     try:
         if not lock.execute(text("SELECT pg_try_advisory_lock(:k)"),

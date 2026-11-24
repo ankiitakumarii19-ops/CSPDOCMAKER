@@ -82,7 +82,34 @@ async def require_admin(current_user: dict = Depends(get_current_user)) -> dict:
     return current_user
 
 
-async def require_any_role(current_user: dict = Depends(get_current_user)) -> dict:
+def _feature_decision(request: Optional[Request], user: dict) -> Optional[bool]:
+    """No. 206: whether this workspace lets this person use the feature this
+    route belongs to (None = not a feature: decide by role as before)."""
+    if request is None:
+        return None
+    route = request.scope.get("route")
+    path = getattr(route, "path", None)
+    if not path:
+        return None
+    from app.services import feature_access
+    return feature_access.check_route(request.method, path, user)
+
+
+def _refused(request: Request) -> HTTPException:
+    from app.services import feature_catalog
+    route = request.scope.get("route")
+    f = feature_catalog.feature_for(request.method, getattr(route, "path", ""))
+    title = f.title if f else "this"
+    logger.info("dependencies: refused %s %s — feature %s not given",
+                request.method, getattr(route, "path", ""), f.key if f else "?")
+    return HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=f"Your workspace has not given you “{title}”. Ask your Super "
+               "Admin (Setup → Feature access).")
+
+
+async def require_any_role(request: Request,
+                           current_user: dict = Depends(get_current_user)) -> dict:
     """Require any role this system recognises.
 
     SUPER_ADMIN is included deliberately. A Workspace Owner configures the
@@ -97,6 +124,8 @@ async def require_any_role(current_user: dict = Depends(get_current_user)) -> di
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Valid role required.",
         )
+    if _feature_decision(request, current_user) is False:
+        raise _refused(request)
     return current_user
 
 
@@ -106,8 +135,17 @@ def require_role(*allowed_roles: str):
     Usage:
         user=Depends(require_role("rm", "admin"))
     """
-    async def _check(current_user: dict = Depends(get_current_user)) -> dict:
+    async def _check(request: Request,
+                     current_user: dict = Depends(get_current_user)) -> dict:
         role = current_user.get("role", "")
+        # No. 206: a route that belongs to a feature follows the workspace's
+        # Feature access — taken away refuses it; given lets it through.
+        # With nothing changed this is exactly the role check below.
+        decision = _feature_decision(request, current_user)
+        if decision is False:
+            raise _refused(request)
+        if decision is True:
+            return current_user
         # Normalise to uppercase for comparison against UserRole enum values
         if role.upper() not in [r.upper() for r in allowed_roles]:
             raise HTTPException(

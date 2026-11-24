@@ -164,9 +164,13 @@ def _send_email(to: str, subject: str, body: str, *,
     if email_service.paused():
         logger.info("message_sender: email to %s not sent — emails are "
                     "paused", to)
-        return False, email_service.PAUSED_REASON
+        return False, email_service.paused_reason()
     track = email_log.tracker(get_settings().smtp_from_email
                               or get_settings().smtp_username)
+    from app.services import send_guard
+    real, to = to, send_guard.email_to(to)        # No. 215: test mode
+    if to != real:
+        subject = send_guard.test_prefix(real) + subject
     html = (
         '<div style="font-family:system-ui,sans-serif;font-size:15px;'
         'line-height:1.6;white-space:pre-wrap">'
@@ -322,7 +326,7 @@ def ask_for_details(session: Session, record, *,
     # nothing is blank — a wrong value on file is still worth catching.
 
     if (not verify and not manual and fields
-            and set(fields) <= set(fo.ASKED_FROM_CSP_WHEN_BLANK)
+            and set(fields) <= set(fo.asked_once())
             and drs.answered_count(session, record.csp_id) >= 2):
         # No. 143: AO / RBO Name INFO could not map are asked in the
         # "details still needed" message after the first form — once. Still

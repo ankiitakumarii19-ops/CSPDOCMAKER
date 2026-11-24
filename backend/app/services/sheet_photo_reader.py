@@ -220,7 +220,8 @@ def photos_in_workbook(xlsx: bytes, tabs: Iterable[str]) -> SheetPhotos:
 # ---- getting the workbook from Google -----------------------------------
 
 _cache_lock = threading.Lock()
-_cache: Optional[Tuple[float, SheetPhotos]] = None
+# One per sheet (No. 210: each workspace reads its own sheet).
+_cache: Dict[str, Tuple[float, SheetPhotos]] = {}
 
 
 def _export_workbook(sheet_id: str) -> bytes:
@@ -237,15 +238,15 @@ def _export_workbook(sheet_id: str) -> bytes:
 
 def sheet_photos(refresh: bool = False) -> SheetPhotos:
     """The Photo columns of the CSP sheet. Raises SheetPhotoError."""
-    global _cache
     settings = get_settings()
     sheet_id = settings.google_sheets_csp_sheet_id
     if not sheet_id:
         raise SheetPhotoError(REASON_TEXT[NOT_CONFIGURED])
     with _cache_lock:
-        if (not refresh and _cache is not None
-                and time.monotonic() - _cache[0] < CACHE_SECONDS):
-            return _cache[1]
+        hit = _cache.get(sheet_id)
+        if (not refresh and hit is not None
+                and time.monotonic() - hit[0] < CACHE_SECONDS):
+            return hit[1]
         try:
             xlsx = _export_workbook(sheet_id)
             found = photos_in_workbook(
@@ -257,14 +258,13 @@ def sheet_photos(refresh: bool = False) -> SheetPhotos:
         logger.info("sheet_photo_reader: %d photo(s) in the sheet's Photo "
                     "column; %d CSP(s) with more than one picture",
                     len(found.pictures), len(found.ambiguous))
-        _cache = (time.monotonic(), found)
+        _cache[sheet_id] = (time.monotonic(), found)
         return found
 
 
 def clear_cache() -> None:
-    global _cache
     with _cache_lock:
-        _cache = None
+        _cache.clear()
 
 
 @telemetry.traced("find_photo_in_sheet", "sheet_photo_reader")

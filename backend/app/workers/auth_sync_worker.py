@@ -37,6 +37,10 @@ def sync_authorization(self):
     from app.services import google_sheets_service as gs
 
     settings = get_settings()
+    if not settings.google_sheets_id:
+        # No. 210: a workspace without its own sign-in list sheet adds
+        # people on Setup → Access instead.
+        return {"skipped": "no sign-in list sheet connected"}
     engine = create_engine(
         settings.database_url.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
     )

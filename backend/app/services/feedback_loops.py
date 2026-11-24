@@ -40,7 +40,12 @@ from app.models.field_provenance import FieldProvenance
 
 logger = logging.getLogger(__name__)
 
-MAX_TRIES = 3
+MAX_TRIES = 3   # Eko's; CONTACT_FIX_MAX_TRIES per workspace (No. 204)
+
+
+def _max_tries() -> int:
+    from app.config import get_settings
+    return get_settings().contact_fix_max_tries
 
 WHATSAPP_UNDELIVERED = "whatsapp_undelivered"
 EMAIL_BOUNCED = "email_bounced"
@@ -320,7 +325,7 @@ def _zoho_numbers(session, record) -> List[str]:
     """The Zoho Lead's mobile / alternate / WhatsApp numbers (Eko only).
     Never raises: a Zoho failure means no Zoho alternates, and is logged."""
     from app.services import zoho_client, zoho_fill
-    if not zoho_client.is_configured() or not zoho_fill._is_eko(session):
+    if not zoho_client.is_configured():   # the workspace's own Zoho (No. 210)
         return []
     try:
         lead = zoho_client.find_lead(record.mobile or "", record.name or "",
@@ -644,9 +649,9 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
             budget -= 1
         if ok is False:
             fix.tries += 1
-            if fix.tries >= MAX_TRIES:
+            if fix.tries >= _max_tries():
                 fix.status = "stopped"
-                fix.note = f"stopped after {MAX_TRIES} tries — {note}"
+                fix.note = f"stopped after {_max_tries()} tries — {note}"
                 counts["stopped"] += 1
         session.commit()
     session.commit()

@@ -548,6 +548,8 @@ export interface TemplatePlaceholder {
   text: string;
   field: string;
   guessed: boolean;
+  /** No. 212 (ZU-05): what it probably means, for the admin to accept. */
+  suggestion?: { field: string; how: string } | null;
 }
 
 export interface TemplateParagraph {
@@ -1089,6 +1091,219 @@ export interface WorkspaceRules extends WorkspaceRulesInput {
   note?: string;
 }
 
+// ---- Settings centre (No. 204, Stage 1) ----
+
+export type SettingValue = number | boolean | string;
+
+export interface WorkspaceSettingItem {
+  key: string;
+  group: string;
+  label: string;
+  help: string;
+  /** What changing it does — shown before saving. */
+  effect: string;
+  kind: "int" | "bool" | "text" | "choice" | "list";
+  unit: string;
+  min: number | null;
+  max: number | null;
+  choices: string[];
+  value: SettingValue;
+  value_text: string;
+  /** The server's value: Eko's value, every workspace's starting point. */
+  standard: SettingValue;
+  standard_text: string;
+  changed: boolean;
+  own: boolean;
+  changed_by: string | null;
+  changed_at: string | null;
+  can_change: boolean;
+  unchanged?: boolean;
+}
+
+export interface SettingsGroup {
+  key: string;
+  title: string;
+  about: string;
+  admins_may_change: boolean;
+}
+
+export interface WorkspaceSettingsView {
+  workspace: { id: string; name: string } | null;
+  groups: SettingsGroup[];
+  settings: WorkspaceSettingItem[];
+  is_owner: boolean;
+  note: string;
+}
+
+export interface SettingsSheetChange {
+  key: string;
+  label: string;
+  now: string;
+  new: string;
+  problem: string | null;
+}
+
+export interface SettingChange {
+  id: number;
+  key: string;
+  label: string;
+  before: string;
+  after: string;
+  by: string;
+  via: string;
+  note: string | null;
+  at: string | null;
+  can_undo: boolean;
+}
+
+// ---- Setup guide (No. 215, Stage 8) ----
+
+export interface SetupGuideStep {
+  key: string;
+  title: string;
+  status: string;
+  label: string;
+  detail: string;
+  how: string;
+  where: string | null;
+  essential: boolean;
+}
+
+export interface SetupGuideView {
+  steps: SetupGuideStep[];
+  live: boolean;
+  test_mode: boolean;
+  test_mode_phone: string;
+  test_mode_email: string;
+  pause_all: boolean;
+  ready_to_go_live: boolean;
+}
+
+export interface DryRun {
+  records: {
+    code: string;
+    name: string | null;
+    type: string;
+    documents: string[];
+    missing: string[];
+    on_hold: string;
+    would_happen: string;
+  }[];
+  sent: number;
+  note: string;
+}
+
+// ---- Columns (No. 211, Stage 4) ----
+
+export interface ColumnsView {
+  fields: { field: string; eko_header: string; label: string; header: string; own: boolean }[];
+  own: Record<string, string>;
+}
+
+export interface ColumnsGuess {
+  headers: string[];
+  guess: Record<string, { header: string; score: number; how: string }>;
+  not_found: string[];
+}
+
+// ---- Connections (No. 210, Stage 3) ----
+
+export interface ConnectionItem {
+  key: string;
+  group: string;
+  label: string;
+  help: string;
+  kind: "text" | "int" | "bool" | "secret" | "choice";
+  choices: string[];
+  /** Never sent for a secret. */
+  value: string | number | boolean | null;
+  secret_set?: boolean;
+  own: boolean;
+  from_server: boolean;
+  changed_by: string | null;
+  changed_at: string | null;
+}
+
+export interface ConnectionsView {
+  workspace: { id: string; name: string; eko: boolean };
+  groups: { key: string; title: string; about: string }[];
+  connections: ConnectionItem[];
+  robot_email: string;
+  connected: Record<string, boolean>;
+  note: string;
+}
+
+// ---- Feature access (No. 206, Stage 2) ----
+
+export interface MyAccess {
+  role: string;
+  own_role: string | null;
+  role_name: string;
+  /** Feature keys this person may use. */
+  features: string[];
+  record_scope: "own" | "all";
+  /** No. 214: the workspace's own app name and main colour. */
+  look: { name: string; color: string };
+  /** May open the Admin pages (always for Admins; for an RM given an Admin screen). */
+  admin_area: boolean;
+}
+
+export interface AccessFeature {
+  key: string;
+  group: string;
+  title: string;
+  about: string;
+  default: string[];
+  can_give_to: string[];
+  locked: boolean;
+  all_csps: boolean;
+  owner: boolean;
+}
+
+export interface AccessRoleItem {
+  key: string;
+  name: string;
+  base_role: "rm" | "admin";
+  record_scope: "own" | "all";
+  built_in: boolean;
+  members: number;
+}
+
+export interface AccessCell {
+  allowed: boolean;
+  /** Changed from today's access on this page. */
+  set: boolean;
+  can_change: boolean;
+}
+
+export interface FeatureAccessPerson {
+  email: string;
+  name: string | null;
+  role: "rm" | "admin";
+  own_role: string | null;
+  overrides: Record<string, boolean>;
+  features: string[];
+}
+
+export interface FeatureAccessView {
+  groups: { key: string; title: string }[];
+  features: AccessFeature[];
+  roles: AccessRoleItem[];
+  grid: Record<string, Record<string, AccessCell>>;
+  people: FeatureAccessPerson[];
+  note: string;
+}
+
+export interface AccessChange {
+  id: number;
+  what: string;
+  before: string;
+  after: string;
+  by: string;
+  via: string;
+  at: string | null;
+}
+
 // ---- Knowledge Base (No. 116) ----
 
 export interface KnowledgeEntry {
@@ -1283,6 +1498,8 @@ class ApiClient {
     requested_role: string;
     /** Only when signing up as a Super Admin of a new workspace. */
     workspace_name?: string;
+    /** No. 215 (ZU-08): start like Eko, or blank. */
+    starter?: "eko" | "blank";
   }) {
     return this.request<{ message: string; otp_sent: boolean }>("/auth/signup", {
       method: "POST",
@@ -1943,6 +2160,194 @@ class ApiClient {
       method: "PUT",
       body: JSON.stringify(rules),
     });
+  }
+
+  // ---- Settings centre (No. 204; see: Admin + Owner, change: Owner, or
+  // Admins in the groups the Owner handed to them) ----
+  async workspaceSettings() {
+    return this.request<WorkspaceSettingsView>("/admin/settings");
+  }
+
+  async changeSetting(key: string, value: SettingValue) {
+    return this.request<WorkspaceSettingItem>(`/admin/settings/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async settingToStandard(key: string) {
+    return this.request<WorkspaceSettingItem>(`/admin/settings/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+  }
+
+  /** ZU-07 (No. 215): every setting as one Excel file. */
+  async settingsSheet(): Promise<Blob> {
+    const path = "/admin/settings/sheet";
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not download the settings");
+    }
+    return response.blob();
+  }
+
+  /** ZU-07: what an uploaded settings sheet would change (apply=false), or save it. */
+  async uploadSettingsSheet(file: File, apply: boolean) {
+    const form = new FormData();
+    form.append("file", file);
+    return this.upload<{ changes: SettingsSheetChange[]; applied: string[] }>(
+      `/admin/settings/sheet?apply=${apply ? "true" : "false"}`,
+      form
+    );
+  }
+
+  async settingHistory(key?: string) {
+    const qs = key ? `?key=${encodeURIComponent(key)}` : "";
+    return this.request<{ changes: SettingChange[] }>(`/admin/settings/history${qs}`);
+  }
+
+  async undoSettingChange(id: number) {
+    return this.request<WorkspaceSettingItem>(`/admin/settings/history/${id}/undo`, {
+      method: "POST",
+    });
+  }
+
+  async setSettingsAdminGroups(groups: string[]) {
+    return this.request<{ admin_groups: string[] }>("/admin/settings/admin-groups", {
+      method: "PUT",
+      body: JSON.stringify({ groups }),
+    });
+  }
+
+  // ---- Setup guide (No. 215; the Super Admin's) ----
+  async setupGuide() {
+    return this.request<SetupGuideView>("/admin/setup-guide");
+  }
+
+  async goLive() {
+    return this.request<SetupGuideView>("/admin/setup-guide/go-live", { method: "POST" });
+  }
+
+  async dryRun() {
+    return this.request<DryRun>("/admin/setup-guide/dry-run", { method: "POST" });
+  }
+
+  /** No. 216: all this workspace's data as a .zip of CSV files. */
+  async exportWorkspace(): Promise<Blob> {
+    const path = "/admin/workspace/export";
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not export");
+    }
+    return response.blob();
+  }
+
+  async closeWorkspace(confirm: string) {
+    return this.request<{ closed: boolean; note: string }>("/admin/workspace/close", {
+      method: "POST",
+      body: JSON.stringify({ confirm }),
+    });
+  }
+
+  // ---- Columns (No. 211; the Super Admin's) ----
+  async columns() {
+    return this.request<ColumnsView>("/admin/columns");
+  }
+
+  async guessColumns() {
+    return this.request<ColumnsGuess>("/admin/columns/guess", { method: "POST" });
+  }
+
+  async saveColumns(columns: Record<string, string>) {
+    return this.request<ColumnsView>("/admin/columns", {
+      method: "PUT",
+      body: JSON.stringify({ columns }),
+    });
+  }
+
+  // ---- Connections (No. 210; the Super Admin's) ----
+  async connections() {
+    return this.request<ConnectionsView>("/admin/connections");
+  }
+
+  async setConnection(key: string, value: string) {
+    return this.request<ConnectionsView>(`/admin/connections/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  async clearConnection(key: string) {
+    return this.request<ConnectionsView>(`/admin/connections/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async testConnection(group: string) {
+    return this.request<{ ok: boolean; message: string }>(
+      `/admin/connections/test/${encodeURIComponent(group)}`,
+      { method: "POST" }
+    );
+  }
+
+  // ---- Feature access (No. 206; the page is the Super Admin's) ----
+  async myAccess() {
+    return this.request<MyAccess>("/me/access");
+  }
+
+  async featureAccess() {
+    return this.request<FeatureAccessView>("/admin/feature-access");
+  }
+
+  async setRoleFeature(role: string, feature: string, allowed: boolean | null) {
+    return this.request<FeatureAccessView>(
+      `/admin/feature-access/roles/${encodeURIComponent(role)}/${encodeURIComponent(feature)}`,
+      { method: "PUT", body: JSON.stringify({ allowed }) }
+    );
+  }
+
+  async setPersonFeature(email: string, feature: string, allowed: boolean | null) {
+    return this.request<FeatureAccessView>(
+      `/admin/feature-access/people/${encodeURIComponent(email)}/${encodeURIComponent(feature)}`,
+      { method: "PUT", body: JSON.stringify({ allowed }) }
+    );
+  }
+
+  async createAccessRole(name: string, copyFrom: string) {
+    return this.request<FeatureAccessView & { role: AccessRoleItem }>("/admin/feature-access/roles", {
+      method: "POST",
+      body: JSON.stringify({ name, copy_from: copyFrom }),
+    });
+  }
+
+  async changeAccessRole(key: string, change: { name?: string; record_scope?: "own" | "all" }) {
+    return this.request<FeatureAccessView>(`/admin/feature-access/roles/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(change),
+    });
+  }
+
+  async deleteAccessRole(key: string) {
+    return this.request<FeatureAccessView>(`/admin/feature-access/roles/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async setMemberAccessRole(email: string, role: string | null) {
+    return this.request<FeatureAccessView>(
+      `/admin/feature-access/members/${encodeURIComponent(email)}/role`,
+      { method: "PUT", body: JSON.stringify({ role }) }
+    );
+  }
+
+  async featureAccessHistory() {
+    return this.request<{ changes: AccessChange[] }>("/admin/feature-access/history");
   }
 
   // ---- Knowledge Base (No. 116; Admin + Super Admin) ----

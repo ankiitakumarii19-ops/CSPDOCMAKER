@@ -105,6 +105,12 @@ celery_app.conf.update(
             "schedule": settings.resend_failed_minutes * 60,
             "options": {"expires": settings.resend_failed_minutes * 60 - 5},
         },
+        # The weekly health email, asked every hour (No. 214).
+        "weekly-health": {
+            "task": "workers.weekly_health",
+            "schedule": 3600,
+            "options": {"expires": 3600 - 5},
+        },
         # Alerts to the Super Admins (No. 173).
         "send-alerts": {
             "task": "workers.send_alerts",
@@ -196,6 +202,7 @@ celery_app.conf.include = [
     "app.workers.sheet_photo_worker",
     "app.workers.agent_worker",
     "app.workers.whatsapp_status_worker",
+    "app.workers.weekly_health_worker",
 ]
 
 

@@ -699,6 +699,19 @@ async def _setup(session, user, question: str, t: str) -> Optional[Answer]:
     if not (owner or admin):
         return None
 
+    # Change a setting: "set feedback delay to 30 minutes" (No. 204, ZU-01).
+    changed = await _setting_by_chat(session, user, question, t, owner)
+    if changed is not None:
+        return changed
+    # Give / take a feature: "give RMs the dashboard" (No. 206, ZU-02).
+    changed = await _access_by_chat(session, user, question, owner)
+    if changed is not None:
+        return changed
+    # Connect / test: "set csp sheet to <link>", "test my sheet" (No. 210).
+    changed = await _connection_by_chat(session, user, question, owner)
+    if changed is not None:
+        return changed
+
     # Run the Setup agent's check now (it only reads and records).
     if _has(t, "setup check", "run setup", "check my setup", "check setup",
             "setup agent"):
@@ -853,6 +866,164 @@ async def _setup(session, user, question: str, t: str) -> Optional[Answer]:
             return _owner_only()
         return await _setup_overview(session, user)
     return None
+
+
+async def _setting_by_chat(session, user, question: str, t: str,
+                           owner: bool) -> Optional[Answer]:
+    """A 'set … to …' command for a setting on Setup → Settings, proposed
+    as a Do it card (it changes nothing until pressed). None when the
+    question is not one."""
+    from app.config import get_settings
+    from app.services import settings_catalog, settings_chat, workspace_settings
+    parsed = settings_chat.parse(question)
+    if parsed is None:
+        # No. 217: "what is the feedback delay setting?" — help for every
+        # setting, from the same list the Settings screen shows.
+        ask = re.match(r"^\s*(?:what is|what's|whats|what does|explain|"
+                       r"help(?: with)?|meaning of)\s+(?:the\s+)?(?P<what>.+?)"
+                       r"\s+setting\b", question or "", re.I)
+        found = settings_catalog.find(ask.group("what")) if ask else []
+        if len(found) != 1:
+            return None
+        s = found[0]
+        now = getattr(get_settings(), s.key)
+        return Answer(
+            f"**{s.label}** — {s.help} Now: "
+            f"{settings_catalog.show(s, now)} (standard, Eko's: "
+            f"{settings_catalog.show(s, workspace_settings.standard_value(s.key))})."
+            f" What changing it does: {s.effect} Change it on Setup → "
+            "Settings, or ask me “set " + s.label.lower() + " to …”.",
+            kind="setup")
+    if parsed.setting is None and parsed.choices is None and not _has(
+            t, "setting", "settings"):
+        return None     # "make … to …" that is not about a setting
+    if not owner:
+        return Answer("Only the Super Admin changes settings by chat. Admins "
+                      "change the groups handed to them on Setup → Settings.",
+                      kind="setup")
+    if parsed.choices:
+        names = [s.label for s in parsed.choices]
+        value = settings_chat.COMMAND.match(question).group("value")
+        return Answer("Which one do you mean: " + "; ".join(
+            f"**{n}**" for n in names) + "?",
+            suggestions=[f"set {n.lower()} to {value}" for n in names[:4]],
+            kind="setup")
+    if parsed.problem:
+        return Answer(parsed.problem, kind="setup")
+    s = parsed.setting
+    now = (await workspace_settings.one(session, s.key, user))["value"]
+    if now == parsed.value:
+        return Answer(f"**{s.label}** is already "
+                      f"{settings_catalog.show(s, now)}.", kind="setup")
+    try:
+        in_force = {k: getattr(get_settings(), k) for k in settings_catalog.KEYS}
+        settings_catalog.check_together({**in_force, s.key: parsed.value})
+    except settings_catalog.SettingError as e:
+        return Answer(str(e), kind="setup")
+    standard = workspace_settings.standard_value(s.key)
+    card = await assistant_tools.propose_action(
+        user, "change_setting", {"key": s.key, "value": parsed.value},
+        f"Change “{s.label}”",
+        f"Now: {settings_catalog.show(s, now)} → new: "
+        f"{settings_catalog.show(s, parsed.value)}. {s.effect}",
+        [f"Standard (Eko's) value: {settings_catalog.show(s, standard)}. "
+         "You can undo this on Setup → Settings → History."])
+    return Answer("Here is the change. Press **Do it** to save it, or "
+                  "Cancel.", [card], kind="setup")
+
+
+async def _connection_by_chat(session, user, question: str,
+                              owner: bool) -> Optional[Answer]:
+    """Connections by chat (ZU-03): a Do it card to set one, or the tests
+    run now. None when the question is not about a connection."""
+    from app.services import connection_chat, connections
+    parsed = connection_chat.parse(question)
+    if parsed is None:
+        return None
+    if not owner:
+        return Answer("Only the Super Admin sets up connections (Setup → "
+                      "Connections).", kind="setup")
+    if parsed.tests:
+        lines = []
+        for group in parsed.tests:
+            out = await connections.run_test(group, user)
+            title = {"sheets": "Google Sheets", "email": "Email",
+                     "whatsapp": "WhatsApp", "crm": "CRM"}[group]
+            lines.append(f"- **{title}**: {'✅' if out['ok'] else '❌'} "
+                         f"{out['message']}")
+        return Answer("\n".join(lines), suggestions=["Setup status"],
+                      kind="setup")
+    if parsed.problem:
+        return Answer(parsed.problem, kind="setup")
+    c, value = parsed.connection, parsed.value
+    view = await connections.describe(session)
+    now = next(i for i in view["connections"] if i["key"] == c.key)["value"]
+    if now == value:
+        return Answer(f"**{c.label}** is already {value}.", kind="setup")
+    card = await assistant_tools.propose_action(
+        user, "change_connection", {"key": c.key, "value": value},
+        f"Set “{c.label}”", f"Now: {now or 'not set'} → new: {value}.",
+        ["Then ask me “test my "
+         + {"sheets": "sheet", "email": "email", "whatsapp": "whatsapp",
+            "crm": "crm"}[c.group] + "” to check it works."])
+    return Answer("Here is the change. Press **Do it** to save it, or "
+                  "Cancel.", [card], kind="setup")
+
+
+async def _access_by_chat(session, user, question: str,
+                          owner: bool) -> Optional[Answer]:
+    """A give / take command for a feature, proposed as a Do it card (it
+    changes nothing until pressed). None when the question is not one."""
+    from app.models.feature_access import AccessRole
+    from app.services import access_chat, feature_access
+    roles = {r.key: r.name for r in (await session.execute(
+        select(AccessRole))).scalars() if r.key not in feature_access.BUILT_IN}
+    parsed = access_chat.parse(question, roles)
+    if parsed is None:
+        return None
+    if not owner:
+        return Answer("Only the Super Admin gives or takes features "
+                      "(Setup → Feature access).", kind="setup")
+    if parsed.problem:
+        return Answer(parsed.problem, kind="setup")
+    f = parsed.feature
+    if f.locked:
+        return Answer(f"“{f.title}” stays with the Super Admin.",
+                      kind="setup")
+    view = await feature_access.describe(session)
+    if parsed.subject_kind == "role":
+        cell = view["grid"].get(parsed.subject, {}).get(f.key)
+        if cell is None:
+            return Answer(f"There is no role {parsed.subject_name}.",
+                          kind="setup")
+        now = cell["allowed"]
+        base = next(r["base_role"] for r in view["roles"]
+                    if r["key"] == parsed.subject)
+    else:
+        person = next((p for p in view["people"]
+                       if p["email"].lower() == parsed.subject), None)
+        if person is None:
+            return Answer(f"{parsed.subject} is not an RM or Admin in this "
+                          "workspace.", kind="setup")
+        now, base = f.key in person["features"], person["role"]
+    if parsed.allowed and base not in f.default and base not in f.can_give_to:
+        return Answer(f"“{f.title}” cannot be given to "
+                      f"{'RMs' if base == 'rm' else 'Admins'}.", kind="setup")
+    verb = {True: "Give", False: "Take away", None: "Put back"}[parsed.allowed]
+    after = {True: "has it", False: "does not have it",
+             None: "as before (today's access)"}[parsed.allowed]
+    extra = []
+    if parsed.allowed and f.all_csps and base == "rm":
+        extra.append("This screen shows every CSP, not only their own.")
+    extra.append("You can change it back on Setup → Feature access.")
+    card = await assistant_tools.propose_action(
+        user, "change_feature_access",
+        {"subject_kind": parsed.subject_kind, "subject": parsed.subject,
+         "feature": f.key, "allowed": parsed.allowed},
+        f"{verb} “{f.title}” — {parsed.subject_name}",
+        f"Now: {'has it' if now else 'does not have it'} → {after}.", extra)
+    return Answer("Here is the change. Press **Do it** to save it, or "
+                  "Cancel.", [card], kind="setup")
 
 
 # ---- the whole question ------------------------------------------------------------

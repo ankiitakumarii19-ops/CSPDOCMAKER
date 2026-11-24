@@ -49,6 +49,8 @@ export default function AuthPage() {
   const [regRole, setRegRole] = useState("rm");
   // Only for a Super Admin creating their own workspace.
   const [regWorkspace, setRegWorkspace] = useState("");
+  // No. 215 (ZU-08): a new workspace starts like Eko or blank.
+  const [regStarter, setRegStarter] = useState<"eko" | "blank">("eko");
 
   // Someone in more than one workspace chooses one at every login.
   const [choices, setChoices] = useState<WorkspaceChoice[] | null>(null);
@@ -177,7 +179,7 @@ export default function AuthPage() {
         password: regPassword,
         requested_role: regRole,
         ...(regRole === "super_admin" && regWorkspace.trim()
-          ? { workspace_name: regWorkspace.trim() }
+          ? { workspace_name: regWorkspace.trim(), starter: regStarter }
           : {}),
       });
       setEmail(regEmail);
@@ -828,10 +830,39 @@ export default function AuthPage() {
                         placeholder="e.g. Patna Pilot"
                       />
                       <p className="text-xs text-gray-500 mt-1">
-                        A new, empty workspace is created for you. Leave this
+                        A new workspace is created for you. Leave this
                         blank only if you are listed as a Super Admin of Eko
                         SBI Kiosk CSP.
                       </p>
+                      {regWorkspace.trim() && (
+                        <div className="mt-3 space-y-1">
+                          <span className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Start with
+                          </span>
+                          <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input
+                              type="radio"
+                              className="mt-1"
+                              checked={regStarter === "eko"}
+                              onChange={() => setRegStarter("eko")}
+                            />
+                            <span>
+                              Eko&apos;s way of working — its message wordings,
+                              document templates (switched off for you to
+                              check) and dashboards. None of Eko&apos;s data.
+                            </span>
+                          </label>
+                          <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+                            <input
+                              type="radio"
+                              className="mt-1"
+                              checked={regStarter === "blank"}
+                              onChange={() => setRegStarter("blank")}
+                            />
+                            <span>Blank — I will add my own.</span>
+                          </label>
+                        </div>
+                      )}
                     </div>
                   )}
                   <button

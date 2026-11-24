@@ -84,6 +84,7 @@ async def signup_user(
     password: str,
     requested_role: str,
     workspace_name: Optional[str] = None,
+    starter: str = "blank",
 ) -> Tuple[bool, str, Optional[User]]:
     """Create a new user account after verifying Google Sheet authorization.
 
@@ -216,7 +217,7 @@ async def signup_user(
         )
         if new_workspace_name:
             ws = await workspace_service.create_workspace(
-                db, new_workspace_name, email, name)
+                db, new_workspace_name, email, name, starter=starter)
             home_workspace_id = ws.id
         if home_workspace_id is None:
             eko = await workspace_service.eko_workspace(db)

@@ -308,7 +308,16 @@ def form_fields() -> List[str]:
 # INFO's AO block first, so one still blank here is one INFO could not map
 # — and the CSP is asked for it in the "details still needed" message
 # (No. 143), once: message_sender stops after that.
-ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("ao", "rbo_name")
+ASKED_FROM_CSP_WHEN_BLANK: Tuple[str, ...] = ("ao", "rbo_name")   # Eko's
+
+
+def asked_once() -> Tuple[str, ...]:
+    """Office fields the CSP is asked for when INFO cannot fill them — the
+    workspace's own list (No. 211), Eko's ASKED_FROM_CSP_WHEN_BLANK by
+    default."""
+    from app.config import get_settings
+    return tuple(f for f in str(get_settings().asked_once_fields or "")
+                 .split(",") if f)
 
 # Shown pre-filled on the verification form for the CSP to check (No. 130).
 ON_VERIFICATION_FORM: Tuple[str, ...] = ("ao", "rbo_name")
@@ -333,7 +342,7 @@ def request_fields(record, verify: bool = False) -> List[str]:
     first; only one INFO could not map is on the CSP's form."""
     if verify:
         return form_fields() + list(ON_VERIFICATION_FORM)
-    return form_fields() + [f for f in ASKED_FROM_CSP_WHEN_BLANK
+    return form_fields() + [f for f in asked_once()
                             if _is_blank(record, f)]
 
 

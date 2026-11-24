@@ -198,13 +198,15 @@ cd backend
 .venv/Scripts/python.exe scripts/install_git_hooks.py
 ```
 
-**Before every push that will be deployed** (No. 146), **on the laptop —
-not on the server** (the server has no test setup; this check is what stops
-a broken change from getting there), with Docker's Postgres running: the
-golden cases — about 60 fixed CSP situations
+**Before every push that will be deployed** (No. 146), on the laptop, with
+Docker's Postgres running — and again **on the server** by `deploy/update.sh`
+(below), on the new version before it starts: the
+golden cases — about 90 fixed CSP situations
 with their known right answers (KO / Sub-KO documents, AO / RBO / DC mapping,
 who owns the CSP, old or new, on hold or not, what the CSP is asked, WhatsApp
-or email). Takes about 15 seconds. Do not deploy if any fails.
+or email, who may edit or act on a CSP, the 3-day links, a person's message
+always going, who sent each WhatsApp). Takes under a minute. Do not deploy if
+any fails.
 
 ```bash
 cd backend
@@ -267,14 +269,61 @@ stored_documents order by created_at desc limit 20;` — and `\q` to leave.
 In the app, the **Database** page shows the same: every CSP's record, photo
 and documents.
 
-**Backups** of the database (documents are stored in it):
+**Backups** of the database (documents are stored in it) — automatic since
+No. 199 (Stage 0). The `backup` service takes one a day into the
+**CSP_Backups** folder beside the app folder (`/home/Ankita/CSP_Backups`;
+the test copy: `CSP_Backups_test`), keeps the newest 14 (`BACKUP_KEEP`), and
+checks each one can be read back. `cspdocmaker-backup.log` there lists every
+run. If a backup fails, is more than 26 hours old (`BACKUP_ALERT_HOURS`) or
+never ran, the Super Admins get an alert email. Still copy one off the server
+now and then (another machine or drive).
+
+Prove a backup can be restored — into a throwaway database, never the live
+one — and see its row counts:
 
 ```bash
-docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres \
-  pg_dump -U cspdocmaker cspdocmaker | gzip > ~/cspdocmaker-$(date +%F).sql.gz
+sh deploy/restore-check.sh                 # the newest backup
+sh deploy/restore-check.sh ../CSP_Backups/cspdocmaker-backup-2026-11-24-0230.dump
 ```
 
-Run it daily (e.g. from `crontab -e`) and keep copies off the server.
+Restoring one into the live app (only after asking; it removes everything
+written since the backup):
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production stop api worker beat
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production exec -T postgres \
+  pg_restore -U cspdocmaker -d cspdocmaker --clean --if-exists --no-owner < ../CSP_Backups/<file>.dump
+docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d
+```
+
+## The configurable product (No. 202-216)
+
+The update needs **no change to `deploy/.env.production`**: every new setting
+starts at the value the code used before (Eko's). The database changes run by
+themselves when the API starts (after update.sh's backup): 5 new tables
+(workspace_settings, workspace_setting_changes, access_roles, feature_access,
+workspace_secrets) and one empty column (workspace_members.access_role) —
+added only. New behaviour Eko will notice: the **weekly health email**
+(Mondays 9 am, to the Super Admins; Settings → Look and weekly email to change
+or stop it). The beat gains one hourly job (workers.weekly_health). Passwords a
+workspace types on Setup → Connections are encrypted with APP_SECRET_KEY —
+changing that key means they must be typed again.
+
+## Updating the server safely (No. 199)
+
+One command does the whole update, in the app folder, as its owner — the
+test copy first, then the live app:
+
+```bash
+sh deploy/update.sh test
+sh deploy/update.sh live
+```
+
+It (1) backs up that copy's database, (2) `git pull`s, (3) builds, (4) runs
+the golden cases **on the new version** in a throwaway database with nothing
+able to send — one failure and it **stops, leaving the running app as it
+was** (and says how to put the code back) — and (5) starts the new version
+and checks it answers.
 
 ## Release checklist (No. 173)
 

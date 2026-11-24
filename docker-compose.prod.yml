@@ -43,9 +43,13 @@ x-backend: &backend
     # CSP_Documents folder BESIDE the app folder (/home/Ankita/CSP_Documents
     # on the server), so re-cloning or cleaning the app never touches it.
     DOCUMENTS_ARCHIVE_DIR: /app/documents
+    # The backup service's "ok / failed" note (No. 199): read by the alerts,
+    # which email the Super Admins when a backup failed or is late.
+    BACKUP_STATUS_FILE: /app/backups/${IMAGE_PREFIX:-cspdocmaker}-last-backup.txt
   volumes:
     - ./backend/credentials:/app/backend/credentials:ro
     - ${DOCUMENTS_ARCHIVE_HOST:-../CSP_Documents}:/app/documents
+    - ${BACKUP_HOST:-../CSP_Backups}:/app/backups:ro
     - documents:/app/backend/generated_documents
     - logs:/app/backend/logs
     - models:/app/backend/app/assets/models
@@ -144,6 +148,28 @@ services:
     depends_on:
       - api
       - frontend
+
+  # Daily database backup (No. 199, Stage 0): deploy/backup-loop.sh takes one
+  # a day into the CSP_Backups folder BESIDE the app folder
+  # (/home/Ankita/CSP_Backups on the server), keeps the newest 14, and writes
+  # <IMAGE_PREFIX>-last-backup.txt for the alerts. Restore check: deploy/restore-check.sh.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    entrypoint: ["sh", "/backup-loop.sh"]
+    environment:
+      PGHOST: postgres
+      PGUSER: ${DATABASE_USER:-cspdocmaker}
+      PGPASSWORD: ${DATABASE_PASSWORD:?set DATABASE_PASSWORD in deploy/.env.production}
+      PGDATABASE: ${DATABASE_NAME:-cspdocmaker}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+      BACKUP_NAME: ${IMAGE_PREFIX:-cspdocmaker}
+    volumes:
+      - ./deploy/backup-loop.sh:/backup-loop.sh:ro
+      - ${BACKUP_HOST:-../CSP_Backups}:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 volumes:
   postgres_data:

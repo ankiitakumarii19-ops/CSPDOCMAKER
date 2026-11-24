@@ -422,6 +422,21 @@ export default function DocumentTemplates() {
                           matched automatically
                         </span>
                       )}
+                      {/* No. 212 (ZU-05): a suggestion, applied only when pressed. */}
+                      {!mapping[p.text] && p.suggestion && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setMapping((m) => ({ ...m, [p.text]: p.suggestion!.field }))
+                          }
+                          className="ml-2 text-xs text-eko-dark dark:text-eko underline"
+                          title={p.suggestion.how}
+                        >
+                          Use suggestion:{" "}
+                          {selected.fields.find((f) => f.field === p.suggestion!.field)?.label ??
+                            p.suggestion.field}
+                        </button>
+                      )}
                     </div>
                     <select
                       value={mapping[p.text] || ""}

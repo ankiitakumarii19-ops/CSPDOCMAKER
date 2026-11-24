@@ -36,6 +36,9 @@ from app.models.field_provenance import FieldCorrection, FieldProvenance
 from app.models.feedback_loop import ContactFix, CspFeedback, QualitySuggestion
 from app.models.csp_reply import CspReply
 from app.models.user_photo import UserPhoto
+from app.models.workspace_setting import (WorkspaceSecret, WorkspaceSetting,
+                                          WorkspaceSettingChange)
+from app.models.feature_access import AccessRole, FeatureAccess
 
 __all__ = [
     "UserPhoto",
@@ -52,6 +55,11 @@ __all__ = [
     "EmailMessage",
     "WorkspaceMember",
     "Workspace",
+    "WorkspaceSetting",
+    "WorkspaceSettingChange",
+    "AccessRole",
+    "WorkspaceSecret",
+    "FeatureAccess",
     "DataSource",
     "Dashboard",
     "DashboardWidget",

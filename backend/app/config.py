@@ -229,6 +229,12 @@ class Settings(BaseSettings):
     alert_repeat_hours: int = Field(default=4, alias="ALERT_REPEAT_HOURS")
     alert_agent_failures: int = Field(default=3, alias="ALERT_AGENT_FAILURES")
     alert_whatsapp_failures: int = Field(default=5, alias="ALERT_WHATSAPP_FAILURES")
+    # No. 199 (Stage 0): the backup service's note "ok|failed <unix time>
+    # <file or why>" (deploy/backup-loop.sh). Blank = no backups here (a
+    # laptop), nothing checked. An alert when the last backup failed or the
+    # last good one is older than BACKUP_ALERT_HOURS.
+    backup_status_file: str = Field(default="", alias="BACKUP_STATUS_FILE")
+    backup_alert_hours: int = Field(default=26, alias="BACKUP_ALERT_HOURS")
     # No. 153: the app writes AO / RBO corrections into INFO itself.
     info_auto_fix_enabled: bool = Field(default=True,
                                         alias="INFO_AUTO_FIX_ENABLED")
@@ -397,6 +403,99 @@ class Settings(BaseSettings):
             return domains[0]
         return ", ".join(domains[:-1]) + " or " + domains[-1]
 
+    # ---- No. 204 (Stage 1): rules that were fixed in the code, now settings
+    # a workspace's Super Admin may change (services/settings_catalog.py).
+    # The defaults are exactly the values the code used before, so nothing
+    # changes until someone changes them.
+    send_time_zone: str = Field(default="+05:30", alias="SEND_TIME_ZONE")
+    resend_first_wait_minutes: int = Field(default=30,
+                                           alias="RESEND_FIRST_WAIT_MINUTES")
+    resend_longest_wait_hours: int = Field(default=4,
+                                           alias="RESEND_LONGEST_WAIT_HOURS")
+    resend_give_up_days: int = Field(default=7, alias="RESEND_GIVE_UP_DAYS")
+    contact_fix_max_tries: int = Field(default=3, alias="CONTACT_FIX_MAX_TRIES")
+    whatsapp_not_received_hours: int = Field(
+        default=24, alias="WHATSAPP_NOT_RECEIVED_HOURS")
+    reply_lookback_hours: int = Field(default=72, alias="REPLY_LOOKBACK_HOURS")
+    reply_quiet_minutes: int = Field(default=5, alias="REPLY_QUIET_MINUTES")
+    reply_auto_per_day: int = Field(default=3, alias="REPLY_AUTO_PER_DAY")
+    documents_link_days: int = Field(default=7, alias="DOCUMENTS_LINK_DAYS")
+
+    # ---- No. 211 (Stage 4): each workspace's own data shape and words ----
+    # Defaults = Eko's rules as they were fixed in the code.
+    record_type_rule: str = Field(default="code_length", alias="RECORD_TYPE_RULE")
+    record_main_lengths: str = Field(default="8", alias="RECORD_MAIN_LENGTHS")
+    record_second_lengths: str = Field(default="9,10",
+                                       alias="RECORD_SECOND_LENGTHS")
+    word_record: str = Field(default="CSP", alias="WORD_RECORD")
+    word_owner: str = Field(default="RM", alias="WORD_OWNER")
+    word_main_type: str = Field(default="KO", alias="WORD_MAIN_TYPE")
+    word_second_type: str = Field(default="Sub-KO", alias="WORD_SECOND_TYPE")
+    asked_once_fields: str = Field(default="ao,rbo_name",
+                                   alias="ASKED_ONCE_FIELDS")
+    crm_fill_fields: str = Field(default="email,address,state,gender",
+                                 alias="CRM_FILL_FIELDS")
+    lookup_fill_enabled: bool = Field(default=True, alias="LOOKUP_FILL_ENABLED")
+    auto_documents_new: bool = Field(default=True, alias="AUTO_DOCUMENTS_NEW")
+    # ---- No. 212 (Stage 5): documents ----
+    # Documents the second record type never gets (Eko: a Sub-KO never gets
+    # the BCP).
+    documents_not_for_second_type: str = Field(
+        default="BCP", alias="DOCUMENTS_NOT_FOR_SECOND_TYPE")
+    # ---- No. 213 (Stage 6): messages ----
+    send_days: str = Field(default="mon,tue,wed,thu,fri,sat,sun",
+                           alias="SEND_DAYS")
+    send_holidays: str = Field(default="", alias="SEND_HOLIDAYS")
+    send_max_per_person_day: int = Field(default=0,
+                                         alias="SEND_MAX_PER_PERSON_DAY")
+    msg_documents_ready: bool = Field(default=True, alias="MSG_DOCUMENTS_READY")
+    feedback_wording: str = Field(default="", alias="FEEDBACK_WORDING")
+    reply_never_answer_words: str = Field(default="",
+                                          alias="REPLY_NEVER_ANSWER_WORDS")
+    # ---- No. 214 (Stage 7): jobs, alerts, weekly health, look ----
+    # Each background job on / off per workspace, and at most how often
+    # (0 = every time the server runs it, as today).
+    job_sheet_read_on: bool = Field(default=True, alias="JOB_SHEET_READ_ON")
+    job_sheet_read_every: int = Field(default=0, alias="JOB_SHEET_READ_EVERY")
+    job_signin_read_on: bool = Field(default=True, alias="JOB_SIGNIN_READ_ON")
+    job_signin_read_every: int = Field(default=0, alias="JOB_SIGNIN_READ_EVERY")
+    job_records_sheets_on: bool = Field(default=True, alias="JOB_RECORDS_SHEETS_ON")
+    job_records_sheets_every: int = Field(default=0, alias="JOB_RECORDS_SHEETS_EVERY")
+    job_sheet_photos_on: bool = Field(default=True, alias="JOB_SHEET_PHOTOS_ON")
+    job_sheet_photos_every: int = Field(default=0, alias="JOB_SHEET_PHOTOS_EVERY")
+    job_delivery_status_on: bool = Field(default=True, alias="JOB_DELIVERY_STATUS_ON")
+    job_delivery_status_every: int = Field(default=0, alias="JOB_DELIVERY_STATUS_EVERY")
+    job_replies_on: bool = Field(default=True, alias="JOB_REPLIES_ON")
+    job_replies_every: int = Field(default=0, alias="JOB_REPLIES_EVERY")
+    job_verify_on: bool = Field(default=True, alias="JOB_VERIFY_ON")
+    job_verify_every: int = Field(default=0, alias="JOB_VERIFY_EVERY")
+    job_contact_loop_on: bool = Field(default=True, alias="JOB_CONTACT_LOOP_ON")
+    job_contact_loop_every: int = Field(default=0, alias="JOB_CONTACT_LOOP_EVERY")
+    job_resend_on: bool = Field(default=True, alias="JOB_RESEND_ON")
+    job_resend_every: int = Field(default=0, alias="JOB_RESEND_EVERY")
+    job_info_fix_on: bool = Field(default=True, alias="JOB_INFO_FIX_ON")
+    job_info_fix_every: int = Field(default=0, alias="JOB_INFO_FIX_EVERY")
+    job_new_records_on: bool = Field(default=True, alias="JOB_NEW_RECORDS_ON")
+    job_new_records_every: int = Field(default=0, alias="JOB_NEW_RECORDS_EVERY")
+    alert_to: str = Field(default="", alias="ALERT_TO")
+    health_email_on: bool = Field(default=True, alias="HEALTH_EMAIL_ON")
+    health_email_day: str = Field(default="mon", alias="HEALTH_EMAIL_DAY")
+    health_email_hour: int = Field(default=9, alias="HEALTH_EMAIL_HOUR")
+    health_email_to: str = Field(default="", alias="HEALTH_EMAIL_TO")
+    brand_name: str = Field(default="CSPdocMaker", alias="BRAND_NAME")
+    brand_color: str = Field(default="#00B259", alias="BRAND_COLOR")
+    # ---- No. 215 (Stage 8): going live, test mode, pause all ----
+    # The server's value is Eko's (live); any other workspace starts not
+    # live (workspace_settings.NOT_EKO_DEFAULTS).
+    workspace_live: bool = Field(default=True, alias="WORKSPACE_LIVE")
+    pause_all: bool = Field(default=False, alias="PAUSE_ALL")
+    test_mode: bool = Field(default=False, alias="TEST_MODE")
+    test_mode_phone: str = Field(default="", alias="TEST_MODE_PHONE")
+    test_mode_email: str = Field(default="", alias="TEST_MODE_EMAIL")
+    # ---- No. 216 (Stage 9): limits per workspace (0 = none, as today) ----
+    max_whatsapp_per_day: int = Field(default=0, alias="MAX_WHATSAPP_PER_DAY")
+    max_documents_per_day: int = Field(default=0, alias="MAX_DOCUMENTS_PER_DAY")
+
     # ---- Celery ----
     celery_broker_url: Optional[str] = Field(default=None, alias="CELERY_BROKER_URL")
     celery_result_backend: Optional[str] = Field(default=None, alias="CELERY_RESULT_BACKEND")
@@ -418,7 +517,57 @@ class Settings(BaseSettings):
     }
 
 
+class WorkspaceSettingsView:
+    """The server's settings, as seen by one workspace (No. 204, Stage 1).
+
+    Inside a workspace (a request, or a job run for it), a setting listed
+    in services/settings_catalog.py answers with that workspace's own value
+    when its Super Admin has set one; otherwise — and for everything else —
+    the server's value, which is Eko's value today. Outside any workspace
+    (start-up, sign-in before a workspace is chosen) it is the server's
+    value. Writing an attribute (tests do) writes the server's value.
+    """
+
+    __slots__ = ("_base",)
+
+    def __init__(self, base: Settings):
+        object.__setattr__(self, "_base", base)
+
+    def __getattr__(self, name):
+        base = object.__getattribute__(self, "_base")
+        value = getattr(base, name)
+        if name in _workspace_keys():
+            from app.services import workspace_settings
+            own = workspace_settings.own_value(name)
+            if own is not workspace_settings.MISSING:
+                return own
+        return value
+
+    def __setattr__(self, name, value):
+        setattr(object.__getattribute__(self, "_base"), name, value)
+
+    def __delattr__(self, name):
+        delattr(object.__getattribute__(self, "_base"), name)
+
+    @property
+    def server(self) -> Settings:
+        """The server's own values, never a workspace's (Eko's value)."""
+        return object.__getattribute__(self, "_base")
+
+
+_KEYS = None
+
+
+def _workspace_keys():
+    global _KEYS
+    if _KEYS is None:
+        from app.services.connection_catalog import KEYS as CONNECTIONS
+        from app.services.settings_catalog import KEYS
+        _KEYS = KEYS | CONNECTIONS
+    return _KEYS
+
+
 @lru_cache()
-def get_settings() -> Settings:
-    """Cached settings instance — loaded once per process."""
-    return Settings()
+def get_settings() -> WorkspaceSettingsView:
+    """Cached settings — loaded once per process; workspace-aware (No. 204)."""
+    return WorkspaceSettingsView(Settings())

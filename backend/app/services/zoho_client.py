@@ -55,6 +55,8 @@ TOKEN_SAFETY_MARGIN = 60
 
 _token: Optional[str] = None
 _token_expires_at: float = 0.0
+# Whose token it is (No. 210: each workspace may have its own Zoho).
+_token_for: Optional[str] = None
 _token_lock = threading.Lock()
 
 
@@ -74,7 +76,7 @@ def is_configured() -> bool:
 
 def access_token(force: bool = False) -> str:
     """A valid access token, reusing the cached one until it nears expiry."""
-    global _token, _token_expires_at
+    global _token, _token_expires_at, _token_for
 
     if not is_configured():
         raise ZohoNotConfigured(
@@ -83,7 +85,8 @@ def access_token(force: bool = False) -> str:
         )
 
     with _token_lock:
-        if not force and _token and time.time() < _token_expires_at:
+        if (not force and _token and _token_for == settings.zoho_client_id
+                and time.time() < _token_expires_at):
             return _token
 
         with telemetry.external_call("zoho", "oauth_token_refresh") as span:
@@ -112,6 +115,7 @@ def access_token(force: bool = False) -> str:
             raise ZohoError(f"Could not obtain a Zoho access token: {error}")
 
         _token = payload["access_token"]
+        _token_for = settings.zoho_client_id
         _token_expires_at = (
             time.time() + int(payload.get("expires_in", 3600)) - TOKEN_SAFETY_MARGIN
         )

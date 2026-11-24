@@ -210,17 +210,23 @@ async def checklist(session, user, live: bool = True) -> List[Step]:
             "workers.",
             "If this stays empty, the background workers may not be running "
             "on the server; ask the server administrator."))
+    elif get_settings().google_sheets_csp_sheet_id:
+        # No. 210: a workspace's own sheet is read like Eko's.
+        steps.append(Step(
+            "records", "CSPs loaded into the app", TODO,
+            "Your main CSP sheet is connected; its rows are read every "
+            "minute by the background jobs.",
+            "If nothing appears after a few minutes, press Test on Setup → "
+            "Connections → Google Sheets: it says whether the sheet and its "
+            "tab can be opened.",
+            ask="Why are there no CSPs in my workspace?"))
     else:
         steps.append(Step(
-            "records", "CSPs loaded into the app", BLOCKED,
-            "The app does not yet read a new workspace's own sheet into CSP "
-            "records — only Eko's sheet is read. Connecting your sheet lets "
-            "you see and edit it on Setup → Sheets, but your CSPs will not "
-            "appear in the app, so no documents can be made for them yet.",
-            "This needs development work in the app (reading each "
-            "workspace's sheet, with its own column names). It is not "
-            "something you can fix from here — tell the Eko team.",
-            ask="Why are there no CSPs in my workspace?"))
+            "records", "CSPs loaded into the app", TODO,
+            "No main CSP sheet is connected yet.",
+            "Setup → Connections → Google Sheets: share your sheet with the "
+            "robot address shown there, paste its link, press Test.",
+            ask="How do I connect my Google Sheet?"))
 
     # 4. Document templates.
     templates = list((await session.execute(
@@ -459,7 +465,8 @@ class Proposal:
 
 
 ACTION_KINDS = ("add_member", "connect_sheet", "create_wordings",
-                "add_email_channel", "enable_agent")
+                "add_email_channel", "enable_agent", "change_setting",
+                "change_feature_access", "change_connection")
 
 
 async def run(kind: str, params: dict, session, user) -> dict:
@@ -512,6 +519,53 @@ async def run(kind: str, params: dict, session, user) -> dict:
             return {"ok": True, "message": (
                 "Email channel added. It sends through the server's email "
                 "account.")}
+        if kind == "change_setting":
+            # No. 204 (ZU-01): the same save, checks and history as the
+            # Settings screen; via="chat" in the history.
+            from app.services import settings_catalog, workspace_settings
+            try:
+                out = await workspace_settings.set_value(
+                    session, params["key"], params["value"], user, via="chat")
+            except (settings_catalog.SettingError, PermissionError) as e:
+                await session.rollback()
+                return {"ok": False, "message": str(e)}
+            return {"ok": True, "message": (
+                f"Saved: {out['label']} is now {out['value_text']}. Undo it "
+                "any time on Setup → Settings → History.")}
+        if kind == "change_connection":
+            # No. 210 (ZU-03): never a password — those only in the locked box.
+            from app.services import connection_catalog, connections
+            if params["key"] in connection_catalog.SECRET_KEYS:
+                return {"ok": False, "message": "Passwords are entered only "
+                        "on Setup → Connections."}
+            try:
+                await connections.set_value(session, params["key"],
+                                            params["value"], user, via="chat")
+            except connection_catalog.ConnectionError_ as e:
+                await session.rollback()
+                return {"ok": False, "message": str(e)}
+            label = connection_catalog.BY_KEY[params["key"]].label
+            return {"ok": True, "message": f"Saved: {label}. Ask me to test it."}
+        if kind == "change_feature_access":
+            # No. 206 (ZU-02): the same change and history as Feature access.
+            from app.services import feature_access, feature_catalog
+            try:
+                if params["subject_kind"] == "role":
+                    await feature_access.set_for_role(
+                        session, params["subject"], params["feature"],
+                        params["allowed"], user, via="chat")
+                else:
+                    await feature_access.set_for_person(
+                        session, params["subject"], params["feature"],
+                        params["allowed"], user, via="chat")
+            except feature_access.AccessError as e:
+                await session.rollback()
+                return {"ok": False, "message": str(e)}
+            title = feature_catalog.BY_KEY[params["feature"]].title
+            return {"ok": True, "message": (
+                f"Saved: “{title}” — " + {True: "given", False: "taken away",
+                                          None: "as before"}[params["allowed"]]
+                + ". See Setup → Feature access.")}
         if kind == "enable_agent":
             from app.routers.agent_router import AgentToggle, toggle_agent
             await toggle_agent(key=params["key"],

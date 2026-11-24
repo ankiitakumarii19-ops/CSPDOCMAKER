@@ -26,9 +26,9 @@ each box ticked or a reason it does not apply. Claude follows it too.
 
 ## 2. On the test copy (server)
 
-- [ ] **Deployed to the test copy first** (DEPLOY.md → "Test copy"):
-      `git pull` then
-      `docker compose -p cspdocmaker-test -f docker-compose.prod.yml --env-file deploy/.env.test up -d --build`
+- [ ] **Deployed to the test copy first**: `sh deploy/update.sh test`
+      (backup, pull, build, golden cases on the new version, start — it
+      stops by itself if a golden case fails).
 - [ ] **Seen working in a browser** on the test copy: every changed screen
       opened, the main path tried, nothing red in the browser console.
       Write what was checked.
@@ -38,8 +38,8 @@ each box ticked or a reason it does not apply. Claude follows it too.
 
 ## 3. On the live app (server)
 
-- [ ] **Database backed up** first (DEPLOY.md → "Backups"); file name noted.
-- [ ] `git pull` and `docker compose -f docker-compose.prod.yml --env-file deploy/.env.production up -d --build`
+- [ ] `sh deploy/update.sh live` — it backs up the database first (file
+      name printed: note it), then pull, build, golden cases, start.
 - [ ] **Health**: `curl -s https://indev.eko.in/csp-docmaker/api/health`
       says healthy; the coloured sheet chips turn green within a few minutes.
 - [ ] **Watched for 30 minutes**: no alert email, Agents page has no new
@@ -51,7 +51,7 @@ each box ticked or a reason it does not apply. Claude follows it too.
 2. `git checkout <good commit>` then the `up -d --build` line above.
 3. If the change altered the database and the old code cannot read it:
    restore the backup taken in step 3
-   (`gunzip -c ~/cspdocmaker-<date>.sql.gz | docker compose ... exec -T postgres psql -U cspdocmaker cspdocmaker`
-   into an empty database) — ask before doing this: it removes everything
+   (DEPLOY.md → "Backups": the `pg_restore` lines, with the
+   `...-before-update.dump` file update.sh printed) — ask before doing this: it removes everything
    written since the backup.
 4. Record what happened in the register.

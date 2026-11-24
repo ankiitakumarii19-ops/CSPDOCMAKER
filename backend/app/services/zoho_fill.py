@@ -51,9 +51,12 @@ def fill_from_zoho(session, record) -> Dict[str, str]:
     from app.services import sheet_writeback_service as wb
     from app.services import zoho_client
 
-    blanks = [f for f in FROM_ZOHO
-              if not (getattr(record, f, None) or "").strip()]
-    if not blanks or not zoho_client.is_configured() or not _is_eko(session):
+    from app.config import get_settings
+    wanted = set(str(get_settings().crm_fill_fields or "").split(","))
+    blanks = [f for f in FROM_ZOHO if f in wanted     # No. 211
+              and not (getattr(record, f, None) or "").strip()]
+    # No. 210: the workspace's own Zoho (Eko's in Eko's workspace only).
+    if not blanks or not zoho_client.is_configured():
         return {}
     if not (record.mobile or "").strip():
         return {}

@@ -24,6 +24,7 @@ the server, in the Eko workspace.
 """
 
 import logging
+from typing import Optional
 from datetime import datetime, timedelta, timezone
 
 from app.celery_app import celery_app
@@ -43,8 +44,37 @@ def ask_again_after() -> timedelta:
 LOCK_KEY = 7261126   # a fixed number: the Postgres lock for one batch at a time
 
 
+def send_zone(text: Optional[str] = None) -> timezone:
+    """The clock sending hours follow (No. 204: the workspace's
+    SEND_TIME_ZONE, "+05:30" = India, Eko's)."""
+    import re
+    if text is None:
+        from app.config import get_settings
+        text = get_settings().send_time_zone
+    m = re.fullmatch(r"([+-])(\d{2}):(\d{2})", (text or "").strip())
+    if not m:
+        logger.error("send_zone: %r is not a time zone like +05:30 — "
+                     "India time is used", text)
+        return IST
+    minutes = int(m.group(2)) * 60 + int(m.group(3))
+    return timezone(timedelta(minutes=minutes if m.group(1) == "+"
+                              else -minutes))
+
+
 def in_hours(now: datetime, start: int, end: int) -> bool:
-    return start <= now.astimezone(IST).hour < end
+    """Whether the app's own messages may go now: the sending hours, and
+    (No. 213) the workspace's sending days and holidays."""
+    from app.config import get_settings
+    local = now.astimezone(send_zone())
+    if not start <= local.hour < end:
+        return False
+    s = get_settings()
+    day = ("mon", "tue", "wed", "thu", "fri", "sat", "sun")[local.weekday()]
+    days = {d.strip() for d in str(s.send_days or "").split(",") if d.strip()}
+    if days and day not in days:
+        return False
+    holidays = {d.strip() for d in str(s.send_holidays or "").split(",")}
+    return local.date().isoformat() not in holidays
 
 
 def to_verify(session, limit: int) -> list:

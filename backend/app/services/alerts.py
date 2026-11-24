@@ -12,6 +12,10 @@ Problems looked for (fixed rules):
   agent:<key>     an agent failed ALERT_AGENT_FAILURES runs in a row
   whatsapp        in the last hour at least ALERT_WHATSAPP_FAILURES
                   WhatsApps failed and more failed than went
+  backup          the daily database backup failed, is late (older than
+                  BACKUP_ALERT_HOURS) or has never run (No. 199). The
+                  backup is the server's, so only workspace 1 (Eko, which
+                  runs the server) is told.
 
 What was sent and when is in audit_logs (alert_sent / alert_resolved,
 resource = the problem key), which is also how a repeat is held back. Only
@@ -82,7 +86,48 @@ def problems(session, settings, now: Optional[datetime] = None) -> List[Problem]
             title="WhatsApp messages are failing",
             detail=(f"In the last hour {failed} WhatsApp(s) failed and {sent} "
                     f"went. Admin → WhatsApp messages (filter: not sent).")))
+
+    from app.workspace_context import current_workspace_id
+    if str(current_workspace_id()) == SERVER_WORKSPACE:
+        problem = backup_problem(settings, now)
+        if problem:
+            found.append(problem)
     return found
+
+
+# Workspace 1 (Eko) runs the server, so the server's backup is its concern.
+SERVER_WORKSPACE = "00000000-0000-4000-8000-000000000001"
+
+
+def backup_problem(settings, now: datetime) -> Optional[Problem]:
+    """The backup service's note says a backup failed, is late, or never ran
+    (No. 199). None when backups are not set up here (BACKUP_STATUS_FILE
+    blank) or the last one is fine."""
+    path = (getattr(settings, "backup_status_file", "") or "").strip()
+    if not path:
+        return None
+    where = "On the server: the CSP_Backups folder, and DEPLOY.md → Backups."
+    try:
+        with open(path, encoding="utf-8") as f:
+            state, stamp, rest = (f.read().strip().split(" ", 2) + ["", ""])[:3]
+        when = datetime.fromtimestamp(int(stamp), tz=timezone.utc)
+    except FileNotFoundError:
+        return Problem(key="backup", title="No database backup has been taken",
+                       detail=("The backup service has not written its note yet "
+                               f"({path}). Is the 'backup' service running? {where}"))
+    except (OSError, ValueError) as e:
+        return Problem(key="backup", title="The backup note cannot be read",
+                       detail=f"{path}: {e}. {where}")
+    hours = (now - when).total_seconds() / 3600
+    if state == "failed":
+        return Problem(key="backup", title="The database backup failed",
+                       detail=(f"{when:%d %b %Y %H:%M} UTC: {rest}. It is tried again "
+                               f"every 15 minutes. {where}"))
+    if hours > settings.backup_alert_hours:
+        return Problem(key="backup", title="The database backup is late",
+                       detail=(f"The last good backup ({rest}) is {int(hours)} hours "
+                               f"old. {where}"))
+    return None
 
 
 def _last(session, keys: List[str]) -> Dict[str, AuditLog]:
@@ -110,8 +155,16 @@ def open_keys(session) -> List[str]:
 
 
 def recipients(session) -> List[str]:
+    """The workspace's own list (No. 214, Settings → Alerts), else every
+    active Super Admin."""
+    from app.config import get_settings
     from app.models.enums import UserRole
     from app.models.workspace_member import WorkspaceMember
+
+    own = sorted({e.strip().lower() for e in str(
+        get_settings().alert_to or "").split(",") if e.strip()})
+    if own:
+        return own
 
     return sorted(set(session.execute(select(WorkspaceMember.email).where(
         WorkspaceMember.role == UserRole.SUPER_ADMIN,

@@ -303,6 +303,19 @@ from app.routers.knowledge_router import router as knowledge_router
 app.include_router(knowledge_router)  # /api/admin/knowledge — the chat's Knowledge Base, Admin + Super Admin (No. 116)
 from app.routers.workspace_rules_router import router as workspace_rules_router
 app.include_router(workspace_rules_router)  # /api/admin/workspace-rules — each workspace's own rules (No. 120)
+from app.routers.settings_router import router as settings_router
+app.include_router(settings_router)  # /api/admin/settings — each workspace's own settings (No. 204)
+from app.routers.feature_access_router import me_router, router as feature_access_router
+app.include_router(feature_access_router)  # /api/admin/feature-access — who has which feature (No. 206)
+app.include_router(me_router)  # /api/me/access — what I may use (No. 206)
+from app.routers.connections_router import router as connections_router
+app.include_router(connections_router)  # /api/admin/connections — own sheets, email, WhatsApp, CRM (No. 210)
+from app.routers.columns_router import router as columns_router
+app.include_router(columns_router)  # /api/admin/columns — own column names, guessed (No. 211)
+from app.routers.setup_guide_router import router as setup_guide_router
+app.include_router(setup_guide_router)  # /api/admin/setup-guide — steps, go live, dry run (No. 215)
+from app.routers.workspace_admin_router import router as workspace_admin_router
+app.include_router(workspace_admin_router)  # /api/admin/workspace — export, close (No. 216)
 app.include_router(csp_form_router)  # PUBLIC — no login; token is the credential
 from app.routers.public_document_router import router as public_document_router
 from app.routers.public_document_router import photo_router as public_photo_router

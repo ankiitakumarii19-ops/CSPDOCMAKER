@@ -14,6 +14,16 @@ import tempfile
 import pytest
 
 TEST_DB = os.environ.get("TEST_DATABASE_NAME", "cspdocmaker_test")
+# The suite DROPS and re-creates TEST_DB. It runs on the server too (the
+# golden check in deploy/update.sh, No. 199), so it must never be pointed at
+# the real database.
+_real = {"cspdocmaker", "postgres"}
+_named = (os.environ.get("DATABASE_NAME") or "").strip().lower()
+if _named and _named != TEST_DB.strip().lower():  # not set by this file already
+    _real.add(_named)
+if TEST_DB.strip().lower() in _real:
+    raise RuntimeError(f"TEST_DATABASE_NAME={TEST_DB!r} is a real database; "
+                       "the tests would wipe it. Use a test name.")
 # Must be set before any app module creates its engine/settings.
 os.environ["DATABASE_NAME"] = TEST_DB
 os.environ["APP_ENV"] = "development"

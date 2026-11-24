@@ -103,6 +103,34 @@ def auto_map(placeholders) -> Tuple[Dict[str, str], List[str]]:
     return mapped, sorted(unmapped)
 
 
+def suggest(unmapped) -> Dict[str, dict]:
+    """No. 212 (ZU-05): for each blank with no exact match, the field its
+    name most likely means — a SUGGESTION the admin accepts or not, never
+    applied by itself (a wrong field on an official document is worse than
+    one question). Fixed rule: the longest known name whose words all appear
+    in the blank's name ("Agent Mobile No." contains "mobile")."""
+    from app.services import csp_mapping, data_shape
+    names = {**known_vocabulary(), **_ALIASES}
+    record_to_template = {attr: f for f, attr in
+                          csp_mapping.FIELD_TO_CSP_ATTR.items()}
+    for field, synonyms in data_shape.SYNONYMS.items():
+        target = record_to_template.get(field, field)
+        for name in synonyms:
+            names.setdefault(_norm(name), target)
+    out: Dict[str, dict] = {}
+    for text in unmapped:
+        words = f" {_norm(text)} "
+        best = None
+        for name, field in names.items():
+            if name and f" {name} " in words:
+                if best is None or len(name) > len(best[0]):
+                    best = (name, field)
+        if best:
+            out[text] = {"field": best[1],
+                         "how": f"its name contains “{best[0]}”"}
+    return out
+
+
 # ---- reading an uploaded file ------------------------------------------
 
 def _open(source) -> Document:
@@ -206,6 +234,7 @@ def inspect(source) -> dict:
         "placeholders": placeholders,
         "mapped": mapped,
         "unmapped": unmapped,
+        "suggested": suggest(unmapped),
         "paragraphs": read_paragraphs(source),
         "photo_marker": guess_photo_marker(source),
     }

@@ -72,7 +72,8 @@ def link_for(workspace_id, processing_job_id, csp_id: str) -> str:
         "ws": str(workspace_id),
         "job": str(processing_job_id),
         "csp": csp_id,
-        "exp": datetime.now(timezone.utc) + timedelta(days=LINK_DAYS),
+        "exp": datetime.now(timezone.utc) + timedelta(
+            days=get_settings().documents_link_days),
     }
     token = jwt.encode(claims, s.jwt_secret_key, algorithm=s.jwt_algorithm)
     return f"{s.public_app_url.rstrip('/')}/api/public/documents/{token}"
@@ -114,6 +115,10 @@ def notify(session, csp, job, document_names: List[str],
     try:
         if getattr(csp, "send_hold", None):
             return _skip(csp, csp.send_hold)        # No. 121
+        from app.config import get_settings as _gs
+        if not _gs().msg_documents_ready:          # No. 213
+            return _skip(csp, "the “documents ready” WhatsApp is switched "
+                              "off (Settings → Feedback question)")
         channel = whatsapp_channel(session)
         if channel is None:
             return _skip(csp, "no active WhatsApp channel")

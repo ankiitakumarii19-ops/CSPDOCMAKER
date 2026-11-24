@@ -39,12 +39,18 @@ def is_admin(token_user: dict) -> bool:
     return (token_user.get("role") or "").lower() in MONITOR_ROLES
 
 
+def _all_csps(token_user: dict) -> bool:
+    """No. 206: the workspace let this person's role act on every CSP."""
+    from app.services import feature_access
+    return feature_access.record_scope(token_user) == "all"
+
+
 def accessible_filter(token_user: dict) -> Optional[ColumnElement]:
     """SQL condition limiting CSP rows to what this user may access.
 
     Returns None when no restriction applies (Admins, who monitor everything).
     """
-    if is_admin(token_user):
+    if is_admin(token_user) or _all_csps(token_user):
         return None
     email = (token_user.get("sub") or "").strip().lower()
     return or_(
@@ -55,7 +61,7 @@ def accessible_filter(token_user: dict) -> Optional[ColumnElement]:
 
 def can_access(csp: CSPRecord, token_user: dict) -> bool:
     """Whether this user may act on a specific CSP record."""
-    if is_admin(token_user):
+    if is_admin(token_user) or _all_csps(token_user):
         return True
     email = (token_user.get("sub") or "").strip().lower()
     return (csp.rm_email or "").lower() == email or csp.rm_resolution == UNRESOLVED

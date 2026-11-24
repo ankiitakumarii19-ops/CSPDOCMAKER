@@ -125,13 +125,40 @@ def redact(value: Any) -> Any:
 # ---- spans to a JSON-lines file ---------------------------------------------
 
 class JsonlSpanExporter(SpanExporter):
-    """Writes each finished span as one JSON line. Never raises."""
+    """Writes each finished span as one JSON line. Never raises.
 
-    def __init__(self, path: str):
+    Trimmed like app.jsonl (No. 199, Stage 0 — it used to grow forever on
+    the server): past max_bytes the file becomes traces.jsonl.1 (.1 -> .2 …)
+    and the oldest beyond backup_count is removed.
+    """
+
+    def __init__(self, path: str, max_bytes: int = 20_000_000,
+                 backup_count: int = 10):
         self.path = path
+        self.max_bytes = max_bytes
+        self.backup_count = backup_count
+
+    def _rotate_if_full(self) -> None:
+        try:
+            if os.path.getsize(self.path) < self.max_bytes:
+                return
+        except OSError:
+            return  # no file yet
+        for i in range(self.backup_count - 1, 0, -1):
+            older = f"{self.path}.{i}"
+            if os.path.exists(older):
+                os.replace(older, f"{self.path}.{i + 1}")
+        os.replace(self.path, f"{self.path}.1")
+        stale = f"{self.path}.{self.backup_count + 1}"
+        if os.path.exists(stale):
+            os.remove(stale)
 
     def export(self, spans) -> SpanExportResult:
         try:
+            try:
+                self._rotate_if_full()
+            except OSError as e:  # another process rotated it first
+                sys.stderr.write(f"telemetry: could not trim traces: {e}\n")
             with open(self.path, "a", encoding="utf-8") as f:
                 for span in spans:
                     f.write(json.dumps(_span_dict(span), ensure_ascii=False) + "\n")

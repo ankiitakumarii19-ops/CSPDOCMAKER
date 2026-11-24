@@ -63,7 +63,10 @@ async def test_the_chat_opens_with_the_checklist(strict_client, new_ws):
     steps = {s["key"]: s for s in body["cards"][0]["steps"]}
     assert steps["team"]["detail"] == "Only you can sign in so far."
     assert steps["sheet"]["status"] == "todo"
-    assert steps["records"]["status"] == "blocked"
+    # No. 210: a new workspace's own sheet is read too — no longer
+    # "blocked"; the step says where to connect it.
+    assert steps["records"]["status"] == "todo"
+    assert "Setup → Connections" in steps["records"]["how"]
     assert steps["knowledge"]["status"] == "optional"
 
 

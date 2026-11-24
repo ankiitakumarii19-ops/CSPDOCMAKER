@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
@@ -17,6 +17,12 @@ import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
 import WorkspaceRules from "./WorkspaceRules";
+import Settings from "./Settings";
+import FeatureAccess from "./FeatureAccess";
+import Connections from "./Connections";
+import Columns from "./Columns";
+import SetupGuide from "./SetupGuide";
+import { useMyAccess } from "../lib/useMyAccess";
 import EmailMessages from "./EmailMessages";
 import CspReplies from "./CspReplies";
 import DataQuality from "./DataQuality";
@@ -76,6 +82,23 @@ const FILTERS = [
 // configures. Both land here.
 const ADMIN_ROLES = ["admin", "super_admin"];
 
+// Which feature (No. 206, Feature access) each Admin-page screen needs.
+const SECTION_FEATURE: Record<string, string> = {
+  overview: "dashboard",
+  build: "dashboards",
+  whatsapp: "whatsapp",
+  replies: "replies",
+  emails: "emails",
+  agents: "agents",
+  quality: "data_quality",
+  knowledge: "knowledge",
+  messaging: "messaging",
+  templates: "templates",
+  settings: "settings",
+  sheets: "sheets",
+  database: "database",
+};
+
 export default function AdminDashboard() {
   const router = useRouter();
   const user = useSessionUser();
@@ -85,7 +108,7 @@ export default function AdminDashboard() {
   // The section open is in the address (?section=…), so a refresh, a
   // bookmark or Back stays on it (No. 171). Leaving a section closes what
   // was open inside it (a CSP's chat, a message).
-  const [adminRoute] = useUrlParam("section", "overview");
+  const [askedRoute] = useUrlParam("section", "overview");
   // The side menu as a drawer on a small screen (No. 175).
   const [navMenu, setNavMenu] = useState(false);
   // A CSP chosen in the header's search (No. 175): its summary.
@@ -106,6 +129,15 @@ export default function AdminDashboard() {
   //                anything.
   const isOwner = user?.role === "super_admin";
   const canConfigure = isOwner || user?.role === "admin";
+  // No. 206: what this person may use (Feature access). The server refuses
+  // the rest; the menu only follows. An RM given an Admin screen may come
+  // here and sees only what was given.
+  const access = useMyAccess(Boolean(user));
+  const can = useCallback(
+    (feature: string) => Boolean(access?.features.includes(feature)),
+    [access]
+  );
+  const mayEnter = Boolean(user && (ADMIN_ROLES.includes(user.role) || access?.admin_area));
   // An Admin manages members too when the Owner's rules say so (No. 120).
   const [adminsManageMembers, setAdminsManageMembers] = useState(false);
   useEffect(() => {
@@ -116,6 +148,20 @@ export default function AdminDashboard() {
       .catch(() => setAdminsManageMembers(false));
   }, [user?.role]);
   const canManageMembers = isOwner || adminsManageMembers;
+  // A screen this person does not have opens their first one instead
+  // (No. 206): worked out while drawing, so nothing redirects.
+  const adminRoute = useMemo(() => {
+    if (!access) return askedRoute;
+    const allowedHere = askedRoute.startsWith("dash:")
+      ? can("dashboards")
+      : askedRoute === "access"
+      ? canManageMembers
+      : ["rules", "feature-access", "connections", "columns", "setup-guide"].includes(askedRoute)
+      ? isOwner
+      : can(SECTION_FEATURE[askedRoute] ?? "");
+    if (allowedHere) return askedRoute;
+    return Object.keys(SECTION_FEATURE).find((r) => can(SECTION_FEATURE[r])) ?? askedRoute;
+  }, [access, askedRoute, can, canManageMembers, isOwner]);
 
   // The dashboards are data now. The permanent one still renders the
   // existing screen below — it has filters, drill-down and CSV export, and
@@ -162,8 +208,9 @@ export default function AdminDashboard() {
     // A Super Admin belongs here too. Before this, "super_admin" failed
     // the test and was sent to /rm, which sent them straight back —
     // an endless bounce between the two screens and a white page.
-    else if (!ADMIN_ROLES.includes(user.role)) router.replace("/rm");
-  }, [user, router]);
+    else if (!ADMIN_ROLES.includes(user.role) && access !== undefined && !access?.admin_area)
+      router.replace("/rm");
+  }, [user, router, access]);
 
   const today = indiaDay(0);
   const yesterday = indiaDay(-1);
@@ -193,7 +240,9 @@ export default function AdminDashboard() {
   const query = { ...filters, ...dayParams };
   const queryKey = JSON.stringify(query);
 
+  const seesDashboard = can("dashboard");
   useEffect(() => {
+    if (!seesDashboard) return;
     let cancelled = false;
     api
       .cspMetrics(JSON.parse(queryKey))
@@ -208,14 +257,15 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [queryKey]);
+  }, [queryKey, seesDashboard]);
 
   useEffect(() => {
+    if (!seesDashboard) return;
     api
       .cspFilters()
       .then((res) => setOptions(res.filters))
       .catch(() => setOptions({}));
-  }, []);
+  }, [seesDashboard]);
 
   useEffect(() => {
     if (drill) {
@@ -242,7 +292,14 @@ export default function AdminDashboard() {
     router.replace("/");
   };
 
-  if (!user || !ADMIN_ROLES.includes(user.role)) return null;
+  if (user && mayEnter && access === null) {
+    return (
+      <div className="p-6 text-sm text-red-600 dark:text-red-400">
+        Could not load which screens you may use. Please reload the page.
+      </div>
+    );
+  }
+  if (!user || !mayEnter || !access) return null;
 
   const activeFilters = Object.entries(filters).filter(([, v]) => v);
   const anythingApplied = activeFilters.length > 0 || dateMode !== "";
@@ -268,14 +325,14 @@ export default function AdminDashboard() {
         <div className="h-16 flex items-center gap-2 px-4 bg-navy-800 border-b border-gray-700 overflow-hidden">
           <BrandLogo height={30} className="shrink-0" />
           <span className="font-bold text-base text-white whitespace-nowrap">
-            CSPdocMaker
+            {access?.look?.name || "CSPdocMaker"}
           </span>
         </div>
         <nav className="flex-grow py-6 px-3 space-y-1 overflow-y-auto">
           <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 px-3">
             Monitoring
           </div>
-          {dashboards.map((d) => (
+          {dashboards.filter((d) => (d.is_system ? can("dashboard") : can("dashboards"))).map((d) => (
             <button
               key={d.slug}
               onClick={() =>
@@ -291,7 +348,7 @@ export default function AdminDashboard() {
               <i className={`fas ${d.icon} w-5 text-center`}></i> {d.name}
             </button>
           ))}
-          {dashboards.length === 0 && (
+          {dashboards.length === 0 && can("dashboard") && (
             <button
               onClick={() => setAdminRoute("overview")}
               className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -305,6 +362,7 @@ export default function AdminDashboard() {
           )}
           {/* Who got which WhatsApp, and what became of it (No. 110).
               Admins and Super Admins alike. */}
+          {can("whatsapp") && (
           <button
             onClick={() => setAdminRoute("whatsapp")}
             className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -315,9 +373,11 @@ export default function AdminDashboard() {
           >
             <i className="fab fa-whatsapp w-5 text-center"></i> WhatsApp messages
           </button>
+          )}
           {/* What CSPs wrote back, and the replies to them (No. 151) — its
               own page since 27 Oct (asked), so WhatsApp messages shows its
               numbers first again. */}
+          {can("replies") && (
           <button
             onClick={() => setAdminRoute("replies")}
             className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -328,7 +388,9 @@ export default function AdminDashboard() {
           >
             <i className="fas fa-reply w-5 text-center"></i> Replies
           </button>
+          )}
           {/* Every email to a CSP and what became of it (No. 127). */}
+          {can("emails") && (
           <button
             onClick={() => setAdminRoute("emails")}
             className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -339,7 +401,8 @@ export default function AdminDashboard() {
           >
             <i className="fas fa-envelope w-5 text-center"></i> Emails
           </button>
-          {canConfigure && (
+          )}
+          {can("dashboards") && (
             <button
               onClick={() => setAdminRoute("build")}
               className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -352,13 +415,26 @@ export default function AdminDashboard() {
             </button>
           )}
 
-          {canConfigure && (
+          {(canConfigure || ["agents", "data_quality", "messaging", "templates", "settings", "sheets", "database", "knowledge"].some(can)) && (
             <>
               <div className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 mt-6 px-3">
                 Setup
               </div>
-              {/* The agents are the Super Admin's alone (No. 104). */}
+              {/* Every setup step, test mode, go live (No. 215): the Owner's. */}
               {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("setup-guide")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "setup-guide"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-list-check w-5 text-center"></i> Setup guide
+                </button>
+              )}
+              {/* The agents are the Super Admin's alone (No. 104). */}
+              {can("agents") && (
               <button
                 onClick={() => setAdminRoute("agents")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -373,6 +449,7 @@ export default function AdminDashboard() {
               {/* Context and harness: what the app reads, what it filled in
                   by itself, check or correct it (No. 146). In Setup since
                   26 Oct (asked for). */}
+              {can("data_quality") && (
               <button
                 onClick={() => setAdminRoute("quality")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -383,6 +460,8 @@ export default function AdminDashboard() {
               >
                 <i className="fas fa-clipboard-check w-5 text-center"></i> Data quality
               </button>
+              )}
+              {can("messaging") && (
               <button
                 onClick={() => setAdminRoute("messaging")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -393,6 +472,8 @@ export default function AdminDashboard() {
               >
                 <i className="fas fa-comment-dots w-5 text-center"></i> Messaging
               </button>
+              )}
+              {can("templates") && (
               <button
                 onClick={() => setAdminRoute("templates")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -403,6 +484,7 @@ export default function AdminDashboard() {
               >
                 <i className="fas fa-file-lines w-5 text-center"></i> Document Templates
               </button>
+              )}
               {/* Access is the Workspace Owner's alone. An Admin who
                   could grant access could grant themselves anything. */}
               {canManageMembers && (
@@ -415,6 +497,59 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <i className="fas fa-users-gear w-5 text-center"></i> Access
+                </button>
+              )}
+              {/* Each workspace's own settings (No. 204): Admins see them
+                  and change the groups handed to them; the Owner, all. */}
+              {can("settings") && (
+              <button
+                onClick={() => setAdminRoute("settings")}
+                className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                  adminRoute === "settings"
+                    ? "bg-navy-800 text-white border-l-4 border-eko"
+                    : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                }`}
+              >
+                <i className="fas fa-sliders w-5 text-center"></i> Settings
+              </button>
+              )}
+              {/* Who has which feature (No. 206): the Owner's alone. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("feature-access")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "feature-access"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-user-shield w-5 text-center"></i> Feature access
+                </button>
+              )}
+              {/* Own sheets, email, WhatsApp, CRM (No. 210): the Owner's alone. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("connections")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "connections"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-plug w-5 text-center"></i> Connections
+                </button>
+              )}
+              {/* Which sheet column is which field (No. 211): the Owner's. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("columns")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "columns"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-table-list w-5 text-center"></i> Columns
                 </button>
               )}
               {/* Each workspace's own rules (No. 120): the Owner's alone. */}
@@ -433,7 +568,7 @@ export default function AdminDashboard() {
               {/* The sheets every other screen is derived from. Admins
                   edit the CSP tabs only; the access sheet and which sheets
                   are read stay the Owner's (No. 104, enforced server-side). */}
-              {canConfigure && (
+              {can("sheets") && (
                 <button
                   onClick={() => setAdminRoute("sheets")}
                   className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -447,7 +582,7 @@ export default function AdminDashboard() {
               )}
               {/* Every CSP's complete record (No. 89), read-only. Admins
                   and RMs too since No. 104. */}
-              {canConfigure && (
+              {can("database") && (
                 <button
                   onClick={() => setAdminRoute("database")}
                   className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -460,6 +595,7 @@ export default function AdminDashboard() {
                 </button>
               )}
               {/* What the chat answers process questions from (No. 116). */}
+              {can("knowledge") && (
               <button
                 onClick={() => setAdminRoute("knowledge")}
                 className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
@@ -470,11 +606,14 @@ export default function AdminDashboard() {
               >
                 <i className="fas fa-book w-5 text-center"></i> Knowledge Base
               </button>
+              )}
             </>
           )}
         </nav>
         <div className="px-6 py-4 text-xs text-gray-500 border-t border-gray-800">
-          {isOwner
+          {!canConfigure
+            ? `${access.role_name} — the screens your Super Admin gave you.`
+            : isOwner
             ? "Workspace Owner — you also control who may sign in."
             : "Admin — dashboards, templates and messaging. Access, sheets, the database and agent actions are the Owner's."}
         </div>
@@ -494,7 +633,7 @@ export default function AdminDashboard() {
             <i className="fas fa-bars"></i>
           </button>
           <div className="flex-1 min-w-0">
-            <GlobalSearch onOpenCsp={(cspId) => setSummaryCsp(cspId)} />
+            {can("csp_search") && <GlobalSearch onOpenCsp={(cspId) => setSummaryCsp(cspId)} />}
           </div>
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <FreshnessBadges />
@@ -551,7 +690,7 @@ export default function AdminDashboard() {
               />
             )}
 
-            {canConfigure && adminRoute === "build" && (
+            {can("dashboards") && adminRoute === "build" && (
               <DashboardBuilder
                 onBuilt={(slug) => {
                   loadDashboards();
@@ -561,11 +700,11 @@ export default function AdminDashboard() {
               />
             )}
 
-            {isOwner && adminRoute === "agents" && (
-              <Agents canSeeHistory={isOwner} canAct={isOwner} />
+            {can("agents") && adminRoute === "agents" && (
+              <Agents canSeeHistory={can("agents")} canAct={can("agents")} />
             )}
-            {adminRoute === "whatsapp" && <WhatsAppMessages />}
-            {adminRoute === "replies" && (
+            {can("whatsapp") && adminRoute === "whatsapp" && <WhatsAppMessages />}
+            {can("replies") && adminRoute === "replies" && (
               <div className="space-y-6">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900 dark:text-white">Replies</h2>
@@ -573,22 +712,27 @@ export default function AdminDashboard() {
                     What CSPs wrote back on WhatsApp, and the replies to them.
                   </p>
                 </div>
-                <CspReplies canSwitch={isOwner} />
+                <CspReplies canSwitch={can("reply_mode")} />
               </div>
             )}
-            {adminRoute === "emails" && <EmailMessages />}
-            {canConfigure && adminRoute === "quality" && <DataQuality />}
-            {canConfigure && adminRoute === "knowledge" && <KnowledgeBase />}
-            {canConfigure && adminRoute === "messaging" && <Messaging />}
-            {canConfigure && adminRoute === "templates" && <DocumentTemplates />}
+            {can("emails") && adminRoute === "emails" && <EmailMessages />}
+            {can("data_quality") && adminRoute === "quality" && <DataQuality />}
+            {can("knowledge") && adminRoute === "knowledge" && <KnowledgeBase />}
+            {can("messaging") && adminRoute === "messaging" && <Messaging />}
+            {can("templates") && adminRoute === "templates" && <DocumentTemplates />}
             {canManageMembers && adminRoute === "access" && (
               <AccessControl canAddSuperAdmin={isOwner} />
             )}
             {isOwner && adminRoute === "rules" && <WorkspaceRules canEdit={isOwner} />}
-            {canConfigure && adminRoute === "sheets" && <Sheets canManage={isOwner} />}
-            {canConfigure && adminRoute === "database" && <Database />}
+            {can("settings") && adminRoute === "settings" && <Settings />}
+            {isOwner && adminRoute === "feature-access" && <FeatureAccess />}
+            {isOwner && adminRoute === "connections" && <Connections />}
+            {isOwner && adminRoute === "columns" && <Columns />}
+            {isOwner && adminRoute === "setup-guide" && <SetupGuide onOpen={setAdminRoute} />}
+            {can("sheets") && adminRoute === "sheets" && <Sheets canManage={isOwner} />}
+            {can("database") && adminRoute === "database" && <Database />}
 
-            {adminRoute === "overview" && (
+            {can("dashboard") && adminRoute === "overview" && (
             <>
             {error && (
               <div className="p-3 bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
@@ -977,7 +1121,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </main>
-      <AssistantChat />
+      {can("chat") && <AssistantChat />}
     </div>
   );
 }

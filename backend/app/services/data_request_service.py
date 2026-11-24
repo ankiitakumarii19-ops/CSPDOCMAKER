@@ -227,4 +227,4 @@ def fields_to_ask(record) -> List[str]:
     """
     missing = fo.missing(record)
     return missing[fo.CSP] + [f for f in missing[fo.ORG]
-                              if f in fo.ASKED_FROM_CSP_WHEN_BLANK]
+                              if f in fo.asked_once()]

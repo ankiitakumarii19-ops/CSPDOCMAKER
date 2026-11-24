@@ -28,25 +28,51 @@ TOKEN = "KO/Sub-KO"
 LABELS = {KO: "KO", SUB_KO: "Sub-KO"}
 
 
+def _lengths(text: str) -> tuple:
+    return tuple(int(p) for p in str(text or "").split(",")
+                 if p.strip().isdigit())
+
+
 def level_of(code: Optional[str]) -> Optional[str]:
-    """KO, SUB_KO, or None when the code is neither length."""
-    length = len((code or "").strip())
-    if length == KO_LENGTH:
+    """KO, SUB_KO, or None when the code is neither length.
+
+    No. 211: each workspace sets its own rule (Settings → Records and
+    words): two types by code length — Eko's 8 / 9-10, the defaults — or
+    one type for every record."""
+    from app.config import get_settings
+    s = get_settings()
+    code = (code or "").strip()
+    if s.record_type_rule == "one_type":
+        return KO if code else None
+    length = len(code)
+    if length in _lengths(s.record_main_lengths):
         return KO
-    if length in SUB_KO_LENGTHS:
+    if length in _lengths(s.record_second_lengths):
         return SUB_KO
     return None
 
 
 def label_for(code: Optional[str]) -> str:
-    """'KO' or 'Sub-KO' for the certificate, or '' when unknown."""
-    return LABELS.get(level_of(code), "")
+    """'KO' or 'Sub-KO' for the certificate (the workspace's own words,
+    No. 211), or '' when unknown."""
+    from app.config import get_settings
+    s = get_settings()
+    level = level_of(code)
+    if level == KO:
+        return s.word_main_type
+    if level == SUB_KO:
+        return s.word_second_type
+    return ""
 
 
 def parent_ko_code(code: Optional[str]) -> Optional[str]:
     """The KO a Sub-KO belongs to: its first 8 characters."""
     code = (code or "").strip()
-    return code[:KO_LENGTH] if level_of(code) == SUB_KO else None
+    if level_of(code) != SUB_KO:
+        return None
+    from app.config import get_settings
+    main = _lengths(get_settings().record_main_lengths)
+    return code[:min(main)] if main else None
 
 
 def allowed_documents(code: Optional[str], document_types: Iterable) -> List:
@@ -58,5 +84,11 @@ def allowed_documents(code: Optional[str], document_types: Iterable) -> List:
 
     wanted = list(document_types)
     if level_of(code) == SUB_KO:
-        return [d for d in wanted if d != DocumentType.BCP]
+        # No. 212: the workspace's own list (Eko: BCP).
+        from app.config import get_settings
+        never = {c.strip().upper() for c in str(
+            get_settings().documents_not_for_second_type or "").split(",")
+            if c.strip()}
+        return [d for d in wanted
+                if str(getattr(d, "value", d)).upper() not in never]
     return wanted

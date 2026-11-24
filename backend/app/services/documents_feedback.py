@@ -141,7 +141,8 @@ def run(session, now: Optional[datetime] = None, wa=None) -> Dict[str, int]:
             row = CspFeedback(csp_id=record.csp_id, phone=message.phone,
                               documents_message_id=message.id)
             session.add(row)
-        outcome = wa.send(message.phone, WORDING,
+        from app.config import get_settings as _gs   # No. 213: own wording
+        outcome = wa.send(message.phone, _gs().feedback_wording or WORDING,
                           {"name": record.name or "CSP"},
                           source_name=message_log.source_name(KIND, record.csp_id))
         with send_reason.because(send_reason.RETRY if row.tries

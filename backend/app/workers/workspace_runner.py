@@ -51,6 +51,88 @@ def active_workspaces():
         engine.dispose()
 
 
+# No. 214 (Stage 7): each job's own switch and pace per workspace
+# (Settings → Background jobs: job_<key>_on, job_<key>_every).
+JOB_KEYS = {
+    "sync_csp_data": "sheet_read",
+    "sync_authorization": "signin_read",
+    "sync_source_sheets": "records_sheets",
+    "import_sheet_photos": "sheet_photos",
+    "refresh_whatsapp_messages": "delivery_status",
+    "answer_csp_replies": "replies",
+    "verify_old_csps": "verify",
+    "contact_loop": "contact_loop",
+    "resend_failed": "resend",
+    "fix_info": "info_fix",
+    "process_new_csps": "new_records",
+}
+
+
+def _redis():
+    import redis
+    from app.config import get_settings
+    s = get_settings().server
+    return redis.Redis(host=s.redis_host, port=s.redis_port, db=0,
+                       socket_timeout=2)
+
+
+def job_skip_reason(fn_name: str, workspace_id) -> str:
+    """Why this job does not run now for this workspace ('' = run it).
+    Called inside the workspace, so its own settings answer."""
+    import time
+    from app.config import get_settings
+    key = JOB_KEYS.get(fn_name)
+    if key is None:
+        return ""
+    s = get_settings()
+    if not getattr(s, f"job_{key}_on"):
+        return "switched off for this workspace (Settings → Background jobs)"
+    every = int(getattr(s, f"job_{key}_every") or 0)
+    if every <= 0:
+        return ""
+    try:
+        last = _redis().get(f"cspdm:job:{workspace_id}:{key}")
+    except Exception as e:
+        logger.error("workspace_runner: cannot read when %s last ran (%s: %s)"
+                     " — running it", key, type(e).__name__, e)
+        return ""
+    if last and time.time() - float(last) < every * 60:
+        return f"not due (every {every} minutes for this workspace)"
+    return ""
+
+
+def mark_ran(fn_name: str, workspace_id) -> None:
+    import time
+    key = JOB_KEYS.get(fn_name)
+    if key is None:
+        return
+    try:
+        _redis().set(f"cspdm:job:{workspace_id}:{key}", str(time.time()),
+                     ex=7 * 24 * 3600)
+    except Exception as e:
+        logger.error("workspace_runner: cannot note that %s ran (%s: %s)",
+                     key, type(e).__name__, e)
+
+
+def connected_workspaces() -> set:
+    """Workspaces that connected their own main CSP sheet (No. 210)."""
+    from sqlalchemy import create_engine, text
+
+    from app.config import get_settings
+    engine = create_engine(
+        get_settings().database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"),
+        pool_pre_ping=True,
+    )
+    try:
+        with engine.connect() as conn:
+            return {row[0] for row in conn.execute(text(
+                "SELECT workspace_id FROM workspace_settings WHERE key = "
+                "'google_sheets_csp_sheet_id' AND value #>> '{}' <> ''"))}
+    finally:
+        engine.dispose()
+
+
 def for_each_workspace(fn, *, configured_only=False):
     """Run this task once per active workspace, inside that workspace.
 
@@ -64,7 +146,12 @@ def for_each_workspace(fn, *, configured_only=False):
 
         workspaces = active_workspaces()
         if configured_only:
-            workspaces = [w for w in workspaces if w[1] == DEFAULT_SLUG]
+            # Eko (the server's own sheets) and, since No. 210, every
+            # workspace that connected its own main sheet — each reads only
+            # its own (connection_catalog: eko_only).
+            connected = connected_workspaces()
+            workspaces = [w for w in workspaces
+                          if w[1] == DEFAULT_SLUG or w[0] in connected]
         if not workspaces:
             logger.warning(
                 "%s: there are no active workspaces, so there is nothing to "
@@ -76,8 +163,14 @@ def for_each_workspace(fn, *, configured_only=False):
         for workspace_id, slug in workspaces:
             try:
                 with workspace(workspace_id):
+                    skip = job_skip_reason(fn.__name__, workspace_id)
+                    if skip:
+                        results.append({"workspace": slug,
+                                        "result": {"skipped": skip}})
+                        continue
                     results.append({"workspace": slug,
                                     "result": fn(*args, **kwargs)})
+                    mark_ran(fn.__name__, workspace_id)
             except Retry:
                 # Not a failure — Celery's way of saying "try again later".
                 # Swallowing it would silently turn off retrying, so a
@@ -112,10 +205,11 @@ def for_each_workspace(fn, *, configured_only=False):
 
 
 def for_configured_workspace(fn):
-    """Run this task only for the workspace that owns the configured sheets.
+    """Run this task for each workspace with sheets: Eko's (the ids in the
+    environment) and those that connected their own on Setup → Connections.
 
-    The Google Sheet ids in the environment are Eko SBI Kiosk CSP's. A task
-    that reads them must never run inside any other workspace: it would copy
-    Eko's CSPs and people into a stranger's workspace within a minute.
+    The environment's sheet ids answer only inside Eko's workspace; in any
+    other they are blank until it connects its own (No. 210), so a task can
+    never copy Eko's CSPs and people into a stranger's workspace.
     """
     return for_each_workspace(fn, configured_only=True)

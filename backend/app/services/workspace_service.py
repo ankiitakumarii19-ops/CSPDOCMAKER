@@ -57,7 +57,7 @@ async def name_taken(session, name: str) -> bool:
 
 
 async def create_workspace(session, name: str, owner_email: str,
-                           owner_name: str) -> Workspace:
+                           owner_name: str, starter: str = "blank") -> Workspace:
     """A new, empty workspace with its creator as its first Super Admin.
 
     It has no data sources, so no background job has anything to read for
@@ -78,9 +78,43 @@ async def create_workspace(session, name: str, owner_email: str,
             role=UserRole.SUPER_ADMIN, active=True, added_by_email=None,
         ))
         await session.flush()
-    logger.info("workspace_service: %s created workspace %r (%s)",
-                email, ws.name, ws.slug)
+    if starter == "eko":
+        await _starter_like_eko(session, ws)
+    logger.info("workspace_service: %s created workspace %r (%s), starter %s",
+                email, ws.name, ws.slug, starter)
     return ws
+
+
+async def _starter_like_eko(session, ws) -> None:
+    """No. 215 (ZU-08): start like Eko — Eko's message wordings (signed with
+    this workspace's name), the four document templates SWITCHED OFF for
+    review, and the dashboards. None of Eko's records, people, connections
+    or Knowledge Base answers are copied; settings start at the standard
+    (Eko's) values anyway, and connections start blank."""
+    from sqlalchemy import select
+    from app.models.document_template import DocumentTemplate
+    from app.services.document_template_service import (
+        sync_builtin_dashboards, sync_builtin_messages)
+    from app.workspace_context import workspace
+    eko = await eko_workspace(session)
+    if eko is not None:
+        with all_workspaces():
+            originals = list((await session.execute(select(
+                DocumentTemplate).where(
+                    DocumentTemplate.workspace_id == eko.id,
+                    DocumentTemplate.is_builtin.is_(True)))).scalars())
+        for t in originals:
+            session.add(DocumentTemplate(
+                workspace_id=ws.id, code=t.code, name=t.name,
+                filename=t.filename, file_data=t.file_data,
+                file_size=t.file_size, checksum=t.checksum,
+                placeholder_map=dict(t.placeholder_map or {}),
+                photo_marker=t.photo_marker, is_builtin=t.is_builtin,
+                active=False, version=1))
+    with workspace(ws.id):
+        await sync_builtin_messages(session, signature=f"Team {ws.name}")
+        await sync_builtin_dashboards(session)
+        await session.flush()
 
 
 async def memberships(session, email: str) -> List[tuple]:

@@ -58,6 +58,9 @@ class WorkspaceMember(Base):
     added_by_email: Mapped[str | None] = mapped_column(
         String(255), nullable=True, index=True,
     )
+    # No. 206: the workspace's own role this member has (access_roles.key);
+    # NULL = the built-in RM / Admin role their `role` says, as before.
+    access_role: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

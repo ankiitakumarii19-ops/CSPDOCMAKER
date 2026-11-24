@@ -17,6 +17,9 @@ class SignupRequest(BaseModel):
     requested_role: UserRole = Field(..., description="Role requested — backend verifies against Google Sheet")
     # Only for a Super Admin creating their own workspace.
     workspace_name: Optional[str] = Field(None, max_length=100)
+    # No. 215 (ZU-08): "eko" = start with Eko's message wordings, document
+    # templates (switched off, to review) and dashboards; "blank" = empty.
+    starter: Optional[str] = Field("blank", pattern="^(eko|blank)$")
 
 
 class SignupResponse(BaseModel):

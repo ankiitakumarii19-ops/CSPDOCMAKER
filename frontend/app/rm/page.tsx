@@ -17,6 +17,7 @@ import Sheets from "../admin/Sheets";
 import { api, DOCUMENT_TYPES } from "../lib/api";
 import type { ApiError, CSPDetail, DocumentTypeKey } from "../lib/api";
 import { useSessionUser } from "../lib/useSessionUser";
+import { useMyAccess } from "../lib/useMyAccess";
 import { useUrlParam } from "../lib/useUrlParam";
 import { useTheme } from "../lib/useTheme";
 
@@ -87,6 +88,8 @@ function blockedBy(data: MissingData, fieldName: string): string[] {
 export default function RMDashboard() {
   const router = useRouter();
   const user = useSessionUser();
+  // No. 206: Admin screens the Super Admin gave this RM (Feature access).
+  const access = useMyAccess(user?.role === "rm");
   // One's own profile picture (No. 171).
   const photo = useProfilePhoto(user?.email ?? "");
 
@@ -403,7 +406,7 @@ export default function RMDashboard() {
           </button>
           <BrandLogo height={36} />
           <span className="font-bold text-lg hidden xl:block text-gray-900 dark:text-white whitespace-nowrap">
-            CSPdocMaker
+            {access?.look?.name || "CSPdocMaker"}
             <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
               RM Portal
             </span>
@@ -438,6 +441,17 @@ export default function RMDashboard() {
         <div className="flex items-center gap-3 sm:gap-4 shrink-0">
           {/* When the sheets were last read (No. 146). */}
           <FreshnessBadges />
+          {access?.admin_area && (
+            <button
+              onClick={() => router.push("/admin")}
+              className="inline-flex items-center gap-1 text-sm font-semibold text-eko-dark dark:text-eko hover:underline"
+              title="The other screens your Super Admin gave you"
+              aria-label="More screens"
+            >
+              <i className="fas fa-table-columns"></i>
+              <span className="hidden sm:inline">More screens</span>
+            </button>
+          )}
           {/* Notifications Dropdown */}
           <div className="relative">
             <button

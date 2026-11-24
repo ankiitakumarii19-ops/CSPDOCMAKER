@@ -52,11 +52,7 @@ class EditError(ValueError):
 
 
 def field_of(column: str) -> Optional[str]:
-    from app.services.sheet_writeback_service import _norm
-
-    return csp_mapping.SHEET_COLUMN_TO_FIELD.get(_norm(column)) or next(
-        (f for c, f in csp_mapping.SHEET_COLUMN_TO_FIELD.items()
-         if _norm(c) == _norm(column)), None)
+    return csp_mapping.field_for_header(column)   # own columns (No. 211)
 
 
 def kind_of(column: str, field: Optional[str]) -> str:

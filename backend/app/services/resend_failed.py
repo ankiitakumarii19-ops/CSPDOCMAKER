@@ -38,9 +38,16 @@ from sqlalchemy import func, or_, select
 
 logger = logging.getLogger(__name__)
 
+# Eko's values; each workspace may set its own (No. 204):
+# RESEND_GIVE_UP_DAYS, RESEND_FIRST_WAIT_MINUTES, RESEND_LONGEST_WAIT_HOURS.
 WINDOW = timedelta(days=7)
 FIRST_WAIT = timedelta(minutes=30)
 LONGEST_WAIT = timedelta(hours=4)
+
+
+def window() -> timedelta:
+    from app.config import get_settings
+    return timedelta(days=get_settings().resend_give_up_days)
 
 # The number is not on WhatsApp (or not a number at all): the contact
 # loop's business, not something a second try fixes.
@@ -64,7 +71,11 @@ def not_on_whatsapp(reason: Optional[str]) -> bool:
 
 def wait(tries: int) -> timedelta:
     """How long after the last failed try the next one goes."""
-    return min(FIRST_WAIT * (2 ** max(tries - 1, 0)), LONGEST_WAIT)
+    from app.config import get_settings
+    s = get_settings()
+    first = timedelta(minutes=s.resend_first_wait_minutes)
+    longest = timedelta(hours=s.resend_longest_wait_hours)
+    return min(first * (2 ** max(tries - 1, 0)), longest)
 
 
 def _groups():
@@ -108,7 +119,7 @@ def due(session, settings, now: datetime):
                 WhatsAppMessage.kind.in_(list(groups)),
                 WhatsAppMessage.is_test.is_(False),
                 WhatsAppMessage.csp_id.isnot(None),
-                WhatsAppMessage.sent_at >= now - WINDOW)
+                WhatsAppMessage.sent_at >= now - window())
             .order_by(WhatsAppMessage.sent_at)).scalars():
         chains.setdefault((m.csp_id, groups[m.kind]), []).append(m)
     owned = fixing = None
@@ -181,7 +192,7 @@ def _due_replies(session, now: datetime):
                                              WhatsAppMessage)
     for reply in session.execute(select(CspReply).where(
             CspReply.status == "failed",
-            CspReply.updated_at >= now - WINDOW)
+            CspReply.updated_at >= now - window())
             .order_by(CspReply.updated_at)).scalars().all():
         if not_on_whatsapp(reply.note):
             continue
@@ -265,7 +276,7 @@ def summary(session, now: Optional[datetime] = None) -> dict:
     rows = dict(session.execute(
         select(WhatsAppMessage.send_status, func.count())
         .where(WhatsAppMessage.sent_because == send_reason.RETRY,
-               WhatsAppMessage.sent_at >= now - WINDOW)
+               WhatsAppMessage.sent_at >= now - window())
         .group_by(WhatsAppMessage.send_status)).all())
     return {"sent": rows.get(SEND_SENT, 0),
             "failed": sum(v for k, v in rows.items() if k != SEND_SENT)}
