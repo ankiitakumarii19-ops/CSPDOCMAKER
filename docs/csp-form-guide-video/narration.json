@@ -1,0 +1,163 @@
+[
+ {
+  "scene": 0,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Namaste! Dekhiye, apni details ka form kaise bharna hai. Bas kuch aasaan steps hain."
+   }
+  ]
+ },
+ {
+  "scene": 1,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step one. WhatsApp par Eko ka message kholiye, aur neele link par tap kijiye."
+   }
+  ]
+ },
+ {
+  "scene": 2,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step two. Link khulne mein thoda time lag sakta hai. Das se bees second rukiye. Page band mat kijiye."
+   }
+  ]
+ },
+ {
+  "scene": 3,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step three. Link nahi khul raha? To message ko kisi bhi number par ek baar forward kijiye. Pehle, message ko daba kar rakhiye."
+   },
+   {
+    "t": 4,
+    "text": "Phir upar, forward wale nishaan par tap kijiye."
+   },
+   {
+    "t": 7.5,
+    "text": "Ab koi bhi number chuniye, jaise apna doosra number, ya ghar ka koi. Aur send kijiye."
+   },
+   {
+    "t": 11,
+    "text": "Ab us chat mein, forward kiye hue message ke link par tap kijiye. Link khul jayega."
+   }
+  ]
+ },
+ {
+  "scene": 4,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step four. Form khul gaya! Pehle yeh peela box padhiye. Form sirf ek baar submit hota hai."
+   },
+   {
+    "t": 4.5,
+    "text": "Aapki saari details pehle se bhari hain. Har detail dhyan se padhiye. Sahi hai, to kuch mat badliye."
+   }
+  ]
+ },
+ {
+  "scene": 5,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step five. Agar koi detail galat hai, to us box par tap kijiye. Yahan email ki spelling galat hai."
+   },
+   {
+    "t": 2.5,
+    "text": "Keyboard ke backspace button se galat text mitaiye."
+   },
+   {
+    "t": 6,
+    "text": "Ab sahi detail type kijiye."
+   },
+   {
+    "t": 9.6,
+    "text": "Ho gaya. Email ab sahi hai."
+   },
+   {
+    "t": 11,
+    "text": "Gender galat hai? To sahi wale circle par tap kijiye. Address aur branch bhi aise hi sahi kijiye."
+   }
+  ]
+ },
+ {
+  "scene": 6,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step six. Apni photo bhejiye. Photograph mein, Choose or take a photo button par tap kijiye."
+   },
+   {
+    "t": 2.6,
+    "text": "Camera chuniye, ya gallery se apni achhi photo chuniye."
+   },
+   {
+    "t": 5,
+    "text": "Seedha camera ki taraf dekhiye. Roshni achhi ho, peeche saadi deewar ho. Chashma ya topi nahi. Phir photo kheenchiye."
+   },
+   {
+    "t": 11,
+    "text": "Photo bheji ja rahi hai. Thoda rukiye."
+   },
+   {
+    "t": 12.6,
+    "text": "Hara message aa gaya, matlab photo pahunch gayi."
+   }
+  ]
+ },
+ {
+  "scene": 7,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Step seven. Agar documents wale sawaal dikhein, to haan ya nahi chuniye."
+   },
+   {
+    "t": 4.6,
+    "text": "Sab check ho gaya? Ab neeche submit button dabaiye."
+   },
+   {
+    "t": 7.4,
+    "text": "Ho gaya! Aapki details Eko tak pahunch gayi."
+   }
+  ]
+ },
+ {
+  "scene": 8,
+  "cues": [
+   {
+    "t": 0,
+    "text": "Yaad rakhiye. Link khulne mein time lage, to thoda rukiye."
+   },
+   {
+    "t": 0.9,
+    "text": "Na khule, to message kisi number par forward karke kholiye."
+   },
+   {
+    "t": 1.5,
+    "text": "Har detail check kijiye. Galat ho, to sahi kijiye."
+   },
+   {
+    "t": 2.1,
+    "text": "Apni saaf photo bhejiye."
+   },
+   {
+    "t": 2.7,
+    "text": "Form sirf ek baar submit hota hai, aur link teen din tak chalta hai."
+   },
+   {
+    "t": 4.0,
+    "text": "Koi dikkat ho, to apne R M se baat kijiye."
+   },
+   {
+    "t": 5.2,
+    "text": "Dhanyavaad!"
+   }
+  ]
+ }
+]

@@ -28,6 +28,7 @@ ALTERNATE_NUMBER = "alternate_number"
 CORRECTED = "contact_corrected"
 RETRY = "sent_again_after_error"
 MANUAL = "sent_by_a_person"
+GUIDE_VIDEO = "guide_video"
 
 LABELS = {
     REPLY: "Reply to the CSP's message",
@@ -39,6 +40,7 @@ LABELS = {
     CORRECTED: "Sent again after their number / email was corrected",
     RETRY: "Sent again after an error (No. 164)",
     MANUAL: "Sent by a person (Messaging / Action Required, No. 174)",
+    GUIDE_VIDEO: "How-to-fill-the-form video (No. 209)",
 }
 USUAL = "Usual flow"
 

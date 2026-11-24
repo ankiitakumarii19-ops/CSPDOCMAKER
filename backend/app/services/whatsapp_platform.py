@@ -27,6 +27,7 @@ what happened.
 
 import json
 import logging
+import os
 import re
 from typing import Dict, List, Optional, Tuple
 
@@ -122,6 +123,23 @@ def call_tool(name: str, arguments: dict) -> dict:
         return {"text": text}
 
 
+def upload_media(path: str) -> str:
+    """Give the platform a local file (PDF, image, MP4 video up to 16 MB) to
+    send as a message's media header. Returns its `ref` ("wamedia://...") —
+    used as header_media_url; no public link needed (No. 212). Raises
+    WhatsAppPlatformError when the platform refuses."""
+    import base64
+
+    with open(path, "rb") as fh:
+        data = base64.b64encode(fh.read()).decode("ascii")
+    answer = call_tool("upload_media", {"file_base64": data,
+                                        "filename": os.path.basename(path)})
+    ref = answer.get("ref")
+    if not ref:
+        raise WhatsAppPlatformError(f"upload_media gave no ref: {str(answer)[:300]}")
+    return ref
+
+
 def _text_of(result: dict) -> str:
     return "".join(c.get("text", "") for c in result.get("content", [])
                    if isinstance(c, dict))
@@ -183,9 +201,33 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
         logger.info("whatsapp_platform.send: not sent — this is a test copy "
                     "(TEST_COPY=true)")
         return _result(FAILED, "TEST_COPY: nothing is sent from the test copy")
+    # No. 215: paused / not live yet / test mode (only the test number).
+    from app.services import send_guard
+    real = to_mobile
+    to_mobile, refused = send_guard.whatsapp_to(to_mobile)
+    if refused:
+        return _result(FAILED, f"waiting: {refused}")
     phone = phone_for_whatsapp(to_mobile)
     if not phone:
         return _result(FAILED, f"not a usable mobile number: {to_mobile!r}")
+    if to_mobile != real:
+        logger.info("whatsapp_platform.send: test mode — sent to the test "
+                    "number instead of %s", real)
+
+    # No. 213: the most of the app's own messages one number gets a day.
+    from app.services import send_reason
+    if not (force or send_reason.current_person()):
+        cap = int(getattr(_settings(), "send_max_per_person_day", 0) or 0)
+        if cap and sent_today(phone) >= cap:
+            return _result(FAILED, f"waiting: {cap} message(s) already went "
+                                   "to this number today (Settings → "
+                                   "Sending hours)")
+    # No. 216: the workspace's ceiling for a day, whoever sends.
+    ceiling = int(getattr(_settings(), "max_whatsapp_per_day", 0) or 0)
+    if ceiling and sent_today(None) >= ceiling:
+        return _result(FAILED, f"waiting: this workspace's ceiling of "
+                               f"{ceiling} WhatsApps today is reached "
+                               "(Settings → Going live)")
 
     template, mapping, columns = to_template(body)
     contact = {"phone": phone}
@@ -251,6 +293,41 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
 # is sent by its name instead. Remove once the platform reads every page.
 
 _ALREADY_EXISTS = re.compile(r"already .{0,40}content for this template", re.I)
+
+
+def sent_today(phone: Optional[str]) -> int:
+    """The app's own WhatsApps sent to this number since midnight (on the
+    workspace's clock); phone None = every WhatsApp the workspace sent
+    today, by anyone (No. 216). 0 if it cannot be counted (logged)."""
+    from datetime import datetime, timezone
+    from sqlalchemy import create_engine, text
+    from app.workers.verify_old_csps_worker import send_zone
+    from app.workspace_context import current_workspace_id
+    zone = send_zone()
+    midnight = datetime.now(timezone.utc).astimezone(zone).replace(
+        hour=0, minute=0, second=0, microsecond=0)
+    engine = create_engine(_settings().database_url.replace(
+        "postgresql+asyncpg://", "postgresql+psycopg2://"))
+    try:
+        with engine.connect() as conn:
+            if phone is None:
+                return int(conn.execute(text(
+                    "SELECT count(*) FROM whatsapp_messages WHERE sent_at >= "
+                    ":t AND send_status = 'sent' AND workspace_id = :w"), {
+                        "t": midnight,
+                        "w": str(current_workspace_id())}).scalar() or 0)
+            return int(conn.execute(text(
+                "SELECT count(*) FROM whatsapp_messages WHERE right(phone, 10)"
+                " = right(:p, 10) AND sent_at >= :t AND sent_by IS NULL AND "
+                "send_status = 'sent' AND workspace_id = :w"), {
+                    "p": phone, "t": midnight,
+                    "w": str(current_workspace_id())}).scalar() or 0)
+    except Exception as e:
+        logger.error("whatsapp_platform.sent_today: could not count (%s: %s)"
+                     " — not limiting", type(e).__name__, e)
+        return 0
+    finally:
+        engine.dispose()
 
 
 def _template_lookup_missed(error: Exception) -> bool:

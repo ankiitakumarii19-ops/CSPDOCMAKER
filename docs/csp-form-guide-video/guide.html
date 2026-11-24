@@ -1,0 +1,323 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:540px;height:960px;overflow:hidden;background:#0f2a1d;font-family:"Segoe UI","Nirmala UI",Arial,sans-serif}
+#stage{position:absolute;inset:0;overflow:hidden;background:linear-gradient(170deg,#0d3b26 0%,#0a2418 100%)}
+#cap{position:absolute;left:0;right:0;top:0;height:262px;padding:22px 26px 0;color:#fff}
+.pill{display:inline-block;background:#00B259;color:#fff;font-weight:800;font-size:15px;letter-spacing:1px;padding:5px 14px;border-radius:20px}
+.ttl{font-size:29px;line-height:1.18;font-weight:800;margin-top:12px}
+.sub{font-size:19px;line-height:1.35;margin-top:10px;color:#d9f5e6;font-weight:600}
+.sub b{color:#ffd54a}
+#phone{position:absolute;left:28px;top:270px;width:484px;height:672px;border-radius:34px;background:#111;padding:9px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
+#scr{position:relative;width:100%;height:100%;border-radius:26px;overflow:hidden;background:#fff}
+.sbar{height:24px;background:#054d3f;color:#fff;font-size:11px;display:flex;justify-content:space-between;align-items:center;padding:0 16px;font-weight:600}
+.sample{position:absolute;right:10px;top:28px;font-size:10px;color:#999;background:rgba(255,255,255,.85);padding:1px 6px;border-radius:6px;z-index:50}
+/* whatsapp */
+.wahead{height:54px;background:#075E54;color:#fff;display:flex;align-items:center;gap:10px;padding:0 12px;font-size:16px}
+.av{width:36px;height:36px;border-radius:50%;background:#00B259;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:17px}
+.wabg{position:absolute;top:78px;left:0;right:0;bottom:0;background:#ECE5DD;padding:14px 12px}
+.bub{background:#fff;border-radius:0 10px 10px 10px;padding:9px 11px 18px;font-size:14.5px;line-height:1.42;color:#111;max-width:88%;position:relative;box-shadow:0 1px 1px rgba(0,0,0,.13)}
+.bub.out{background:#dcf8c6;border-radius:10px 0 10px 10px;margin-left:auto}
+.bub .tm{position:absolute;right:8px;bottom:3px;font-size:10px;color:#888}
+.lnk{color:#0a66c2;text-decoration:underline;word-break:break-all}
+.selbar{height:54px;background:#075E54;color:#fff;display:flex;align-items:center;gap:22px;padding:0 16px;font-size:20px}
+.daybadge{margin:0 auto 12px;width:max-content;background:#d4eaf4;color:#555;font-size:11px;padding:3px 10px;border-radius:8px}
+/* browser */
+.urlbar{height:50px;background:#f1f3f4;display:flex;align-items:center;padding:0 10px;border-bottom:1px solid #ddd}
+.url{flex:1;height:34px;background:#fff;border-radius:17px;display:flex;align-items:center;padding:0 14px;font-size:13px;color:#333;gap:6px}
+.prog{height:3px;background:#1a73e8}
+/* form */
+.fbg{position:absolute;top:24px;left:0;right:0;bottom:0;background:#f9fafb;overflow:hidden}
+.fwrap{position:absolute;left:0;right:0;top:0;padding:16px 12px}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:18px 16px}
+.h1{font-size:20px;font-weight:800;color:#111827}
+.hhi{font-size:14px;color:#4b5563;margin-top:2px}
+.who{font-size:13px;color:#6b7280;margin-top:8px}
+.amber{margin-top:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:10px 12px;font-size:12.5px;color:#78350f;line-height:1.45}
+.fld{margin-top:14px;position:relative}
+.lab{font-size:12.5px;font-weight:700;color:#1f2937}
+.lab span{font-weight:400;color:#6b7280}
+.inp{margin-top:5px;min-height:36px;border:1px solid #d1d5db;border-radius:8px;padding:8px 10px;font-size:14px;color:#111;background:#fff}
+.inp.foc{border-color:#00B259;box-shadow:0 0 0 3px rgba(0,178,89,.3)}
+.radios{display:flex;gap:18px;margin-top:7px;font-size:13.5px;color:#374151}
+.rd{display:inline-flex;align-items:center;gap:6px}
+.dot{width:17px;height:17px;border-radius:50%;border:2px solid #9ca3af;display:inline-flex;align-items:center;justify-content:center}
+.dot.on{border-color:#00B259}.dot.on::after{content:"";width:9px;height:9px;border-radius:50%;background:#00B259}
+.pbtn{display:inline-block;margin-top:7px;border:1.5px solid #00B259;color:#00B259;font-weight:700;font-size:13px;padding:8px 14px;border-radius:8px}
+.small{font-size:12px;color:#6b7280;margin-top:4px;line-height:1.4}
+.okmsg{font-size:12.5px;color:#15803d;margin-top:6px;line-height:1.4;font-weight:600}
+.dochead{margin-top:20px;font-size:11.5px;font-weight:800;letter-spacing:1px;color:#6b7280}
+.docbox{margin-top:10px;border:1px solid #e5e7eb;border-radius:10px;padding:12px}
+.submit{margin-top:20px;background:#00B259;color:#fff;text-align:center;font-weight:700;padding:13px;border-radius:10px;font-size:15px}
+.hl{position:absolute;border:3px solid #ffb300;border-radius:12px;box-shadow:0 0 0 4000px rgba(0,0,0,.28);pointer-events:none;z-index:20}
+.tag{position:absolute;z-index:30;font-size:13px;font-weight:800;padding:4px 10px;border-radius:8px;color:#fff;white-space:nowrap}
+/* keyboard */
+.kb{position:absolute;left:0;right:0;bottom:0;height:210px;background:#d1d5db;padding:8px 4px;z-index:25}
+.kr{display:flex;justify-content:center;gap:4px;margin-bottom:7px}
+.k{width:39px;height:40px;background:#fff;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;color:#111;box-shadow:0 1px 0 #9ca3af}
+.k.w{width:60px;background:#b8bec7}.k.sp{width:200px}.k.dn{background:#00B259;color:#fff}
+/* tap */
+.tap{position:absolute;z-index:60;border-radius:50%;pointer-events:none}
+/* sheet */
+.sheet{position:absolute;left:0;right:0;bottom:0;background:#fff;border-radius:18px 18px 0 0;z-index:26;padding:14px 18px 22px;box-shadow:0 -6px 24px rgba(0,0,0,.25)}
+.sitem{display:flex;align-items:center;gap:14px;padding:13px 4px;font-size:16px;color:#111;border-bottom:1px solid #eee}
+.sic{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:19px;color:#fff}
+/* full slides */
+.full{position:absolute;inset:0;padding:60px 36px;color:#fff}
+.li{display:flex;gap:14px;align-items:flex-start;font-size:21px;line-height:1.35;margin-top:20px;font-weight:600}
+.num{flex:none;width:38px;height:38px;border-radius:50%;background:#00B259;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px}
+</style></head>
+<body><div id="stage"></div>
+<script>
+const W=540,H=960;
+const cl=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
+const seg=(t,a,b)=>cl((t-a)/(b-a));
+const ease=x=>x<.5?2*x*x:1-Math.pow(-2*x+2,2)/2;
+const fadeIn=(t,a,d=.4)=>cl((t-a)/d);
+const NAME="Ramesh Kumar", CODE="1A123456";
+const LINK="https://indev.eko.in/csp-docmaker/csp/details/aB3xQ9…";
+
+function tapAt(t,start,x,y,hold=0){ // ripple
+  const d=t-start; if(d<0||d>0.9+hold) return "";
+  const p=d<hold?0.25:cl((d-hold)/0.9);
+  const r=18+p*30, op=d<hold?0.85:(1-p)*0.9;
+  return `<div class="tap" style="left:${x-r}px;top:${y-r}px;width:${2*r}px;height:${2*r}px;background:rgba(255,179,0,${op*0.45});border:3px solid rgba(255,140,0,${op})"></div>`+
+   `<div class="tap" style="left:${x-9}px;top:${y-9}px;width:18px;height:18px;background:rgba(255,120,0,${op})"></div>`;
+}
+function caption(step,title,sub,t){
+  const a=fadeIn(t,0,.45);
+  return `<div id="cap" style="opacity:${a};transform:translateY(${(1-a)*-12}px)">${step?`<span class="pill">${step}</span>`:""}<div class="ttl">${title}</div><div class="sub">${sub}</div></div>`;
+}
+function phone(inner){return `<div id="phone"><div id="scr">${inner}<div class="sample">Sample / udaharan</div></div></div>`;}
+const sbar=`<div class="sbar"><span>10:30</span><span>4G ▮▮▮ 85%</span></div>`;
+
+function waChat(t,opts={}){
+  const title=opts.title||"Eko India", subtitle=opts.subtitle||"Business account";
+  const sel=opts.sel;
+  const head= sel?`<div class="selbar"><span>←</span><span style="font-size:17px">1</span><span style="flex:1"></span><span>★</span><span>🗑</span><span id="fw" style="font-size:24px;${opts.fwHL?'color:#ffd54a':''}">➦</span></div>`
+   :`<div class="wahead"><span>←</span><div class="av">${title[0]}</div><div><div style="font-weight:700">${title}</div><div style="font-size:11px;opacity:.85">${subtitle}</div></div></div>`;
+  const msg=`Namaste ${NAME} ji 🙏<br>Eko ki taraf se: kripya apni details check karein aur apni photo bhejein.<br><span class="lnk" style="${opts.linkHL?'background:#fff3b0':''}">${LINK}</span><br>Yeh link 3 din tak chalega.`;
+  const bub= opts.out
+    ? `<div class="bub out" style="${sel?'':''}"><div style="font-size:11px;color:#667;font-style:italic;margin-bottom:3px">➦ Forwarded</div>${msg}<span class="tm">10:31 ✓✓</span></div>`
+    : `<div class="bub" style="${sel?'outline:600px solid rgba(37,211,102,.18);background:#e8fff1':''}">${msg}<span class="tm">10:29</span></div>`;
+  return sbar+head+`<div class="wabg"><div class="daybadge">TODAY</div>${bub}</div>`;
+}
+
+/* ---------- form ---------- */
+function formHTML(s){
+  // s: {email, emailFocus, gender, photoState, docYes, submitting}
+  const f=(lab,hi,val,extra="")=>`<div class="fld" ${extra}><div class="lab">${lab} <span>/ ${hi}</span></div><div class="inp">${val}</div></div>`;
+  const photoText = s.photoState==="sent"
+    ? `<div class="okmsg">Thank you. Your photo has been received. / धन्यवाद। आपकी फ़ोटो प्राप्त हो गई है।</div>`:"";
+  const pbtn = s.photoState==="sending"?"Sending… / भेजा जा रहा है…":"📷 Choose or take a photo / फ़ोटो चुनें या लें";
+  return `<div class="card">
+   <div class="h1">Confirm your details</div><div class="hhi">अपनी जानकारी की पुष्टि करें</div>
+   <div class="who">${NAME} · ${CODE}</div>
+   <div class="amber" id="amber">Please check everything carefully. You can submit this form <b>only once</b>.<br>कृपया सब कुछ ध्यान से जाँच लें। आप यह फ़ॉर्म <b>केवल एक ही बार</b> जमा कर सकते हैं।</div>
+   ${f("CSP Name","CSP का नाम",NAME)}
+   ${f("CSP Mobile Number","मोबाइल नंबर","9876543210")}
+   <div class="fld" id="emailF"><div class="lab">CSP Email Id <span>/ ईमेल आईडी</span></div><div class="inp ${s.emailFocus?'foc':''}">${s.email}${s.emailFocus?'<span style="border-left:2px solid #00B259;margin-left:1px"></span>':''}</div></div>
+   <div class="fld" id="genderF"><div class="lab">Gender <span>/ जेंडर</span></div><div class="radios"><span class="rd"><span class="dot ${s.gender==='M'?'on':''}"></span>Male / पुरुष</span><span class="rd"><span class="dot ${s.gender==='F'?'on':''}"></span>Female / महिला</span></div></div>
+   <div class="fld"><div class="lab">Address <span>/ पता</span></div><div class="inp" style="min-height:58px">Shop No. 4, Main Bazaar, Rampur, Near SBI Branch, 845401</div></div>
+   ${f("District","जिला","East Champaran")}
+   ${f("State","राज्य","Bihar")}
+   ${f("Branch Name","शाखा का नाम","Rampur")}
+   ${f("Branch Code","शाखा कोड","12345")}
+   <div class="fld" id="photoF"><div class="lab">Photograph <span>/ फोटो</span></div>
+     <div class="small">Please send a clear photo of your face, facing the camera. / कृपया अपने चेहरे की साफ़ फ़ोटो भेजें, कैमरे की ओर देखते हुए।</div>
+     <div class="pbtn" id="pbtn" style="${s.photoState==='sending'?'opacity:.55':''}">${pbtn}</div>${photoText}</div>
+   <div class="dochead">DOCUMENTS YOU ALREADY HAVE / आपके पास मौजूद दस्तावेज़</div>
+   <div class="docbox" id="docF"><div class="lab">Do you have a CSP ID Card?</div><div class="small" style="margin-top:1px">क्या आपके पास CSP आईडी कार्ड है?</div>
+     <div class="radios"><span class="rd"><span class="dot ${s.doc==='No'?'on':''}"></span>No / नहीं</span><span class="rd"><span class="dot ${s.doc==='Yes'?'on':''}"></span>Yes / हाँ</span></div></div>
+   <div class="submit" id="subBtn" style="${s.submitting?'opacity:.6':''}">${s.submitting?'Submitting…':'Submit / जमा करें'}</div>
+  </div>`;
+}
+// Approx y positions of elements inside the form content (measured at runtime)
+let POS=null;
+let POS2=null;
+function measureOne(state){
+  const st=document.getElementById('stage');
+  st.innerHTML=phone(sbar+`<div class="fbg"><div class="fwrap" id="fw">${formHTML(state)}</div></div>`);
+  const fw=document.getElementById('fw').getBoundingClientRect();
+  const g=id=>{const r=document.getElementById(id).getBoundingClientRect();return {y:r.top-fw.top,h:r.height,x:r.left-fw.left,w:r.width};};
+  return {amber:g('amber'),email:g('emailF'),gender:g('genderF'),photo:g('photoF'),pbtn:g('pbtn'),doc:g('docF'),sub:g('subBtn'),total:fw.height};
+}
+function measure(){
+  POS=measureOne({email:"x",gender:"M",doc:""});
+  POS2=measureOne({email:"x",gender:"M",doc:"",photoState:"sent"});
+}
+// screen inner coords: phone screen top-left = (37,279) on stage; form area starts 24px lower
+const SX=37, SY=279, FORM_TOP=24, VIEW_H=654-24;
+function formScreen(state,scroll,overlays=""){
+  return sbar+`<div class="fbg"><div class="fwrap" style="transform:translateY(${-scroll}px)">${formHTML(state)}</div>${overlays}</div>`;
+}
+function hlBox(p,scroll,pad=6,color="#ffb300"){ // in .fbg coords
+  return `<div class="hl" style="left:${p.x-pad+0}px;top:${p.y-scroll-pad}px;width:${p.w+2*pad}px;height:${p.h+2*pad}px;border-color:${color}"></div>`;
+}
+const toStage=(x,y)=>[SX+x, SY+FORM_TOP+y]; // fbg coords -> stage
+
+function keyboard(pressKey){
+  const rows=["qwertyuiop","asdfghjkl","zxcvbnm"];
+  let h=`<div class="kb">`;
+  rows.forEach((r,i)=>{h+=`<div class="kr">${i==2?`<div class="k w">⇧</div>`:""}${[...r].map(c=>`<div class="k" style="${pressKey===c?'background:#9ca3af':''}">${c}</div>`).join("")}${i==2?`<div class="k w" style="${pressKey==='⌫'?'background:#ffb300':''}">⌫</div>`:""}</div>`;});
+  h+=`<div class="kr"><div class="k w">123</div><div class="k">@</div><div class="k sp">space</div><div class="k">.</div><div class="k w dn">✓</div></div></div>`;
+  return h;
+}
+
+/* ---------- scenes ---------- */
+const scenes=[
+ {d:6, f:t=>{
+   const a=fadeIn(t,.2,.6);
+   const steps=["WhatsApp par aaya link kholein","Link na khule to forward karein","Apni details check karein","Galat ho to sahi karein","Apni photo bhejein","Submit karein"];
+   return `<div class="full"><div class="pill" style="opacity:${a}">EKO · SBI KIOSK CSP</div>
+    <div style="font-size:38px;font-weight:900;line-height:1.15;margin-top:18px;opacity:${a}">Apni details ka form kaise bharein?</div>
+    <div style="font-size:20px;color:#bfeed4;margin-top:12px;opacity:${a}">Aasaan steps — sirf 2–3 minute ka kaam</div>
+    <div style="margin-top:26px">${steps.map((s,i)=>{const o=fadeIn(t,1+i*.55,.4);return `<div class="li" style="opacity:${o};transform:translateX(${(1-o)*30}px)"><div class="num">${i+1}</div><div>${s}</div></div>`}).join("")}</div></div>`;
+ }},
+ {d:8, f:t=>{
+   const linkY=279+78+14+18+8+ 21*3+10; // approximate link line on stage
+   return caption("STEP 1","WhatsApp par Eko ka message kholein","Message mein jo <b>link</b> hai (neela likha hua), us par <b>tap</b> karein.",t)
+     + phone(waChat(t,{linkHL:t>3.6}))
+     + tapAt(t,3.6,200,linkY+18);
+ }},
+ {d:8, f:t=>{
+   const p=Math.min(.92, 1-Math.exp(-t/2.2));
+   const secs=Math.floor(t*2.2);
+   const ang=(t*360)%360;
+   return caption("STEP 2","Link khulne mein thoda time lag sakta hai","<b>10–20 second</b> rukiye. Page band mat kijiye, baar-baar tap mat kijiye.",t)
+    + phone(sbar+`<div class="urlbar"><div class="url">🔒 indev.eko.in/csp-docmaker/…</div></div><div class="prog" style="width:${p*100}%"></div>
+     <div style="position:absolute;top:240px;left:0;right:0;text-align:center">
+       <div style="width:54px;height:54px;margin:0 auto;border-radius:50%;border:5px solid #e5e7eb;border-top-color:#00B259;transform:rotate(${ang}deg)"></div>
+       <div style="margin-top:16px;color:#6b7280;font-size:16px">Loading…</div>
+       <div style="margin-top:30px;font-size:30px;font-weight:800;color:#0d3b26">⏳ 0:${String(secs).padStart(2,"0")}</div>
+       <div style="margin-top:6px;color:#6b7280;font-size:14px">Thoda intezaar karein…</div></div>`);
+ }},
+ {d:17, f:t=>{
+   let sub,inner,tap="";
+   const bubbleY=279+78+60;
+   if(t<4){ sub="<b>1.</b> Message ko <b>daba kar rakhein</b> (long press) jab tak woh select na ho jaye.";
+     inner=waChat(t,{sel:t>2.2}); tap=tapAt(t,0.8,260,bubbleY+40,1.4);
+   } else if(t<7.5){ sub="<b>2.</b> Upar <b>Forward (➦)</b> wale nishaan par tap karein.";
+     inner=waChat(t,{sel:true,fwHL:t>5.6}); tap=tapAt(t-4,1.6,37+462-28,279+24+27);
+   } else if(t<11){ sub="<b>3.</b> Kisi bhi number ko chunein (apna doosra number, ghar ka koi) aur <b>Send</b> karein.";
+     const chk=t>8.6;
+     inner=sbar+`<div class="wahead"><span>←</span><div style="font-weight:700">Forward to…</div></div>
+      <div style="padding:6px 0">${[["Apna doosra number","A"],["Papa","P"],["Suresh","S"],["Sunita Didi","S"]].map((c,i)=>`<div class="sitem" style="padding:12px 16px;${i==0&&chk?'background:#e8fff1':''}"><div class="av" style="background:${['#00B259','#5c6bc0','#ef6c00','#8e24aa'][i]}">${c[1]}</div><div style="flex:1">${c[0]}</div>${i==0?`<div class="dot ${chk?'on':''}"></div>`:'<div class="dot"></div>'}</div>`).join("")}</div>
+      ${chk?`<div style="position:absolute;right:18px;bottom:26px;width:56px;height:56px;border-radius:50%;background:#00B259;color:#fff;font-size:24px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 8px rgba(0,0,0,.3)">➤</div>`:""}`;
+     tap=tapAt(t-7.5,0.6,37+240,279+24+54+6+30)+tapAt(t-7.5,2.2,37+462-46,279+654-54);
+   } else { sub="<b>4.</b> Ab <b>us chat</b> mein forward kiye message ke link par tap karein — link khul jayega ✅";
+     inner=waChat(t,{out:true,title:"Apna doosra number",subtitle:"online",linkHL:t>13.2}); tap=tapAt(t-7.5,5.7,200,279+78+14+18+8+20+21*3+20);
+   }
+   return caption("STEP 3 · Link nahi khul raha?","Message ko kisi number par ek baar <b style='color:#ffd54a'>Forward</b> karein",sub,t<0.01?0:1) + phone(inner) + tap;
+ }},
+ {d:12, f:t=>{
+   const st={email:"ramesh.kumr@gmial.com",gender:"F",doc:""};
+   let scroll=0, ov="", title, sub;
+   if(t<4.5){ title="Form khul gaya! Pehle yeh peela box padhein"; sub="Form sirf <b>EK BAAR</b> submit hota hai — isliye sab kuch dhyan se check karein.";
+     ov=t>.6?hlBox(POS.amber,0):"";
+   } else { title="Har detail dhyan se padhein";
+     sub="Naam, mobile, email, gender, pata, district, state, branch — sab pehle se bhara hai. <b>Sahi hai to kuch mat badliye.</b>";
+     scroll=ease(seg(t,4.8,11.5))*(POS.photo.y-120);
+   }
+   return caption("STEP 4",title,sub,t<4.5?t:t-4.5)+phone(formScreen(st,scroll,ov));
+ }},
+ {d:18, f:t=>{
+   const wrong="ramesh.kumr@gmial.com", right="ramesh.kumar@gmail.com";
+   const scroll=POS.email.y-150;
+   let email=wrong, foc=false, kb="", ov="", tag="", tap="", sub, gender="F", key="";
+   const ep=POS.email;
+   if(t<2.5){ sub="<b>1.</b> Jo detail galat hai, us <b>box par tap</b> karein. (Yahan email ki spelling galat hai)";
+     ov=hlBox(ep,scroll,6,"#ef4444"); tag=`<div class="tag" style="background:#ef4444;left:${SX+ep.x+ep.w-118}px;top:${SY+FORM_TOP+ep.y-scroll-34}px">✗ Galat spelling</div>`;
+     tap=tapAt(t,1.5,...toStage(ep.x+120,ep.y-scroll+40));
+   } else if(t<6){ foc=true; const n=Math.max(0,Math.round(wrong.length*(1-seg(t,3,5.6)))); email=wrong.slice(0,n); key=(t>3&&t<5.6&&Math.floor(t*8)%2==0)?"⌫":"";
+     sub="<b>2.</b> Keyboard ke <b>⌫ (backspace)</b> se galat text mitayein."; kb=keyboard(key);
+   } else if(t<9.6){ foc=true; const n=Math.round(right.length*seg(t,6.2,9.2)); email=right.slice(0,n); key=right[n-1]||"";
+     sub="<b>3.</b> Ab <b>sahi detail type</b> karein."; kb=keyboard(t<9.2?key:"");
+   } else if(t<11){ email=right; sub="Ho gaya! Email ab sahi hai ✅";
+     ov=hlBox(ep,scroll,6,"#22c55e"); tag=`<div class="tag" style="background:#16a34a;left:${SX+ep.x+ep.w-70}px;top:${SY+FORM_TOP+ep.y-scroll-34}px">✓ Sahi</div>`;
+   } else { email=right; const gp=POS.gender;
+     sub="Gender galat chuna hai? Sahi wale <b>gol (circle)</b> par tap karein. Pata, branch, sab isi tarah sahi kar sakte hain.";
+     gender=t>13.2?"M":"F";
+     ov=hlBox(gp,scroll,6,t>13.2?"#22c55e":"#ef4444");
+     tag=`<div class="tag" style="background:${t>13.2?'#16a34a':'#ef4444'};left:${SX+gp.x+gp.w-100}px;top:${SY+FORM_TOP+gp.y-scroll-34}px">${t>13.2?'✓ Sahi':'✗ Galat'}</div>`;
+     tap=tapAt(t,12.6,...toStage(gp.x+8,gp.y-scroll+33));
+   }
+   return caption("STEP 5","Kuch galat hai? Aise sahi karein",sub,1)+phone(formScreen({email,emailFocus:foc,gender,doc:""},scroll,ov+kb))+tag+tap;
+ }},
+ {d:16, f:t=>{
+   const scroll=POS.photo.y-120; const pb=POS.pbtn;
+   let sub, inner, tap="", photoState="idle", ov="";
+   const base=s=>formScreen({email:"ramesh.kumar@gmail.com",gender:"M",doc:"",photoState:s},scroll,ov);
+   if(t<2.6){ sub="<b>1.</b> Photograph mein <b>“Choose or take a photo”</b> button par tap karein.";
+     ov=hlBox(pb,scroll,5); inner=base("idle"); tap=tapAt(t,1.6,...toStage(pb.x+pb.w/2,pb.y-scroll+pb.h/2));
+   } else if(t<5){ sub="<b>2.</b> <b>Camera</b> chunein — ya Gallery se apni achhi photo chunein.";
+     ov=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.4);z-index:24"></div><div class="sheet"><div style="font-weight:700;font-size:15px;margin-bottom:6px;color:#444">Choose an action</div>
+      <div class="sitem"><div class="sic" style="background:#00B259">📷</div>Camera</div><div class="sitem"><div class="sic" style="background:#5c6bc0">🖼</div>Photos / Gallery</div><div class="sitem" style="border:0"><div class="sic" style="background:#ef6c00">📁</div>Files</div></div>`;
+     inner=base("idle"); tap=tapAt(t,3.9,37+120,279+654-150);
+   } else if(t<11){ sub="Seedha <b>camera ki taraf</b> dekhein · <b>achhi roshni</b> · peeche <b>saadi deewar</b> · chashma / topi / mask <b>nahi</b>.";
+     const flash=t>9.8&&t<10.3?(1-seg(t,9.8,10.3)):0;
+     inner=`<div style="position:absolute;inset:0;background:#1b1b1b">
+       <div style="position:absolute;left:40px;right:40px;top:60px;bottom:150px;background:linear-gradient(#e9e4dc,#d8d2c8);border-radius:6px;overflow:hidden">
+         <svg viewBox="0 0 200 260" style="position:absolute;inset:0;width:100%;height:100%">
+           <ellipse cx="100" cy="250" rx="85" ry="60" fill="#2e5c8a"/><rect x="88" y="150" width="24" height="30" fill="#c99a76"/>
+           <ellipse cx="100" cy="112" rx="40" ry="50" fill="#d6a882"/><path d="M60 100 Q62 55 100 55 Q138 55 140 100 Q130 72 100 72 Q70 72 60 100Z" fill="#2b2118"/>
+           <circle cx="85" cy="112" r="4" fill="#222"/><circle cx="115" cy="112" r="4" fill="#222"/><path d="M88 138 Q100 146 112 138" stroke="#7a4a35" stroke-width="3" fill="none"/>
+           <ellipse cx="100" cy="115" rx="56" ry="72" fill="none" stroke="#fff" stroke-width="2.5" stroke-dasharray="7 6"/></svg></div>
+       <div style="position:absolute;left:0;right:0;top:22px;text-align:center;color:#fff;font-size:13px">Chehra gol ghere ke andar rakhein</div>
+       <div style="position:absolute;left:50%;bottom:44px;width:70px;height:70px;margin-left:-35px;border-radius:50%;border:5px solid #fff;background:${t>9.6&&t<10?'#ccc':'#fff'}"></div>
+       <div style="position:absolute;inset:0;background:#fff;opacity:${flash}"></div></div>`;
+     tap=tapAt(t,9.5,37+231,279+654-79);
+   } else { const sending=t<12.6; photoState=sending?"sending":"sent";
+     sub=sending?"Photo bheji ja rahi hai… thoda rukiye.":"<b>3.</b> Green message aa gaya = photo pahunch gayi ✅";
+     ov=!sending?hlBox({x:pb.x,y:pb.y,w:POS.photo.w,h:pb.h+48},scroll,5,"#22c55e"):"";
+     inner=base(photoState);
+   }
+   return caption("STEP 6","Apni photo bhejein",sub,1)+phone(inner)+tap;
+ }},
+ {d:12, f:t=>{
+   const from=POS.photo.y-120, to=POS2.sub.y+POS2.sub.h+30-VIEW_H;
+   const scroll=from+ease(seg(t,0,1.4))*(to-from);
+   let sub, ov="", tap="", inner, doc="", submitting=false;
+   const dp=POS2.doc, sp=POS2.sub;
+   if(t<4.6){ sub="Agar <b>“Documents you already have”</b> wale sawaal dikhein, to <b>Haan / Nahi</b> chunein.";
+     doc=t>3.2?"No":""; ov=t>1.4?hlBox(dp,scroll):""; tap=tapAt(t,2.8,...toStage(dp.x+20,dp.y-scroll+dp.h-22));
+   } else if(t<7.4){ doc="No"; submitting=t>6.4; sub="Sab check ho gaya? Ab neeche <b>“Submit / जमा करें”</b> dabayein.";
+     ov=hlBox(sp,scroll,5); tap=tapAt(t,6.0,...toStage(sp.x+sp.w/2,sp.y-scroll+sp.h/2));
+   }
+   if(t<7.4) inner=formScreen({email:"ramesh.kumar@gmail.com",gender:"M",doc,photoState:"sent",submitting},scroll,ov);
+   else { const a=fadeIn(t,7.4,.5); sub="<b>Ho gaya!</b> Aapki details Eko tak pahunch gayi ✅";
+     inner=sbar+`<div class="fbg"><div class="fwrap"><div class="card" style="text-align:center;padding:50px 18px;opacity:${a}">
+      <div style="width:72px;height:72px;margin:0 auto;border-radius:50%;background:#00B259;color:#fff;font-size:40px;display:flex;align-items:center;justify-content:center;transform:scale(${.6+.4*a})">✓</div>
+      <div style="margin-top:18px;font-size:18px;font-weight:700;color:#111">Thank you. Your details have been received.</div>
+      <div style="margin-top:8px;font-size:15px;color:#4b5563">धन्यवाद। आपकी जानकारी प्राप्त हो गई है।</div></div></div></div>`; }
+   return caption("STEP 7","Ab Submit karein",sub,1)+phone(inner)+tap;
+ }},
+ {d:10, f:t=>{
+   const items=["Link khulne mein time lage to <b>thoda rukiye</b>","Na khule to message <b>kisi number par forward</b> karke link kholiye","Har detail check kijiye — <b>galat ho to sahi kijiye</b>","Apni <b>saaf photo</b> bhejiye","Form <b>sirf ek baar</b> submit hota hai — link 3 din tak chalta hai"];
+   return `<div class="full"><div class="pill">YAAD RAKHEIN</div>
+    <div style="margin-top:6px">${items.map((s,i)=>{const o=fadeIn(t,.3+i*.6,.4);return `<div class="li" style="opacity:${o};font-size:20px"><div class="num">${i+1}</div><div>${s.replace(/<b>/g,'<b style="color:#ffd54a">')}</div></div>`}).join("")}</div>
+    <div style="margin-top:44px;opacity:${fadeIn(t,4,.5)};background:rgba(255,255,255,.08);border-radius:14px;padding:18px;font-size:19px;line-height:1.45">Koi dikkat aaye to <b style="color:#ffd54a">apne RM</b> se baat karein ya isi WhatsApp number par message karein.</div>
+    <div style="margin-top:40px;text-align:center;font-size:30px;font-weight:900;opacity:${fadeIn(t,5.2,.6)}">Dhanyavaad 🙏</div>
+    <div style="text-align:center;color:#9fe3bf;font-size:17px;margin-top:6px;opacity:${fadeIn(t,5.6,.6)}">— Team Eko</div></div>`;
+ }},
+];
+const TOTAL=scenes.reduce((a,s)=>a+s.d,0);
+// Time warp (set by render.js from timeline.json): each narration segment of a
+// scene is stretched so the screen waits for its spoken line to finish.
+let WARP=null;
+window.setWarp=w=>{WARP=w; window.TOTAL=w.reduce((a,s)=>a+s.segs.reduce((b,g)=>b+g.out,0),0); return window.TOTAL;};
+function render(T){
+  if(!POS) measure();
+  if(WARP){
+    let acc=0;
+    for(const sc of WARP){ for(const g of sc.segs){ if(T<acc+g.out){ const lt=g.c0+(T-acc)/g.out*(g.c1-g.c0);
+      document.getElementById('stage').innerHTML=scenes[sc.scene].f(lt); return; } acc+=g.out; } }
+    const last=scenes[scenes.length-1]; document.getElementById('stage').innerHTML=last.f(last.d-0.01); return;
+  }
+  let acc=0;
+  for(const s of scenes){ if(T<acc+s.d){ document.getElementById('stage').innerHTML=s.f(T-acc); return; } acc+=s.d; }
+  document.getElementById('stage').innerHTML=scenes[scenes.length-1].f(scenes[scenes.length-1].d-0.01);
+}
+window.render=render; window.TOTAL=TOTAL;
+</script></body></html>
