@@ -33,6 +33,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 INT, BOOL, TEXT, CHOICE, LIST = "int", "bool", "text", "choice", "list"
 
+# No. 228: the looks on Setup → Display (frontend/app/admin/Display.tsx and
+# globals.css hold what each one looks like).
+UI_THEMES = ("classic", "ocean", "royal", "sunset", "rose", "forest",
+             "graphite", "compact", "large")
+# No. 229: design styles — shapes, shadows and surfaces, on top of a look.
+UI_STYLES = ("standard", "clay", "neumorph", "glass", "maximal", "minimal",
+             "brutal", "flat", "material", "skeuo", "neon", "retro", "paper",
+             "bento", "aurora")
+
 # Record fields a list setting may name (field_ownership.ALL_FIELDS).
 RECORD_FIELDS = ("csp_code", "name", "mobile", "email", "gender", "address",
                  "district", "state", "branch_name", "branch_code",
@@ -525,6 +534,18 @@ SETTINGS += [
             "Shown at the top of every page (Eko: CSPdocMaker).",
             "Every page shows this name.", kind=TEXT, min=1, max=40,
             words=("app name", "brand name")),
+    Setting("ui_theme", "look", "Display",
+            "The look of the app for everyone in this workspace: colours, "
+            "menu, text size and spacing. Pick one on Setup → Display.",
+            "Every page changes to this look (each person's light / dark "
+            "choice stays theirs).", kind=CHOICE,
+            choices=UI_THEMES, words=("display", "ui type", "theme", "look")),
+    Setting("ui_style", "look", "Design style",
+            "Shapes, shadows and surfaces on top of the Display look — e.g. "
+            "claymorphism, glassmorphism, brutalism, minimalism. Pick one on "
+            "Setup → Display.", "Every page changes to this style.",
+            kind=CHOICE, choices=UI_STYLES,
+            words=("design style", "ui design", "style")),
     Setting("brand_color", "look", "Main colour",
             "A colour like #00B259 (Eko's green).",
             "Buttons and highlights use this colour.", kind=TEXT, min=7,

@@ -484,6 +484,12 @@ class Settings(BaseSettings):
     health_email_to: str = Field(default="", alias="HEALTH_EMAIL_TO")
     brand_name: str = Field(default="CSPdocMaker", alias="BRAND_NAME")
     brand_color: str = Field(default="#00B259", alias="BRAND_COLOR")
+    # No. 228: the look of the app for everyone in the workspace (Setup →
+    # Display). "classic" = the app as it has always looked.
+    ui_theme: str = Field(default="classic", alias="UI_THEME")
+    # No. 229: the design style (shapes, shadows, surfaces) on top of the
+    # look's colours. "standard" = the app as it has always looked.
+    ui_style: str = Field(default="standard", alias="UI_STYLE")
     # ---- No. 215 (Stage 8): going live, test mode, pause all ----
     # The server's value is Eko's (live); any other workspace starts not
     # live (workspace_settings.NOT_EKO_DEFAULTS).

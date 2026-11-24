@@ -52,3 +52,272 @@
 @media (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]), select, textarea { font-size: 16px; }
 }
+
+/* ---- Display (No. 228): the look each workspace's Super Admin picks ------
+   Setup → Display sets data-ui-theme on <html> (lib/useMyAccess.ts; also
+   before the first paint from localStorage, app/layout.tsx). Each look only
+   changes theme VARIABLES that every utility already reads — colours, the
+   side menu, the font, corner rounding, spacing and text size — so every
+   screen follows without being changed. In @layer base so it beats the
+   @theme defaults but never a utility. "classic" has no block: it is the
+   app as it has always looked. */
+@layer base {
+  :root[data-ui-theme="ocean"] {
+    --color-eko: #2563eb; --color-eko-dark: #1d4ed8; --color-eko-light: #e8f0fe;
+    --color-navy-800: #12305c; --color-navy-900: #0b1d3a;
+    --radius-lg: 0.625rem; --radius-xl: 1rem;
+  }
+  :root[data-ui-theme="royal"] {
+    --color-eko: #7c3aed; --color-eko-dark: #6d28d9; --color-eko-light: #f1eafe;
+    --color-navy-800: #2a1b4d; --color-navy-900: #170f2e;
+  }
+  :root[data-ui-theme="sunset"] {
+    --color-eko: #ea580c; --color-eko-dark: #c2410c; --color-eko-light: #fff1e8;
+    --color-navy-800: #3b2418; --color-navy-900: #22140d;
+    --radius-lg: 0.625rem; --radius-xl: 1rem;
+  }
+  :root[data-ui-theme="rose"] {
+    --color-eko: #e11d48; --color-eko-dark: #be123c; --color-eko-light: #fde8ee;
+    --color-navy-800: #3a1424; --color-navy-900: #220b15;
+  }
+  :root[data-ui-theme="forest"] {
+    --color-eko: #15803d; --color-eko-dark: #166534; --color-eko-light: #e7f5ec;
+    --color-navy-800: #1b3326; --color-navy-900: #0f1f17;
+    --font-sans: "Segoe UI", Roboto, system-ui, sans-serif;
+  }
+  :root[data-ui-theme="graphite"] {
+    --color-eko: #475569; --color-eko-dark: #334155; --color-eko-light: #eef1f5;
+    --color-navy-800: #27272a; --color-navy-900: #111113;
+    --radius-lg: 0.25rem; --radius-xl: 0.375rem;
+  }
+  :root[data-ui-theme="compact"] {
+    --spacing: 0.21rem;
+    --text-xs: 0.6875rem; --text-sm: 0.8125rem; --text-base: 0.9375rem;
+    --radius-lg: 0.375rem; --radius-xl: 0.5rem;
+  }
+  :root[data-ui-theme="large"] {
+    --color-eko: #008a45; --color-eko-dark: #006e37;
+    --spacing: 0.29rem;
+    --text-xs: 0.8125rem; --text-sm: 1rem; --text-base: 1.125rem; --text-lg: 1.25rem;
+    --radius-lg: 0.625rem; --radius-xl: 1rem;
+  }
+}
+
+/* ---- Design styles (No. 229): shapes, shadows and surfaces --------------
+   Setup → Display → Design style sets data-ui-style on <html>. A style
+   restyles what every screen is made of — cards (.rounded-xl), buttons and
+   boxes (.rounded-lg), the page and the side menu — so no screen had to be
+   changed. It sits on top of the Display look's colours (--color-eko …).
+   In the utilities layer with higher specificity (:root + attribute +
+   class), so it wins over the plain utility it replaces and nothing else.
+   "standard" has no rules: the app as it has always looked. */
+@layer utilities {
+  /* -- Claymorphism: soft, puffy, rounded clay ---------------------------- */
+  :root[data-ui-style="clay"]:not(.dark) body {
+    background: color-mix(in srgb, var(--color-eko) 7%, #f4f1fa);
+  }
+  :root[data-ui-style="clay"] .rounded-xl {
+    border-radius: 1.75rem; border-color: transparent;
+    box-shadow: 12px 12px 26px rgb(0 0 0 / 0.09),
+      inset -6px -6px 14px rgb(0 0 0 / 0.05), inset 6px 6px 14px rgb(255 255 255 / 0.85);
+  }
+  :root.dark[data-ui-style="clay"] .rounded-xl {
+    box-shadow: 12px 12px 26px rgb(0 0 0 / 0.45),
+      inset -6px -6px 14px rgb(0 0 0 / 0.3), inset 6px 6px 14px rgb(255 255 255 / 0.06);
+  }
+  :root[data-ui-style="clay"] button.rounded-lg {
+    border-radius: 1.1rem;
+    box-shadow: 5px 5px 12px rgb(0 0 0 / 0.14), inset 2px 2px 5px rgb(255 255 255 / 0.45),
+      inset -2px -2px 5px rgb(0 0 0 / 0.1);
+  }
+  :root[data-ui-style="clay"] :is(input, select, textarea).rounded-lg {
+    border-radius: 0.9rem; border-color: transparent;
+    box-shadow: inset 3px 3px 7px rgb(0 0 0 / 0.08), inset -3px -3px 7px rgb(255 255 255 / 0.7);
+  }
+
+  /* -- Neumorphism: one soft surface, light and shadow ------------------- */
+  :root[data-ui-style="neumorph"]:not(.dark) body,
+  :root[data-ui-style="neumorph"]:not(.dark) .rounded-xl { background-color: #e7eaf0; }
+  :root.dark[data-ui-style="neumorph"] body,
+  :root.dark[data-ui-style="neumorph"] .rounded-xl { background-color: #252a33; }
+  :root[data-ui-style="neumorph"] .rounded-xl {
+    border-color: transparent; border-radius: 1.25rem;
+    box-shadow: 9px 9px 18px #c5c9d3, -9px -9px 18px #ffffff;
+  }
+  :root.dark[data-ui-style="neumorph"] .rounded-xl {
+    box-shadow: 9px 9px 18px #1a1e25, -9px -9px 18px #303641;
+  }
+  :root[data-ui-style="neumorph"] button.rounded-lg {
+    box-shadow: 4px 4px 9px rgb(0 0 0 / 0.18), -4px -4px 9px rgb(255 255 255 / 0.7);
+  }
+  :root[data-ui-style="neumorph"] :is(input, select, textarea).rounded-lg {
+    background-color: transparent; border-color: transparent;
+    box-shadow: inset 4px 4px 8px rgb(0 0 0 / 0.12), inset -4px -4px 8px rgb(255 255 255 / 0.6);
+  }
+
+  /* -- Glassmorphism: frosted glass over a soft gradient ----------------- */
+  :root[data-ui-style="glass"]:not(.dark) body {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-eko) 30%, #ffffff),
+      #f8fafc 45%, #e0e7ff) fixed;
+  }
+  :root.dark[data-ui-style="glass"] body {
+    background: linear-gradient(135deg, color-mix(in srgb, var(--color-eko) 35%, #0f172a),
+      #0f172a 50%, #1e1b4b) fixed;
+  }
+  :root[data-ui-style="glass"] .rounded-xl {
+    background-color: rgb(255 255 255 / 0.55); border-color: rgb(255 255 255 / 0.7);
+    backdrop-filter: blur(14px); border-radius: 1.25rem;
+    box-shadow: 0 8px 32px rgb(31 38 135 / 0.12);
+  }
+  :root.dark[data-ui-style="glass"] .rounded-xl {
+    background-color: rgb(30 41 59 / 0.5); border-color: rgb(255 255 255 / 0.1);
+  }
+  :root[data-ui-style="glass"] aside { background-color: rgb(15 23 42 / 0.78); backdrop-filter: blur(12px); }
+
+  /* -- Maximalism: bold, layered, more is more ---------------------------- */
+  :root[data-ui-style="maximal"]:not(.dark) body {
+    background:
+      radial-gradient(circle at 10% 10%, color-mix(in srgb, var(--color-eko) 30%, transparent), transparent 40%),
+      radial-gradient(circle at 90% 20%, rgb(245 158 11 / 0.25), transparent 40%),
+      radial-gradient(circle at 50% 100%, rgb(236 72 153 / 0.2), transparent 45%), #fffdf7;
+  }
+  :root[data-ui-style="maximal"] .rounded-xl {
+    border: 3px solid var(--color-eko); border-radius: 1.4rem;
+    box-shadow: 8px 8px 0 color-mix(in srgb, var(--color-eko) 55%, #000);
+  }
+  :root[data-ui-style="maximal"] h2 {
+    background-image: linear-gradient(90deg, var(--color-eko), #f59e0b, #ec4899);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    font-weight: 900; letter-spacing: -0.02em;
+  }
+  :root[data-ui-style="maximal"] button.bg-eko {
+    background-image: linear-gradient(90deg, var(--color-eko), #f59e0b); font-weight: 800;
+    box-shadow: 4px 4px 0 #111827;
+  }
+
+  /* -- Minimalism: nothing extra ----------------------------------------- */
+  :root[data-ui-style="minimal"]:not(.dark) body { background: #ffffff; }
+  :root[data-ui-style="minimal"] .rounded-xl {
+    box-shadow: none; border-radius: 0.5rem; border-color: rgb(0 0 0 / 0.06);
+  }
+  :root.dark[data-ui-style="minimal"] .rounded-xl { border-color: rgb(255 255 255 / 0.08); }
+  :root[data-ui-style="minimal"] :is(.shadow-sm, .shadow, .shadow-md, .shadow-lg) { box-shadow: none; }
+  :root[data-ui-style="minimal"] :is(h2, h3) { font-weight: 500; }
+
+  /* -- Brutalism: raw, thick lines, hard shadows ------------------------- */
+  :root[data-ui-style="brutal"] { --font-sans: ui-monospace, "Cascadia Code", Consolas, monospace; }
+  :root[data-ui-style="brutal"]:not(.dark) body { background: #fff8e1; }
+  :root[data-ui-style="brutal"] .rounded-xl {
+    border: 3px solid #000; border-radius: 0; box-shadow: 6px 6px 0 #000;
+  }
+  :root[data-ui-style="brutal"] :is(button, input, select, textarea).rounded-lg {
+    border: 2px solid #000; border-radius: 0; box-shadow: 3px 3px 0 #000;
+  }
+  :root.dark[data-ui-style="brutal"] .rounded-xl { border-color: #fff; box-shadow: 6px 6px 0 #fff; }
+  :root.dark[data-ui-style="brutal"] :is(button, input, select, textarea).rounded-lg {
+    border-color: #fff; box-shadow: 3px 3px 0 #fff;
+  }
+
+  /* -- Flat: solid tinted surfaces, no shadows --------------------------- */
+  :root[data-ui-style="flat"]:not(.dark) .rounded-xl {
+    background-color: color-mix(in srgb, var(--color-eko) 6%, #ffffff);
+  }
+  :root[data-ui-style="flat"] .rounded-xl { border-color: transparent; box-shadow: none; border-radius: 0.375rem; }
+  :root[data-ui-style="flat"] :is(button, input, select, textarea).rounded-lg { border-radius: 0.25rem; box-shadow: none; }
+
+  /* -- Material: paper cards with elevation, pill buttons ---------------- */
+  :root[data-ui-style="material"] { --font-sans: Roboto, "Segoe UI", system-ui, sans-serif; }
+  :root[data-ui-style="material"] .rounded-xl {
+    border-color: transparent; border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12), 0 4px 14px rgb(0 0 0 / 0.08);
+  }
+  :root[data-ui-style="material"] button.rounded-lg {
+    border-radius: 9999px; letter-spacing: 0.03em; box-shadow: 0 2px 5px rgb(0 0 0 / 0.2);
+  }
+
+  /* -- Skeuomorphism: real-world gloss, bevels and texture ---------------- */
+  :root[data-ui-style="skeuo"]:not(.dark) body {
+    background: repeating-linear-gradient(45deg, #f1ede4 0 2px, #ece7dc 2px 4px);
+  }
+  :root[data-ui-style="skeuo"]:not(.dark) .rounded-xl {
+    background-image: linear-gradient(#ffffff, #f2f2f2); border-color: #cfcfcf;
+  }
+  :root[data-ui-style="skeuo"] .rounded-xl {
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), 0 3px 6px rgb(0 0 0 / 0.18);
+  }
+  :root[data-ui-style="skeuo"] button.bg-eko {
+    background-image: linear-gradient(to bottom, rgb(255 255 255 / 0.35), rgb(0 0 0 / 0.15));
+    border: 1px solid rgb(0 0 0 / 0.3); text-shadow: 0 -1px 0 rgb(0 0 0 / 0.35);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.45), 0 2px 3px rgb(0 0 0 / 0.3);
+  }
+  :root[data-ui-style="skeuo"] :is(input, select, textarea).rounded-lg {
+    box-shadow: inset 0 2px 3px rgb(0 0 0 / 0.15);
+  }
+
+  /* -- Neon: glowing lines in the dark (always dark) --------------------- */
+  :root.dark[data-ui-style="neon"] body { background: #05060d; }
+  :root.dark[data-ui-style="neon"] .rounded-xl {
+    background-color: #0b0d18; border: 1px solid var(--color-eko);
+    box-shadow: 0 0 14px color-mix(in srgb, var(--color-eko) 55%, transparent),
+      inset 0 0 10px color-mix(in srgb, var(--color-eko) 20%, transparent);
+  }
+  :root.dark[data-ui-style="neon"] button.bg-eko { box-shadow: 0 0 16px var(--color-eko); }
+  :root.dark[data-ui-style="neon"] h2 { text-shadow: 0 0 10px var(--color-eko); }
+  :root.dark[data-ui-style="neon"] aside { border-right: 1px solid var(--color-eko); }
+
+  /* -- Retro 80s: sunset gradient, offset colour shadows ----------------- */
+  :root[data-ui-style="retro"]:not(.dark) body {
+    background: linear-gradient(180deg, #ffe3f6 0%, #f3e8ff 50%, #dffcff 100%) fixed;
+  }
+  :root.dark[data-ui-style="retro"] body {
+    background: linear-gradient(180deg, #2b0a3d 0%, #1a0b3b 50%, #071a33 100%) fixed;
+  }
+  :root[data-ui-style="retro"] .rounded-xl {
+    border: 2px solid #ff4fbf; border-radius: 0.5rem; box-shadow: 6px 6px 0 #00d5ff;
+  }
+  :root[data-ui-style="retro"] button.bg-eko {
+    background-image: linear-gradient(90deg, #ff4fbf, #8b5cf6, #00d5ff); text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  :root[data-ui-style="retro"] h2 { text-transform: uppercase; letter-spacing: 0.08em; }
+
+  /* -- Paper / editorial: serif, ruled, newspaper calm ------------------- */
+  :root[data-ui-style="paper"] { --font-sans: Georgia, "Times New Roman", serif; }
+  :root[data-ui-style="paper"]:not(.dark) body { background: #f6f1e6; }
+  :root[data-ui-style="paper"]:not(.dark) .rounded-xl { background-color: #fffdf7; border-color: #d8cfbd; }
+  :root.dark[data-ui-style="paper"] body { background: #1c1a16; }
+  :root.dark[data-ui-style="paper"] .rounded-xl { background-color: #24211c; border-color: #3b352b; }
+  :root[data-ui-style="paper"] .rounded-xl { border-radius: 0.125rem; box-shadow: none; }
+  :root[data-ui-style="paper"] h2 { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; }
+
+  /* -- Bento: big rounded tiles, gentle fill ------------------------------ */
+  :root[data-ui-style="bento"]:not(.dark) body { background: #eef0f4; }
+  :root[data-ui-style="bento"]:not(.dark) .rounded-xl { background-color: #ffffff; }
+  :root[data-ui-style="bento"] .rounded-xl {
+    border-color: transparent; border-radius: 1.75rem; box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
+  }
+  :root[data-ui-style="bento"] button.rounded-lg { border-radius: 0.9rem; }
+
+  /* -- Aurora: soft northern-lights glow behind light cards -------------- */
+  :root[data-ui-style="aurora"]:not(.dark) body {
+    background:
+      radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--color-eko) 35%, transparent), transparent 55%),
+      radial-gradient(ellipse at 80% 10%, rgb(167 139 250 / 0.35), transparent 55%),
+      radial-gradient(ellipse at 50% 100%, rgb(34 211 238 / 0.25), transparent 55%), #f8fafc;
+    background-attachment: fixed;
+  }
+  :root.dark[data-ui-style="aurora"] body {
+    background:
+      radial-gradient(ellipse at 20% 0%, color-mix(in srgb, var(--color-eko) 30%, transparent), transparent 55%),
+      radial-gradient(ellipse at 80% 10%, rgb(139 92 246 / 0.3), transparent 55%), #0b1120;
+    background-attachment: fixed;
+  }
+  :root[data-ui-style="aurora"] .rounded-xl {
+    background-color: rgb(255 255 255 / 0.78); backdrop-filter: blur(8px);
+    border-color: rgb(255 255 255 / 0.6); border-radius: 1.25rem;
+    box-shadow: 0 10px 30px rgb(15 23 42 / 0.08);
+  }
+  :root.dark[data-ui-style="aurora"] .rounded-xl {
+    background-color: rgb(17 24 39 / 0.7); border-color: rgb(255 255 255 / 0.08);
+  }
+}

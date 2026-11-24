@@ -1243,7 +1243,7 @@ export interface MyAccess {
   features: string[];
   record_scope: "own" | "all";
   /** No. 214: the workspace's own app name and main colour. */
-  look: { name: string; color: string };
+  look: { name: string; color: string; theme?: string; style?: string };
   /** May open the Admin pages (always for Admins; for an RM given an Admin screen). */
   admin_area: boolean;
 }

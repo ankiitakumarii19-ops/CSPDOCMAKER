@@ -31,6 +31,13 @@ try {
   if (t === 'dark' || (!t && matchMedia('(prefers-color-scheme: dark)').matches)) {
     document.documentElement.classList.add('dark');
   }
+  var u = localStorage.getItem('uiTheme');
+  if (u && /^[a-z]+$/.test(u)) document.documentElement.setAttribute('data-ui-theme', u);
+  var st = localStorage.getItem('uiStyle');
+  if (st && /^[a-z]+$/.test(st) && st !== 'standard') {
+    document.documentElement.setAttribute('data-ui-style', st);
+    if (st === 'neon') document.documentElement.classList.add('dark');
+  }
 } catch (e) {}
 `;
 

@@ -22,6 +22,7 @@ import FeatureAccess from "./FeatureAccess";
 import Connections from "./Connections";
 import Columns from "./Columns";
 import SetupGuide from "./SetupGuide";
+import Display from "./Display";
 import { useMyAccess } from "../lib/useMyAccess";
 import EmailMessages from "./EmailMessages";
 import CspReplies from "./CspReplies";
@@ -156,7 +157,7 @@ export default function AdminDashboard() {
       ? can("dashboards")
       : askedRoute === "access"
       ? canManageMembers
-      : ["rules", "feature-access", "connections", "columns", "setup-guide"].includes(askedRoute)
+      : ["rules", "feature-access", "connections", "columns", "setup-guide", "display"].includes(askedRoute)
       ? isOwner
       : can(SECTION_FEATURE[askedRoute] ?? "");
     if (allowedHere) return askedRoute;
@@ -431,6 +432,19 @@ export default function AdminDashboard() {
                   }`}
                 >
                   <i className="fas fa-list-check w-5 text-center"></i> Setup guide
+                </button>
+              )}
+              {/* The look of the app for everyone (No. 228): the Owner's. */}
+              {isOwner && (
+                <button
+                  onClick={() => setAdminRoute("display")}
+                  className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                    adminRoute === "display"
+                      ? "bg-navy-800 text-white border-l-4 border-eko"
+                      : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                  }`}
+                >
+                  <i className="fas fa-palette w-5 text-center"></i> Display
                 </button>
               )}
               {/* The agents are the Super Admin's alone (No. 104). */}
@@ -729,6 +743,7 @@ export default function AdminDashboard() {
             {isOwner && adminRoute === "connections" && <Connections />}
             {isOwner && adminRoute === "columns" && <Columns />}
             {isOwner && adminRoute === "setup-guide" && <SetupGuide onOpen={setAdminRoute} />}
+            {isOwner && adminRoute === "display" && <Display />}
             {can("sheets") && adminRoute === "sheets" && <Sheets canManage={isOwner} />}
             {can("database") && adminRoute === "database" && <Database />}
 

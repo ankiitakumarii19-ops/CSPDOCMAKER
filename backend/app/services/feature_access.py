@@ -215,7 +215,8 @@ def mine(user: dict) -> dict:
     s = get_settings()
     return {"role": base, "own_role": key, "role_name": name,
             # No. 214: the workspace's own name and colour.
-            "look": {"name": s.brand_name, "color": s.brand_color},
+            "look": {"name": s.brand_name, "color": s.brand_color,
+                     "theme": s.ui_theme, "style": s.ui_style},
             "features": keys, "record_scope": record_scope(user),
             "admin_area": base in (ADMIN, SUPER)
             or any(k in ADMIN_AREA for k in keys)}
