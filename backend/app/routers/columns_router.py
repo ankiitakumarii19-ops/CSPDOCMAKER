@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.database import get_session
 from app.dependencies import require_role
 from app.services import data_shape
@@ -47,7 +48,7 @@ async def guess(user=Depends(owner)):
         with workspace(wid):
             return data_shape.main_headers()
     try:
-        headers = await asyncio.get_running_loop().run_in_executor(None, read)
+        headers = await off_loop.google(read)
     except ValueError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     except Exception as e:

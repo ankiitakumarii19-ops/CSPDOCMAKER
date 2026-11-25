@@ -28,6 +28,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.config import get_settings
 from app.database import get_session
 from app.dependencies import require_role
@@ -172,7 +173,7 @@ async def _check_row_owner(session: AsyncSession, user, source: DataSource,
     if not _is_csp_tab(spreadsheet, tab):
         return {}
     try:
-        before = await asyncio.to_thread(sheets.read_row, spreadsheet, tab,
+        before = await off_loop.google(sheets.read_row, spreadsheet, tab,
                                          row_number)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
@@ -304,7 +305,7 @@ async def list_sheets(
         if not spreadsheet_id or spreadsheet_id in described:
             continue
         try:
-            described[spreadsheet_id] = (sheets.describe(spreadsheet_id), None)
+            described[spreadsheet_id] = (await off_loop.google(sheets.describe, spreadsheet_id), None)
         except SheetAdminError as e:
             described[spreadsheet_id] = (None, str(e))
 
@@ -346,7 +347,7 @@ async def register_sheet(
     # opened is a typo in the id, and saying so here is far cheaper than
     # a failed sync at three in the morning.
     try:
-        tabs = sheets.list_tabs(body.spreadsheet_id)
+        tabs = await off_loop.google(sheets.list_tabs, body.spreadsheet_id)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
     if not any(t["title"] == body.tab for t in tabs):
@@ -424,7 +425,7 @@ async def read_rows(
     source = await _source(session, source_id)
     await _check_csp_tab(session, user, source, tab)
     try:
-        return sheets.read_tab(_spreadsheet(source), tab)
+        return await off_loop.google(sheets.read_tab, _spreadsheet(source), tab)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
@@ -443,7 +444,7 @@ async def update_row(
     await _check_csp_tab(session, user, source, tab)
     before = await _check_row_owner(session, user, source, tab, row_number)
     try:
-        written, unknown = sheets.update_row(
+        written, unknown = await off_loop.google(sheets.update_row,
             _spreadsheet(source), tab, row_number, body.cells)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
@@ -474,7 +475,7 @@ async def _note_corrections(session: AsyncSession, user, spreadsheet: str,
     try:
         values = csp_mapping.map_sheet_row(written)
         code = values.get(csp_mapping.IDENTITY_FIELD) or \
-            csp_mapping.map_sheet_row(sheets.read_row(
+            csp_mapping.map_sheet_row(await off_loop.google(sheets.read_row,
                 spreadsheet, tab, row_number)).get(csp_mapping.IDENTITY_FIELD)
         if not code:
             return
@@ -503,7 +504,7 @@ async def add_row(
     source = await _source(session, source_id)
     await _check_csp_tab(session, user, source, tab)
     try:
-        row_number, unknown = sheets.append_row(
+        row_number, unknown = await off_loop.google(sheets.append_row,
             _spreadsheet(source), tab, body.cells)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
@@ -531,7 +532,7 @@ async def remove_row(
     await _check_csp_tab(session, user, source, tab)
     await _check_row_owner(session, user, source, tab, row_number)
     try:
-        removed = sheets.delete_row(_spreadsheet(source), tab, row_number)
+        removed = await off_loop.google(sheets.delete_row, _spreadsheet(source), tab, row_number)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
 
@@ -552,7 +553,7 @@ async def add_tab(
     """Add a tab to the spreadsheet this source points at."""
     source = await _source(session, source_id)
     try:
-        created = sheets.create_tab(
+        created = await off_loop.google(sheets.create_tab,
             _spreadsheet(source), body.title, body.columns)
     except SheetAdminError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))

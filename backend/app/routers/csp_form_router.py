@@ -32,6 +32,7 @@ from fastapi import (
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.database import get_session
 from app.models.data_request import DataRequest
 from app.services import field_ownership as fo
@@ -307,7 +308,8 @@ async def submit_form(
         written, skipped = {}, []
         sheet_error = None
         try:
-            written, skipped = wb.write_values(record.csp_id, accepted)
+            written, skipped = await off_loop.google(
+                wb.write_values, record.csp_id, accepted)
         except wb.SheetWriteError as e:
             # The CSP has done their part. Their answers are saved; the
             # sheet is reconciled by an admin rather than the person being

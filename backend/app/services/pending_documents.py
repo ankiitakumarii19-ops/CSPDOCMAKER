@@ -191,7 +191,13 @@ def load(session) -> dict:
     from app.models.source_sheet import SourceSheetState
     from app.models.whatsapp_message import SEND_SENT, WhatsAppMessage
 
-    records = session.execute(select(CSPRecord)).scalars().all()
+    # Only the columns build_rows() reads (No. 251): loading every column of
+    # every CSP as a full record was half of this list's wait.
+    records = session.execute(select(
+        CSPRecord.csp_id, CSPRecord.csp_code, CSPRecord.name,
+        CSPRecord.mobile, CSPRecord.rm_name, CSPRecord.dc, CSPRecord.state,
+        CSPRecord.district, CSPRecord.origin, CSPRecord.send_hold,
+    )).all()
 
     mailed: Dict[str, Set[str]] = defaultdict(set)
     for csp_id, doc_type in session.execute(

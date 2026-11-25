@@ -30,6 +30,7 @@ from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.config import get_settings
 from app.database import get_session
 from app.dependencies import require_role
@@ -224,7 +225,7 @@ async def _grant_in_sheet(
     The workspace's domain rule was checked by grant_access (No. 120)."""
 
     tab = _tab(request.role)
-    service, rows, columns = _read(tab)
+    service, rows, columns = await off_loop.google(_read, tab)
     if "email" not in columns:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -236,7 +237,8 @@ async def _grant_in_sheet(
         if index < len(row) and _norm(row[index]) == wanted:
             # Already listed — reactivate rather than add a second row.
             if "status" in columns:
-                _write_cell(tab, number, columns["status"], ACTIVE)
+                await off_loop.google(_write_cell, tab, number,
+                                      columns["status"], ACTIVE)
                 logger.info("access_router.grant_access: %s reactivated in %s "
                             "by %s", request.email, tab, _who(user))
                 return {"email": request.email, "role": request.role,
@@ -258,12 +260,12 @@ async def _grant_in_sheet(
         new_row[columns["status"]] = ACTIVE
 
     try:
-        service.spreadsheets().values().append(
+        await off_loop.google(lambda: service.spreadsheets().values().append(
             spreadsheetId=settings.google_sheets_id,
             range=tab, valueInputOption="RAW",
             insertDataOption="INSERT_ROWS",
             body={"values": [new_row]},
-        ).execute()
+        ).execute())
     except Exception as e:
         gs.reset_sheets_service()
         if "PERMISSION_DENIED" in str(e) or "403" in str(e):
@@ -292,7 +294,7 @@ async def _revoke_in_sheet(
 ):
     """Take someone's access away by marking them inactive in the sheet."""
     tab = _tab(request.role)
-    _service, rows, columns = _read(tab)
+    _service, rows, columns = await off_loop.google(_read, tab)
     if "email" not in columns or "status" not in columns:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -303,7 +305,8 @@ async def _revoke_in_sheet(
     index = columns["email"]
     for number, row in enumerate(rows[1:], start=2):
         if index < len(row) and _norm(row[index]) == wanted:
-            _write_cell(tab, number, columns["status"], INACTIVE)
+            await off_loop.google(_write_cell, tab, number,
+                                  columns["status"], INACTIVE)
 
             # Reflect it immediately rather than waiting for the next sync,
             # so a revoked person cannot sign in during the gap.

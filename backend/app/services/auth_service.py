@@ -14,6 +14,7 @@ from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.config import get_settings
 from app.models.user import User
 from app.workspace_context import all_workspaces
@@ -131,7 +132,7 @@ async def signup_user(
         # tab of the Authorization sheet, checked live.
         try:
             authorized, sheet_data = (
-                google_sheets_service.check_authorization(
+                await off_loop.google(google_sheets_service.check_authorization,
                     email, "super_admin"))
         except RuntimeError as e:
             logger.error("auth_service.signup_user: SuperAdmins tab check "
@@ -171,7 +172,7 @@ async def signup_user(
             # (d) Listed in Eko's Authorization sheet, exactly as before.
             try:
                 authorized, sheet_data = (
-                    google_sheets_service.check_authorization(
+                    await off_loop.google(google_sheets_service.check_authorization,
                         email, requested_role))
             except RuntimeError as e:
                 logger.error(

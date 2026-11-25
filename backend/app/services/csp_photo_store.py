@@ -13,11 +13,11 @@ photo: the new-CSP worker's fetch, an RM's upload, and document generation
 must not fail a delivery, so a problem is logged instead.
 """
 
-import glob
 import hashlib
 import logging
 import mimetypes
 import os
+import time
 from typing import Dict, List, Optional
 
 from sqlalchemy import select
@@ -35,10 +35,56 @@ def original_path(csp) -> Optional[str]:
         return photo
     from app.services import csp_photo_service
     directory = csp_photo_service.photo_directory()
-    for path in sorted(glob.glob(os.path.join(directory, f"{csp.csp_id}.*"))):
-        if ".white." not in os.path.basename(path):
-            return path
+    for name in _photos_in(directory).get(os.path.normcase(csp.csp_id), ()):
+        if ".white." not in name:
+            return os.path.join(directory, name)
     return None
+
+
+# The photo folder's listing, read once and reused until the folder changes
+# (No. 251). Asking for one CSP used to list the whole folder: the Admin
+# dashboard asks for every CSP, so a dashboard of 8,000 CSPs listed a folder
+# of thousands of photos 16,000 times - most of its 6-second wait.
+# A file added, removed or renamed in the folder changes the folder's own
+# modified time, which throws the listing away; a photo overwritten in place
+# keeps its name, so the listing is still right.
+_listing: Dict[str, tuple] = {}
+
+
+def _photos_in(directory: str) -> Dict[str, List[str]]:
+    """{CSP code: sorted file names starting with "<code>."} for the folder -
+    the same names glob("<code>.*") finds (names starting with a dot are
+    left out, as glob does; case follows the system, as glob does)."""
+    try:
+        stamp = os.stat(directory).st_mtime_ns
+    except OSError:
+        return {}
+    hit = _listing.get(directory)
+    if hit is not None and hit[0] == stamp:
+        return hit[1]
+    index: Dict[str, List[str]] = {}
+    try:
+        names = sorted(e.name for e in os.scandir(directory)
+                       if not e.name.startswith("."))
+    except OSError as e:
+        logger.warning("csp_photo_store: could not list %s: %s: %s",
+                       directory, type(e).__name__, e)
+        return {}
+    for name in names:
+        folded = os.path.normcase(name)
+        # Every prefix ending just before a dot: "A.B.png" is found for a
+        # code "A" and for a code "A.B", exactly as glob("A.*") and
+        # glob("A.B.*") would find it.
+        dot = folded.find(".")
+        while dot > 0:
+            index.setdefault(folded[:dot], []).append(name)
+            dot = folded.find(".", dot + 1)
+    # A folder changed in the last moments may change again within the same
+    # clock tick, which its modified time would not show: not kept until
+    # it has settled.
+    if time.time_ns() - stamp > 2_000_000_000:
+        _listing[directory] = (stamp, index)
+    return index
 
 
 def _content_type(path: str) -> str:

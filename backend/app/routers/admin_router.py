@@ -362,10 +362,20 @@ async def get_audit_logs(
 # "details fetched" only when all of them are present. Computed in Python
 # rather than SQL because required_fields() is the single definition of what
 # a document needs, and duplicating it in a query would let the two drift.
-def _details_complete(csp) -> bool:
+def _details_complete(csp, required=None) -> bool:
+    """Same answer as check_missing_data(...).has_missing_data, negated, but
+    fast enough to ask of every CSP (No. 251). Pass ``required`` from
+    _required_fields() when asking of many CSPs."""
     from app.models.enums import DocumentType
-    from app.services.missing_data_service import check_missing_data
-    return not check_missing_data(csp, list(DocumentType)).has_missing_data
+    from app.services.missing_data_service import has_everything
+    return has_everything(csp, list(DocumentType), required)
+
+
+def _required_fields():
+    """Each document's required fields, worked out once per request."""
+    from app.models.enums import DocumentType
+    from app.services.missing_data_service import required_by_document
+    return required_by_document(list(DocumentType))
 
 
 def _parse_day(value: str | None, field: str):
@@ -488,6 +498,13 @@ async def csp_metrics(
     scoped_ids = set((await session.execute(
         select(scoped.c.csp_id))).scalars().all())
 
+    # Which documents each CSP may get (a Sub-KO never gets a BCP, No. 57),
+    # worked out once per CSP rather than once per CSP per document.
+    from app.services import ko_level
+    all_types = list(DocumentType)
+    allowed_for = {i: set(ko_level.allowed_documents(i, all_types))
+                   for i in scoped_ids}
+
     # A document counts when its PDF is stored — that is the copy a CSP is
     # sent, so it is the only honest measure of "done".
     per_document = []
@@ -511,9 +528,7 @@ async def csp_metrics(
         mailed_ids, failed_ids = await _delivery_sets(session, doc_type)
         # Only the CSPs this document is for: a Sub-KO never gets a BCP
         # (No. 57), so it is not "pending" one either.
-        from app.services import ko_level
-        eligible = {i for i in scoped_ids
-                    if ko_level.allowed_documents(i, [doc_type])}
+        eligible = {i for i in scoped_ids if doc_type in allowed_for[i]}
         mailed = len(eligible & mailed_ids)
         failed = len(eligible & failed_ids)
 
@@ -541,7 +556,8 @@ async def csp_metrics(
     in_scope = (await session.execute(
         select(CSPRecord).where(CSPRecord.csp_id.in_(select(scoped.c.csp_id)))
     )).scalars().all()
-    complete = sum(1 for c in in_scope if _details_complete(c))
+    required = _required_fields()
+    complete = sum(1 for c in in_scope if _details_complete(c, required))
 
     return {
         "filters_applied": active,
@@ -681,9 +697,23 @@ async def _drill_rows(session, params: dict):
                 else CSPRecord.csp_id.in_(holders)
             )
 
-    records = list((await session.execute(
-        query.order_by(CSPRecord.created_at.desc())
-    )).scalars().all())
+    # The newest first; the id only settles ties, so pages never overlap.
+    ordered = query.order_by(CSPRecord.created_at.desc(), CSPRecord.id)
+
+    # No. 251: when nothing below filters in Python, only the page asked for
+    # is read - not every CSP, of which a page shows 25.
+    window = params.get("window")
+    if window is not None and not delivery and view not in (
+            "details_fetched", "details_missing"):
+        offset, limit = window
+        total = (await session.execute(
+            select(func.count()).select_from(query.subquery()))).scalar() or 0
+        records = list((await session.execute(
+            ordered.offset(offset).limit(limit))).scalars().all())
+        params["paged"] = True
+        return records, total
+
+    records = list((await session.execute(ordered)).scalars().all())
 
     if delivery:
         # The same sets the dashboard counted with, so a tile and the list
@@ -698,10 +728,11 @@ async def _drill_rows(session, params: dict):
                        if c.csp_id not in mailed_ids
                        and c.csp_id not in failed_ids]
 
-    if view == "details_fetched":
-        records = [c for c in records if _details_complete(c)]
-    elif view == "details_missing":
-        records = [c for c in records if not _details_complete(c)]
+    if view in ("details_fetched", "details_missing"):
+        required = _required_fields()
+        want = view == "details_fetched"
+        records = [c for c in records
+                   if _details_complete(c, required) == want]
 
     return records, len(records)
 
@@ -754,14 +785,17 @@ async def csp_list(
 
     filters = {"rm": rm, "dc": dc, "ao": ao, "asm": asm, "ch": ch,
                "lho": lho, "district": district, "state": state}
-    records, total = await _drill_rows(session, {
+    offset = (page - 1) * page_size
+    params = {
         "filters": filters, "document_type": document_type, "view": view,
         "delivery": delivery,
         "missing": missing, "date_from": date_from, "date_to": date_to,
-    })
+        "window": (offset, page_size),
+    }
+    records, total = await _drill_rows(session, params)
 
-    offset = (page - 1) * page_size
-    window = records[offset:offset + page_size]
+    window = (records if params.get("paged")
+              else records[offset:offset + page_size])
 
     return {
         "total": total,

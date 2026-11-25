@@ -20,6 +20,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.database import get_session
 from app.dependencies import require_role
 from app.models.csp_photo import CSPPhoto, KINDS
@@ -270,7 +271,7 @@ async def edit_form(
 
     csp = await _editable(session, csp_id, user)
     try:
-        form = await asyncio.to_thread(csp_editor.load, csp.csp_code or csp.csp_id)
+        form = await off_loop.google(csp_editor.load, csp.csp_code or csp.csp_id)
     except csp_editor.EditError as e:
         raise HTTPException(e.status_code, e.message)
     except SheetWriteError as e:

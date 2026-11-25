@@ -79,6 +79,39 @@ def _current_value(csp: CSPRecord, field: str) -> str:
     return "" if value is None else str(value).strip()
 
 
+def required_by_document(document_types: List[DocumentType]
+                         ) -> Dict[DocumentType, List[str]]:
+    """{document: the fields it needs}, worked out once for a batch of
+    has_everything() calls - it is the same for every CSP."""
+    return {d: [f for f, _l, _t in required_fields(d)] for d in document_types}
+
+
+def has_everything(csp: CSPRecord, document_types: List[DocumentType],
+                   required: Dict[DocumentType, List[str]] = None) -> bool:
+    """True when nothing is missing for these documents.
+
+    Exactly ``not check_missing_data(csp, document_types).has_missing_data``
+    - the same documents (Sub-KO rule included), the same required fields,
+    the same values - but it stops at the first gap and builds no report
+    and no log line. For counting thousands of CSPs at once (the Admin
+    dashboard, No. 251); check_missing_data is still what says WHAT is
+    missing. The photo, the one check that looks at the disk, goes last.
+    """
+    from app.services import ko_level
+    document_types = ko_level.allowed_documents(
+        getattr(csp, "csp_code", None) or getattr(csp, "csp_id", None),
+        document_types)
+    if required is None:
+        required = required_by_document(document_types)
+    needed: List[str] = []
+    for doc_type in document_types:
+        for field in required[doc_type]:
+            if field not in needed:
+                needed.append(field)
+    needed.sort(key=lambda f: f == "photo")
+    return all(_current_value(csp, field) for field in needed)
+
+
 def check_missing_data(
     csp: CSPRecord,
     document_types: List[DocumentType],

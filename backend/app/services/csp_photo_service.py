@@ -69,7 +69,10 @@ class PhotoResult:
 
 def photo_directory() -> str:
     directory = os.path.join(settings.document_output_dir, "photos")
-    os.makedirs(directory, exist_ok=True)
+    # Asked once per CSP on the dashboard: a quick look first, since
+    # "create it unless it exists" costs a failed create every time (No. 251).
+    if not os.path.isdir(directory):
+        os.makedirs(directory, exist_ok=True)
     return directory
 
 

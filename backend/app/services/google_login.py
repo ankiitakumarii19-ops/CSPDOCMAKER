@@ -23,6 +23,7 @@ import logging
 import secrets
 from typing import Optional, Tuple
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.config import get_settings
 from app.models.enums import AccountStatus, UserRole
 from app.services import auth_service, google_sheets_service, workspace_service
@@ -102,7 +103,7 @@ async def _role_for_new_account(db, email: str) -> Optional[str]:
             return member.role.value
     for role in ("super_admin", "admin", "rm"):
         try:
-            listed, _row = google_sheets_service.check_authorization(
+            listed, _row = await off_loop.google(google_sheets_service.check_authorization,
                 email, role)
         except RuntimeError as e:
             logger.error("google_login: Authorization sheet check failed for "

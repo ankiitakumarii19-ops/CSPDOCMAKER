@@ -33,6 +33,7 @@ from fastapi import (APIRouter, Depends, File, HTTPException, Query,
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.config import get_settings
 from app.database import get_session
 from app.dependencies import require_any_role, require_role
@@ -322,7 +323,8 @@ async def correct_value(
     # The sheet is the source of truth: a value set only here would be
     # put back by the next sync. Written exactly as the CSP's form writes.
     try:
-        written, skipped = wb.write_values(body.csp_id, {body.field: new})
+        written, skipped = await off_loop.google(
+            wb.write_values, body.csp_id, {body.field: new})
     except wb.SheetWriteError as e:
         logger.error("quality_router: %s could not correct %s %s in the "
                      "sheet: %s", _who(user), body.csp_id, body.field, e)

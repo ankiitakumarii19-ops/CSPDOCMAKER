@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.database import get_db
 from app.config import get_settings
 from app.schemas.auth import (
@@ -121,7 +122,7 @@ async def signup(request: SignupRequest, db: AsyncSession = Depends(get_db)):
             detail="OTP generation failed. Please try again.",
         )
 
-    delivery_ok = email_service.send_otp_email(
+    delivery_ok = await off_loop.run(email_service.send_otp_email,
         to_email=request.email, otp_code=otp_code, user_name=request.name,
     )
 
@@ -210,7 +211,7 @@ async def login(
             detail="OTP generation failed. Please try again.",
         )
 
-    delivery_ok = email_service.send_otp_email(
+    delivery_ok = await off_loop.run(email_service.send_otp_email,
         to_email=request.email,
         otp_code=otp_code,
         user_name=user.name if user else None,
@@ -506,7 +507,7 @@ async def resend_otp(
             ),
         )
 
-    delivered = email_service.send_otp_email(
+    delivered = await off_loop.run(email_service.send_otp_email,
         to_email=request.email, otp_code=otp_code, user_name=user.name,
     )
     if not delivered:
@@ -584,7 +585,7 @@ async def forgot_password(
             detail="Too many reset requests. Please wait a minute and try again.",
         )
 
-    delivered = email_service.send_otp_email(
+    delivered = await off_loop.run(email_service.send_otp_email,
         to_email=request.email,
         otp_code=otp_code,
         user_name=user.name,

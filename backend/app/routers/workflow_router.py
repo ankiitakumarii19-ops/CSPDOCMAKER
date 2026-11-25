@@ -22,6 +22,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.services import off_loop  # slow calls beside the server (No. 251)
 from app.database import get_session
 from app.dependencies import require_role
 from app.models.csp_record import CSPRecord
@@ -318,7 +319,7 @@ async def process_workflow(
     # or sent. A conversion failure stops the workflow: the CSP is sent PDFs,
     # so a missing PDF means there is nothing to send.
     try:
-        converted = pdf_service.convert_all([path for _, path in generated])
+        converted = await off_loop.run(pdf_service.convert_all, [path for _, path in generated])
     except pdf_service.PDFConversionError as e:
         job.current_state = JobState.FAILED_PDF_CONVERSION
         job.error_message = "PDF conversion failed — documents will NOT be sent."
@@ -637,7 +638,8 @@ async def confirm_and_send(
     await session.flush()
 
     try:
-        email_sent = email_service.send_documents_email(
+        email_sent = await off_loop.run(
+            email_service.send_documents_email,
             to_email=csp.email,
             csp_name=csp.name,
             csp_id=csp.csp_id,
