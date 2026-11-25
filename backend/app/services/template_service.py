@@ -955,6 +955,7 @@ def fill_template(
     output_path: str,
     template_file: Optional[str] = None,
     photo_path: Optional[str] = None,
+    lho: Optional[str] = None,
 ) -> str:
     """Fill a supplied template and save the result.
 
@@ -964,6 +965,8 @@ def fill_template(
             required_fields(doc_type) must be present and non-empty.
         output_path: Where to write the generated DOCX.
         template_file: Override the template path (tests only).
+        lho: The CSP's LHO. An LHO with its own signature picture gets it in
+            place of the default one (No. 242).
 
     Returns:
         output_path.
@@ -1026,6 +1029,9 @@ def fill_template(
                 f"{code_of(doc_type)}: photo marker {marker!r} not found in "
                 f"the template."
             )
+
+    from app.services import lho_signature
+    lho_signature.apply(doc, lho)
 
     leftover = _find_leftover_placeholders(doc, set(placeholders))
     if leftover:

@@ -35,6 +35,7 @@ x-backend: &backend
     # Paths inside the container — fixed here so a value copied from a
     # laptop's .env cannot point somewhere that does not exist.
     DOCUMENT_TEMPLATES_DIR: /app/templates/documents
+    SIGNATURES_DIR: /app/templates/signatures
     DOCUMENT_OUTPUT_DIR: /app/backend/generated_documents
     LIBREOFFICE_PATH: ""
     GOOGLE_SHEETS_CREDENTIALS_FILE: /app/backend/credentials/google_service_account.json
