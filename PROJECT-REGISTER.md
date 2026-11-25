@@ -596,9 +596,13 @@ it — you said so.
 | 24 Nov 2026 | Added No. 234: every RM acts on every CSP; RM Dashboard (documents left, times contacted, RM / DC / state / district filters); RM header fixed - not pushed |
 | 24 Nov 2026 | Added No. 235: today's work as tasks |
 | 24 Nov 2026 | Added No. 236: today's tasks as one list |
+| 243 | 25 Nov | "Is everything done? If yes give me the command to push it on the server." | **Pushed to GitHub 25 Nov** (40ad970; golden check 125 passed): the SaaS upgrade No. 239-241 only. The other session's LHO signature work (No. 242) was left out, untouched, for that session to push. Server commands given: git pull; backup to ~ with pg_dump; add SUPREME_OWNER_EMAILS to deploy/.env.production; up -d --build (the 4 database steps run by themselves); check (ps, health, logs). **Waiting for you:** the Supreme Owner's email. |
+| 244 | 25 Nov | "Push it on server" (the LHO signatures, No. 242). | **Pushed to GitHub 25 Nov** (a26129b, on top of 40ad970; golden check 125 passed). 40ad970 already carried two lines of No. 242 (the setting and the LHO passed to document making) without the part that swaps the sign, so 40ad970 alone stops documents being made - a26129b completes it. Only No. 242 files went in. Server: `sh deploy/update.sh live` in /home/Ankita/Csp_Doc_Maker (backup, pull, build, golden check, start) - this also brings 40ad970 (No. 243). **Waiting for:** kapil to run it. |
 | 25 Nov 2026 | Added No. 237: every CSP gets the WhatsApp - no giving up, alternate then email, alternate column with /, mailto: removed, daily contact email - not pushed |
 | 25 Nov 2026 | Added No. 238: pushed e2070a5 (No. 234 + 237); server commands given |
 | 25 Nov 2026 | Added No. 239: SaaS upgrade brief - code checked, plan in 6 stages, waiting for 3 answers |
 | 25 Nov 2026 | Added No. 240: owner's answers (billing in, Supreme Owner, own data) + Stage 2 (each person's own look) built - not pushed |
 | 25 Nov 2026 | Added No. 241: SaaS upgrade Stages 3-7 built and tested - not pushed |
 | 25 Nov 2026 | Added No. 242: new Gurugram signature in all LHOs' documents; Patna's own sign added - not pushed |
+| 25 Nov 2026 | Added No. 243: pushed 40ad970 (SaaS upgrade); server commands given |
+| 25 Nov 2026 | Added No. 244: pushed a26129b (LHO signatures, No. 242); server command given |
