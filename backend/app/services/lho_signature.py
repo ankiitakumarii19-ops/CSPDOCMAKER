@@ -117,6 +117,14 @@ def apply(doc, lho: Optional[str]) -> Optional[str]:
     own = own_signature_path(lho)
     if own is None:
         return None
+    # No. 247: the pictures in this folder are Eko's (its signatory and
+    # stamps). Another workspace chooses its own on Document templates →
+    # Signatures; these are never put on its documents.
+    from app.workspace_context import current_workspace_id
+    from app.services.workspace_settings import EKO_WORKSPACE
+    ws = current_workspace_id()
+    if ws is not None and str(ws) != str(EKO_WORKSPACE):
+        return None
 
     default = default_path()
     if not os.path.isfile(default):

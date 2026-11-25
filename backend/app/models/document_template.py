@@ -90,6 +90,11 @@ class DocumentTemplate(Base):
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     # No. 240 (Stage 5): an optional group for the Document Templates list.
     category: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # No. 247: where the signature sits — "picture:<sha256>" (that picture in
+    # the file is replaced) or "text:<paragraph text>" (that paragraph becomes
+    # the signature). NULL = as before. Used only when a signature rule
+    # (models/signature.py) matches the CSP.
+    signature_spot: Mapped[str | None] = mapped_column(String(400), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

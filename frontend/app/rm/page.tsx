@@ -656,7 +656,7 @@ export default function RMDashboard() {
                       onKeyDown={(e) => e.key === "Escape" && setSuggestOpen(false)}
                       onKeyUp={(e) => e.key === "Enter" && searchCSP()}
                       className="w-full pl-11 pr-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 focus:ring-2 focus:ring-eko focus:border-eko dark:text-white outline-none transition-all text-lg"
-                      placeholder="CSP code, name, phone, email or district (e.g. 1A8504)"
+                      placeholder="CSP code, name, phone, email or district (e.g. 1A0001)"
                     />
                     {suggestOpen && searchQuery.trim().length >= 2 && (
                       <div className="absolute left-0 right-0 top-full mt-1 z-30 max-h-80 overflow-y-auto bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg">
@@ -1198,7 +1198,7 @@ export default function RMDashboard() {
                     </div>
                     <div className="text-xs text-gray-500 mb-1">Subject</div>
                     <div className="font-medium text-gray-900 dark:text-white text-sm">
-                      Your CSP Documents — {csp.csp_id} | Eko Bharat Ventures Pvt Ltd
+                      Your CSP Documents — {csp.csp_id} | {access?.look?.sender_org || "Eko Bharat Ventures Pvt Ltd"}
                     </div>
                   </div>
 

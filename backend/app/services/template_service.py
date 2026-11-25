@@ -956,6 +956,7 @@ def fill_template(
     template_file: Optional[str] = None,
     photo_path: Optional[str] = None,
     lho: Optional[str] = None,
+    record: Optional[Dict[str, str]] = None,
 ) -> str:
     """Fill a supplied template and save the result.
 
@@ -967,6 +968,8 @@ def fill_template(
         template_file: Override the template path (tests only).
         lho: The CSP's LHO. An LHO with its own signature picture gets it in
             place of the default one (No. 242).
+        record: The CSP's values the workspace's signature rules look at
+            (No. 247, signature_rules.record_of). None = no rules (tests).
 
     Returns:
         output_path.
@@ -1030,8 +1033,11 @@ def fill_template(
                 f"the template."
             )
 
-    from app.services import lho_signature
-    lho_signature.apply(doc, lho)
+    # No. 247: a workspace's signature rule decides first; with none
+    # matching, the LHO's picture from the server folder, as before.
+    from app.services import lho_signature, signature_rules
+    if signature_rules.apply(doc, code_of(doc_type), record) is None:
+        lho_signature.apply(doc, lho)
 
     leftover = _find_leftover_placeholders(doc, set(placeholders))
     if leftover:

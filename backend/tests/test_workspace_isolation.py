@@ -208,6 +208,8 @@ async def test_every_table_holding_customer_data_is_scoped():
         # UserPhoto; Plan and PlatformAnnouncement belong to the platform —
         # an announcement's target_workspace_id is NULL for "everyone".)
         "WorkspaceFile", "DocumentTemplateVersion", "WorkspaceSubscription",
+        # No. 247: signature pictures and the rules that choose them.
+        "Signature", "SignatureRule",
     }
     # DashboardWidget is deliberately absent: it is reached only through the
     # dashboard that owns it, which is scoped. Denormalising the workspace

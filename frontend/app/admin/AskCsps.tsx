@@ -18,6 +18,7 @@ import { useMemo, useRef, useState } from "react";
 import { fillPlaceholders } from "../components/ActionRequiredDetail";
 import { matches } from "../lib/searchMatch";
 import { api } from "../lib/api";
+import { useMyAccess } from "../lib/useMyAccess";
 import type {
   ApiError, CspSendResult, MessageTemplateInfo, SendCandidate, SendChannel,
 } from "../lib/api";
@@ -46,6 +47,9 @@ export default function AskCsps({
   channels: SendChannel[];
   onChanged: () => void;
 }) {
+  // No. 247: the name the CSP sees (Eko's company for Eko, else the workspace's).
+  const access = useMyAccess();
+  const senderShort = access?.look?.sender_short || "Eko Bharat Ventures";
   // Who
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "missing" | "asked" | "not_asked">("all");
@@ -359,7 +363,8 @@ export default function AskCsps({
             ) : (
               <div className="text-gray-700 dark:text-gray-300">
                 {channel === "whatsapp"
-                  ? WRAPPER.replace("{name}", first.name || "CSP").replace(
+                  ? WRAPPER.replace("Eko Bharat Ventures", senderShort)
+                      .replace("{name}", first.name || "CSP").replace(
                       "{message}", fillPlaceholders(text, first.name, first.csp_id, first.missing).split(/\s+/).join(" "))
                   : fillPlaceholders(text, first.name, first.csp_id, first.missing)}
               </div>

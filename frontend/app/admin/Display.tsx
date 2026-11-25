@@ -35,14 +35,14 @@ interface Look {
 
 // What each look is, for the previews. app/globals.css is what applies it.
 const LOOKS: Look[] = [
-  { key: "classic", name: "Eko classic", about: "The app as it has always looked: Eko green, dark navy menu.", accent: "#00B259", menu: "#1e293b", radius: 10, size: 13 },
+  { key: "classic", name: "Classic", about: "The app as it has always looked: green, dark navy menu.", accent: "#00B259", menu: "#1e293b", radius: 10, size: 13 },
   { key: "ocean", name: "Ocean blue", about: "Calm blue with a deep blue menu and softer corners.", accent: "#2563eb", menu: "#12305c", radius: 14, size: 13 },
   { key: "royal", name: "Royal purple", about: "Purple highlights on a dark violet menu.", accent: "#7c3aed", menu: "#2a1b4d", radius: 10, size: 13 },
   { key: "sunset", name: "Sunset orange", about: "Warm orange with a warm dark menu.", accent: "#ea580c", menu: "#3b2418", radius: 14, size: 13 },
   { key: "rose", name: "Rose", about: "Rose-red highlights on a deep wine menu.", accent: "#e11d48", menu: "#3a1424", radius: 10, size: 13 },
   { key: "forest", name: "Forest", about: "Deep green with a forest menu and a plain system font.", accent: "#15803d", menu: "#1b3326", radius: 10, font: "'Segoe UI', Roboto, system-ui, sans-serif", size: 13 },
   { key: "graphite", name: "Graphite", about: "No colour: slate grey, near-black menu, sharp corners.", accent: "#475569", menu: "#27272a", radius: 4, size: 13 },
-  { key: "compact", name: "Compact", about: "Eko colours, tighter spacing and smaller text: more on one screen.", accent: "#00B259", menu: "#1e293b", radius: 6, size: 11 },
+  { key: "compact", name: "Compact", about: "Classic colours, tighter spacing and smaller text: more on one screen.", accent: "#00B259", menu: "#1e293b", radius: 6, size: 11 },
   { key: "large", name: "Large and clear", about: "Bigger text, more space and stronger green: easiest to read.", accent: "#008a45", menu: "#1e293b", radius: 14, size: 15 },
 ];
 

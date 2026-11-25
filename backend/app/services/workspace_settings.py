@@ -225,13 +225,20 @@ def _stored(setting, row):
         return None
 
 
+def _neutral(text):
+    from app.services import org_identity
+    return org_identity.neutral(text)
+
+
 def _one(setting, row, user, ws) -> dict:
     standard = standard_value(setting.key)
     stored = _stored(setting, row)
     value = stored if stored is not None else standard
     return {
         "key": setting.key, "group": setting.group, "label": setting.label,
-        "help": setting.help, "effect": setting.effect, "kind": setting.kind,
+        # No. 247: Eko's own examples are not shown to another workspace.
+        "help": _neutral(setting.help), "effect": _neutral(setting.effect),
+        "kind": setting.kind,
         "unit": setting.unit, "min": setting.min, "max": setting.max,
         "choices": list(setting.choices),
         "value": value, "value_text": catalog.show(setting, value),
@@ -258,9 +265,9 @@ async def describe(session, user) -> dict:
         "settings": [_one(s, rows.get(s.key), user, ws)
                      for s in catalog.SETTINGS],
         "is_owner": is_owner(user),
-        "note": ("A setting you have not changed keeps the standard value "
-                 "(Eko's value). Changes reach the background jobs within "
-                 "half a minute."),
+        "note": _neutral("A setting you have not changed keeps the standard "
+                         "value (Eko's value). Changes reach the background "
+                         "jobs within half a minute."),
     }
 
 

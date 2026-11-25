@@ -50,6 +50,12 @@ WHATSAPP_WORDING = ("Namaste {name}, here is a message from Eko Bharat "
                     "Ventures: {message} Thank you.")
 EMAIL_SUBJECT = "A message from Eko Bharat Ventures — CSP {code}"
 
+
+def _org_swap(text: str) -> str:
+    """No. 247: another workspace's own name in place of Eko's."""
+    from app.services import org_identity
+    return org_identity.swap(text)
+
 # Contact and identity fields, as the CSP sheet names them.
 CONTACT_FIELDS = [
     ("csp_code", "CSP Code"), ("name", "CSP Name"),
@@ -199,7 +205,8 @@ def preview_text(channel: str, csp: CSPRecord, message: str,
     approved and stays fixed."""
     if channel == WHATSAPP:
         from app.services.whatsapp_platform import one_line
-        return WHATSAPP_WORDING.format(name=one_line(csp.name or "CSP"),
+        from app.services import org_identity
+        return org_identity.swap(WHATSAPP_WORDING).format(name=one_line(csp.name or "CSP"),
                                        message=one_line(message))
     return (f"Namaste {csp.name or 'CSP'},\n\n{message}\n\n"
             f"— {sender_name}\n{organisation}")
@@ -262,7 +269,7 @@ async def draft_message(session, user, csp_code, message, channel="auto"
         "message": message,
         "preview": preview_text(channel, csp, message, sender,
                                 await _organisation(session)),
-        "subject": (EMAIL_SUBJECT.format(code=csp.csp_code or csp.csp_id)
+        "subject": (_org_swap(EMAIL_SUBJECT).format(code=csp.csp_code or csp.csp_id)
                     if channel == EMAIL else None),
         "owner": _text(user.get("sub")).lower(),
         "sender_name": sender,

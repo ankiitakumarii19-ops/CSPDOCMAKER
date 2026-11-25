@@ -52,6 +52,8 @@ class DocumentSpec:
     file_data: Optional[bytes] = None
     photo_marker: Optional[str] = None
     placeholder_map: Dict[str, str] = field(default_factory=dict)
+    # No. 247: where the signature sits (see document_templates.signature_spot).
+    signature_spot: Optional[str] = None
 
     @property
     def fields(self) -> set:
@@ -116,6 +118,15 @@ def _load() -> Dict[str, DocumentSpec]:
         # none. Fall back to the supplied four rather than claiming this
         # system can produce no documents at all.
         specs = _builtin_specs()
+        # No. 247: the supplied four are Eko's designs (Eko's name, contacts
+        # and signature). Another workspace never falls back to them: it has
+        # the documents it added (its own, or the ready-made samples), or
+        # none yet.
+        if not _is_eko(workspace_id):
+            logger.warning("document_registry: workspace %s has no documents "
+                           "of its own (or they could not be read) — Eko's "
+                           "are not used in their place", workspace_id)
+            specs = {}
     _cache[workspace_id] = (time.monotonic(), specs)
     return specs
 
@@ -157,6 +168,7 @@ def _read_from_database() -> Optional[Dict[str, DocumentSpec]]:
                         fallback.photo_marker if fallback else None),
                     placeholder_map=dict(row.placeholder_map or {}) or (
                         dict(fallback.placeholder_map) if fallback else {}),
+                    signature_spot=row.signature_spot,
                 )
         engine.dispose()
         return specs or None
@@ -166,6 +178,12 @@ def _read_from_database() -> Optional[Dict[str, DocumentSpec]]:
             "falling back to the supplied four", type(e).__name__, e,
         )
         return None
+
+
+def _is_eko(workspace_id) -> bool:
+    """Eko's workspace, or no workspace in force (scripts, older callers)."""
+    from app.services.workspace_settings import EKO_WORKSPACE
+    return workspace_id is None or str(workspace_id) == str(EKO_WORKSPACE)
 
 
 def _builtin_specs() -> Dict[str, DocumentSpec]:

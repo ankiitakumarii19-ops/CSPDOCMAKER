@@ -77,11 +77,15 @@ export default function TemplateVersions({
     }
   }
 
-  const test = () =>
+  const test = (sample = false) =>
     run(async () => {
-      const f = await api.testTemplate(template.code, cspId.trim());
+      const f = await api.testTemplate(template.code, sample ? "SAMPLE" : cspId.trim());
       save(f.blob, f.name);
-      setMessage(`Made ${f.name} for ${cspId.trim()} — downloaded. Nothing was stored or sent.`);
+      setMessage(
+        sample
+          ? `Made ${f.name} for a made-up CSP (Asha Verma) — downloaded. Nothing was stored or sent.`
+          : `Made ${f.name} for ${cspId.trim()} — downloaded. Nothing was stored or sent.`
+      );
     });
 
   const restore = (v: TemplateVersion) => {
@@ -118,17 +122,26 @@ export default function TemplateVersions({
           <input
             value={cspId}
             onChange={(e) => setCspId(e.target.value)}
-            placeholder="CSP code, e.g. 1A850674"
+            placeholder="CSP code, e.g. 1A000101"
             aria-label="CSP code to test with"
             className="sm:w-64 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
           />
           <button
             type="button"
             disabled={busy || !cspId.trim()}
-            onClick={test}
+            onClick={() => test()}
             className="px-4 py-2 rounded-lg text-sm font-semibold bg-eko hover:bg-eko-dark text-white disabled:opacity-50"
           >
             {busy ? "Working…" : "Make test document"}
+          </button>
+          {/* No. 247: no CSPs yet? A made-up one, never stored. */}
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => test(true)}
+            className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+          >
+            Test with a made-up CSP
           </button>
         </div>
       </section>

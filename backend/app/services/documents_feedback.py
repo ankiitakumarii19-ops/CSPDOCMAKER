@@ -31,6 +31,7 @@ from sqlalchemy import func, select
 
 from app.models.feedback_loop import CspFeedback
 
+from app.services import org_identity  # No. 247
 logger = logging.getLogger(__name__)
 
 KIND = "feedback"
@@ -142,7 +143,7 @@ def run(session, now: Optional[datetime] = None, wa=None) -> Dict[str, int]:
                               documents_message_id=message.id)
             session.add(row)
         from app.config import get_settings as _gs   # No. 213: own wording
-        outcome = wa.send(message.phone, _gs().feedback_wording or WORDING,
+        outcome = wa.send(message.phone, _gs().feedback_wording or org_identity.swap(WORDING),
                           {"name": record.name or "CSP"},
                           source_name=message_log.source_name(KIND, record.csp_id))
         with send_reason.because(send_reason.RETRY if row.tries

@@ -213,6 +213,7 @@ def mine(user: dict) -> dict:
     name = (data["roles"][key]["name"] if key else
             {"super_admin": "Super Admin", **BUILT_IN}.get(base, base))
     from app.config import get_settings
+    from app.services import org_identity
     s = get_settings()
     return {"role": base, "own_role": key, "role_name": name,
             # No. 214: the workspace's own name and colour.
@@ -222,7 +223,11 @@ def mine(user: dict) -> dict:
                      "color_2": s.brand_color_2,
                      "own_colours": bool(s.allow_personal_look),
                      "logo": workspace_files.logo_version(),
-                     "org_name": workspace_files.workspace_name()},
+                     "org_name": workspace_files.workspace_name(),
+                     # No. 247: whose name CSP messages carry (Eko's company
+                     # for Eko; the workspace's own name for any other).
+                     "sender_org": org_identity.organisation_name(),
+                     "sender_short": org_identity.short_name()},
             "features": keys, "record_scope": record_scope(user),
             "admin_area": base in (ADMIN, SUPER)
             or any(k in ADMIN_AREA for k in keys)}

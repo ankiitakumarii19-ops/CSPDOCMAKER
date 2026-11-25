@@ -130,11 +130,20 @@ def apply_harness(ws, rows: List[dict]) -> List[dict]:
     return out
 
 
+# No. 247: rules about Eko's own people and working, not shown as another
+# workspace's starting rules.
+EKO_ONLY_GUARDRAILS = {"Two Ganesh Kumar accounts are two people",
+                       "No payment or billing", "Every request is recorded"}
+
+
 def guardrails(ws) -> List[dict]:
     saved = stored(ws).get("guardrails")
     if isinstance(saved, list):
         return saved
-    return [dict(g) for g in DEFAULT_GUARDRAILS]
+    from app.services.workspace_settings import EKO_WORKSPACE
+    eko = ws is None or str(getattr(ws, "id", "")) == str(EKO_WORKSPACE)
+    return [dict(g) for g in DEFAULT_GUARDRAILS
+            if eko or g["title"] not in EKO_ONLY_GUARDRAILS]
 
 
 def validated(section: str, body, harness_keys: List[str]):

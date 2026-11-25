@@ -109,7 +109,7 @@ function SettingRow({
           </div>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{s.help}</p>
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            Standard (Eko&apos;s) value: <strong>{s.standard_text}</strong>
+            Standard value: <strong>{s.standard_text}</strong>
             {s.own && s.changed_by && (
               <>
                 {" "}
@@ -186,7 +186,7 @@ function SettingRow({
             <button
               className={`${btn} text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-600`}
               onClick={() => setConfirming("standard")}
-              title="Use the standard (Eko's) value again"
+              title="Use the standard value again"
             >
               Back to standard
             </button>

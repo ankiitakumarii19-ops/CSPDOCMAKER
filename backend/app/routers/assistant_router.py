@@ -161,10 +161,10 @@ async def send_draft(draft_id: str,
 async def _send_whatsapp(session: AsyncSession, draft: dict, csp,
                          by: str = "") -> dict:
     from app.models.whatsapp_message import KIND_OTHER
-    from app.services import message_log, whatsapp_platform as wa
+    from app.services import message_log, org_identity, whatsapp_platform as wa
 
     result = await asyncio.to_thread(
-        wa.send, draft["to"], assistant_tools.WHATSAPP_WORDING,
+        wa.send, draft["to"], org_identity.swap(assistant_tools.WHATSAPP_WORDING),
         {"name": csp.name or "CSP", "message": draft["message"]},
         source_name=message_log.source_name("chat", csp.csp_id))
     await session.run_sync(lambda s: message_log.record(

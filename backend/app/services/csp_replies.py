@@ -562,7 +562,8 @@ def _send(session, reply: CspReply, by: str, text: Optional[str] = None,
     body = with_quote(quote, body)
 
     from app.services import send_reason
-    outcome = wa.send(reply.phone, assistant_tools.WHATSAPP_WORDING,
+    from app.services import org_identity
+    outcome = wa.send(reply.phone, org_identity.swap(assistant_tools.WHATSAPP_WORDING),
                       {"name": record.name or "CSP", "message": body},
                       source_name=message_log.source_name("chat", record.csp_id))
     # A reply tried again after an error says so (No. 164).

@@ -1282,6 +1282,9 @@ export interface MyAccess {
     logo?: string | null;
     /** No. 240: the organisation's name. */
     org_name?: string;
+    /** No. 247: whose name CSP messages carry, in full and short. */
+    sender_org?: string;
+    sender_short?: string;
   };
   /** May open the Admin pages (always for Admins; for an RM given an Admin screen). */
   admin_area: boolean;
@@ -2817,6 +2820,98 @@ class ApiClient {
     );
   }
 
+  // ---- Signatures chosen by rule (No. 247) ----
+  async signatures() {
+    return this.request<SignatureOverview>("/admin/signatures");
+  }
+
+  async uploadSignature(name: string, file: File) {
+    const body = new FormData();
+    body.append("name", name);
+    body.append("file", file);
+    const path = "/admin/signatures";
+    const response = await this.send(`${API_BASE}${path}`, { method: "POST", body });
+    if (!response.ok) throw await this.failure(response, path, "Could not upload the signature");
+    return response.json() as Promise<SignaturePicture>;
+  }
+
+  async renameSignature(id: string, name: string) {
+    return this.request<{ ok: boolean }>(`/admin/signatures/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  async removeSignature(id: string) {
+    return this.request<{ ok: boolean }>(`/admin/signatures/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  /** A picture behind sign-in, as a URL an <img> can show. */
+  async pictureUrl(path: string) {
+    const { blob } = await this.fileFrom(path, {}, "Could not load the picture");
+    return URL.createObjectURL(blob);
+  }
+
+  signaturePicturePath(id: string) {
+    return `/admin/signatures/${encodeURIComponent(id)}/picture`;
+  }
+
+  documentPicturePath(code: string, checksum: string) {
+    return `/admin/signatures/documents/${encodeURIComponent(code)}/pictures/${encodeURIComponent(checksum)}`;
+  }
+
+  async addSignatureRule(rule: SignatureRuleInput) {
+    return this.request<{ id: string }>("/admin/signatures/rules", {
+      method: "POST",
+      body: JSON.stringify(rule),
+    });
+  }
+
+  async changeSignatureRule(id: string, rule: SignatureRuleInput) {
+    return this.request<{ ok: boolean }>(`/admin/signatures/rules/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(rule),
+    });
+  }
+
+  async removeSignatureRule(id: string) {
+    return this.request<{ ok: boolean }>(`/admin/signatures/rules/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async orderSignatureRules(ids: string[]) {
+    return this.request<{ ok: boolean }>("/admin/signatures/rules/order", {
+      method: "PUT",
+      body: JSON.stringify({ ids }),
+    });
+  }
+
+  async signatureColumnValues(column: string) {
+    return this.request<{ column: string; values: { value: string; count: number }[] }>(
+      `/admin/signatures/values?column=${encodeURIComponent(column)}`
+    );
+  }
+
+  async signatureSpot(code: string) {
+    return this.request<SignatureSpot>(`/admin/signatures/documents/${encodeURIComponent(code)}`);
+  }
+
+  async setSignatureSpot(code: string, spot: string | null) {
+    return this.request<{ ok: boolean; spot: string | null }>(
+      `/admin/signatures/documents/${encodeURIComponent(code)}/spot`,
+      { method: "PUT", body: JSON.stringify({ spot }) }
+    );
+  }
+
+  async whichSignature(code: string, cspId: string) {
+    return this.request<{ signature: string | null; rule_id: string | null; why: string }>(
+      `/admin/signatures/which?code=${encodeURIComponent(code)}&csp_id=${encodeURIComponent(cspId)}`
+    );
+  }
+
   async updateTemplate(
     code: string,
     settings: {
@@ -3243,6 +3338,55 @@ class ApiClient {
       "/health"
     );
   }
+}
+
+// ---- Signatures chosen by rule (No. 247) ----
+export interface SignaturePicture {
+  id: string;
+  name: string;
+  width: number;
+  height: number;
+  checksum: string;
+  used_by: number;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+export interface SignatureRule {
+  id: string;
+  document_code: string | null;
+  column: string;
+  values: string[];
+  signature_id: string;
+  signature_name: string;
+  position: number;
+  active: boolean;
+  words: string;
+}
+
+export interface SignatureRuleInput {
+  document_code: string | null;
+  column: string;
+  values: string[];
+  signature_id: string;
+  active: boolean;
+}
+
+export interface SignatureOverview {
+  signatures: SignaturePicture[];
+  rules: SignatureRule[];
+  columns: { key: string; label: string }[];
+  documents: { code: string; name: string }[];
+}
+
+export interface SignatureSpot {
+  code: string;
+  name: string;
+  spot: string | null;
+  chosen: boolean;
+  found: boolean;
+  pictures: { checksum: string; width: number; height: number; count: number }[];
+  paragraphs: { text: string }[];
 }
 
 export const api = new ApiClient();

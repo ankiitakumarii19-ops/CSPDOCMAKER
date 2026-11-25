@@ -195,7 +195,7 @@ export default function WorkspaceRules({ canEdit }: { canEdit: boolean }) {
             maxLength={100}
             disabled={disabled}
             onChange={(e) => setForm({ ...form, message_signoff: e.target.value })}
-            placeholder="Team Eko"
+            placeholder="e.g. Team Your Company"
           />
         </div>
       </section>

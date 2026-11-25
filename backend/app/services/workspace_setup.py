@@ -162,7 +162,7 @@ async def checklist(session, user, live: bool = True) -> List[Step]:
         "team", "Add your team", DONE if members > 1 else TODO,
         f"{members} people can sign in to this workspace." if members > 1
         else "Only you can sign in so far.",
-        "Ask me e.g. **add rm priya@eko.co.in** (or admin), or use Setup → "
+        "Ask me e.g. **add rm asha@yourcompany.com** (or admin), or use Setup → "
         "Access. They then sign up with that email and choose this "
         "workspace.",
         ask="How do I add my team?"))
@@ -235,8 +235,8 @@ async def checklist(session, user, live: bool = True) -> List[Step]:
     if not templates:
         steps.append(Step(
             "templates", "Add your document templates", TODO,
-            "You have no templates of your own, so documents would be made "
-            "from Eko's four built-in designs.",
+            "You have no document templates yet, so no documents can be "
+            "made.",
             "Upload a Word (.docx) file for each document on Setup → Document "
             "Templates, using one of these codes: "
             + ", ".join(f"{c} ({n})" for c, n in DOCUMENT_CODES)
@@ -278,8 +278,8 @@ async def checklist(session, user, live: bool = True) -> List[Step]:
          + ".") if channels else "No messaging channel, so no CSP can be "
         "emailed or asked for details.",
         "" if channels else "Ask me **add the email channel** — it sends "
-        "through the server's email account. WhatsApp goes through Eko's "
-        "WhatsApp platform and is added by the Eko team.",
+        "through the server's email account. WhatsApp is added by the "
+        "platform team.",
         ask=None if channels else "add the email channel"))
 
     # 7. The Communication agent sends the asks on a schedule.
@@ -398,7 +398,7 @@ def guide() -> list:
         ("How do I add my team?",
          "add members\nadd rm\nadd admin\ninvite people\nteam kaise add kare",
          "add member, invite, team",
-         "Ask me **add rm name@eko.co.in** or **add admin name@eko.co.in** "
+         "Ask me **add rm name@yourcompany.com** or **add admin name@yourcompany.com** "
          "(I confirm before adding), or use Setup → Access. The person then "
          "signs up with that email, picks the same role, and chooses your "
          "workspace at login. Only addresses your workspace's rules allow "
@@ -426,18 +426,16 @@ def guide() -> list:
          "bheje",
          "channel, messaging",
          "Two things are needed: a **channel** (ask me **add the email "
-         "channel**; WhatsApp is added by the Eko team) and the **wordings** "
+         "channel**; WhatsApp is added by the platform team) and the **wordings** "
          "(ask me **create the message wordings**). Then turn on the "
          "Communication agent to chase missing details on a schedule."),
         ("Why are there no CSPs in my workspace?",
          "no csps\ncsp not showing\nmy csps are missing\ncsp kyun nahi dikh "
          "rahe",
          "no csp, records",
-         "The app does not yet read a new workspace's own sheet into CSP "
-         "records — only Eko's sheet is read. You can connect and edit your "
-         "sheet on Setup → Sheets, but your CSPs will not appear in the app "
-         "until that is built. Tell the Eko team; it is not something you "
-         "can fix from here."),
+         "Your CSPs come from your own sheet: connect it on Setup → Sheets "
+         "(ask me **setup status** to see what is missing). Until a sheet is "
+         "connected and read, the workspace has no CSPs."),
         ("What do the agents do?",
          "agents meaning\nwhich agents to turn on\ncommunication agent",
          "agent",

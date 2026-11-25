@@ -144,8 +144,10 @@ def generate_document(
     photo_path = resolve_photo(csp) if doc_type in template_service.PHOTO_MARKERS else None
     filename = f"{output_prefix(doc_type)}_{csp.csp_id}_{uuid.uuid4().hex[:8]}.docx"
     filepath = os.path.join(output_dir, filename)
+    from app.services import signature_rules
     template_service.fill_template(doc_type, values, filepath, photo_path=photo_path,
-                                   lho=csp.lho)
+                                   lho=csp.lho,
+                                   record=signature_rules.record_of(csp))
     logger.info("document_service: generated %s → %s", registry.code_of(doc_type), filepath)
     return filepath
 

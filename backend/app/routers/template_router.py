@@ -68,6 +68,29 @@ class TestRun(BaseModel):
     csp_id: str = Field(..., min_length=1, max_length=60)
 
 
+# No. 247: "SAMPLE" tests on a made-up CSP — for a workspace with no CSPs
+# yet. Built in memory only: never added to the database, never sent.
+SAMPLE_CSP_ID = "SAMPLE"
+
+
+def sample_csp():
+    from datetime import date
+    from app.models.csp_record import CSPRecord
+    from app.services import template_service as ts_
+    return CSPRecord(
+        csp_id="1A000101", csp_code="1A000101", name="Asha Verma",
+        gender="Female", address="12 Sample Road, Sample Nagar",
+        district="Sample District", state="Sample State",
+        mobile="9000000001", email="asha.verma@example.com",
+        branch_name="Sample Branch", branch_code="00001",
+        branch_contact="9000000002", ao="Sample AO", rbo_name="Sample RBO",
+        rbo_contact="9000000003", lho="Sample LHO", dc="Sample DC",
+        asm_name="Ravi Kumar", asm_email="ravi.kumar@example.com",
+        asm_contact="9000000004", rm_name="Neha Singh",
+        certificate_date=date.today(), photo_url=ts_.PLACEHOLDER_PHOTO,
+        origin="new", rm_resolution="unresolved")
+
+
 class ContentEdit(BaseModel):
     edits: Dict[str, str] = Field(
         ..., description="Paragraph index -> its new wording",
@@ -587,8 +610,11 @@ async def test_template(
     from app.workspace_context import current_workspace_id
 
     template = await _get(session, code)
-    csp = (await session.execute(select(CSPRecord).where(
-        CSPRecord.csp_id == body.csp_id.strip()))).scalars().first()
+    if body.csp_id.strip().upper() == SAMPLE_CSP_ID:
+        csp = sample_csp()
+    else:
+        csp = (await session.execute(select(CSPRecord).where(
+            CSPRecord.csp_id == body.csp_id.strip()))).scalars().first()
     if csp is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND,
                             f"No CSP {body.csp_id.strip()} in this workspace.")

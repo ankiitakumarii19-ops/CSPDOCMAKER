@@ -92,7 +92,7 @@ export default function Columns() {
       <div>
         <h2 className="text-xl font-bold text-gray-900 dark:text-white">Columns</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Which column of your main sheet holds each field. Eko&apos;s column names are the start; press
+          Which column of your main sheet holds each field. The standard column names are the start; press
           <strong> Guess from my sheet</strong> and only correct what is wrong.
         </p>
       </div>
@@ -114,7 +114,7 @@ export default function Columns() {
             <div key={f.field} className="p-3 flex flex-col sm:flex-row sm:items-center gap-2">
               <div className="sm:w-1/3">
                 <div className="text-sm font-semibold text-gray-900 dark:text-white">{f.label}</div>
-                <div className="text-[11px] text-gray-500">Eko: {f.eko_header}</div>
+                <div className="text-[11px] text-gray-500">Standard: {f.eko_header}</div>
               </div>
               <div className="sm:w-2/5">
                 {options.length > 0 ? (

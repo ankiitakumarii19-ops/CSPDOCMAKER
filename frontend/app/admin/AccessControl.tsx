@@ -223,7 +223,7 @@ export default function AccessControl({
               <input
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@eko.co.in"
+                placeholder="name@yourcompany.com"
                 className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 dark:text-white outline-none focus:ring-2 focus:ring-eko"
               />
             </div>

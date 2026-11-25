@@ -40,6 +40,7 @@ from app.models.user_preference import UserPreference
 from app.models.workspace_file import WorkspaceFile
 from app.models.document_template_version import DocumentTemplateVersion
 from app.models.platform import Plan, PlatformAnnouncement, WorkspaceSubscription
+from app.models.signature import Signature, SignatureRule
 from app.models.workspace_setting import (WorkspaceSecret, WorkspaceSetting,
                                           WorkspaceSettingChange)
 from app.models.feature_access import AccessRole, FeatureAccess
@@ -52,6 +53,8 @@ __all__ = [
     "Plan",
     "PlatformAnnouncement",
     "WorkspaceSubscription",
+    "Signature",
+    "SignatureRule",
     "CspFeedback",
     "CspReply",
     "QualitySuggestion",

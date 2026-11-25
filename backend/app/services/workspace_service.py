@@ -86,35 +86,94 @@ async def create_workspace(session, name: str, owner_email: str,
 
 
 async def _starter_like_eko(session, ws) -> None:
-    """No. 215 (ZU-08): start like Eko — Eko's message wordings (signed with
-    this workspace's name), the four document templates SWITCHED OFF for
-    review, and the dashboards. None of Eko's records, people, connections
-    or Knowledge Base answers are copied; settings start at the standard
-    (Eko's) values anyway, and connections start blank."""
-    from sqlalchemy import select
-    from app.models.document_template import DocumentTemplate
+    """No. 215 (ZU-08), No. 247: the ready-made start — the message wordings
+    (signed with this workspace's name), the four documents SWITCHED OFF for
+    review, a sample signature, and the dashboards.
+
+    The four documents are the SAMPLE designs (templates/samples, made by
+    scripts/make_sample_templates.py): a made-up organisation, bank, people
+    and contacts, a "Your logo" box and a sample signature — nothing of
+    Eko's, nor of any other workspace. None of Eko's records, people,
+    connections or Knowledge Base answers are copied; connections start
+    blank."""
     from app.services.document_template_service import (
         sync_builtin_dashboards, sync_builtin_messages)
     from app.workspace_context import workspace
-    eko = await eko_workspace(session)
-    if eko is not None:
-        with all_workspaces():
-            originals = list((await session.execute(select(
-                DocumentTemplate).where(
-                    DocumentTemplate.workspace_id == eko.id,
-                    DocumentTemplate.is_builtin.is_(True)))).scalars())
-        for t in originals:
-            session.add(DocumentTemplate(
-                workspace_id=ws.id, code=t.code, name=t.name,
-                filename=t.filename, file_data=t.file_data,
-                file_size=t.file_size, checksum=t.checksum,
-                placeholder_map=dict(t.placeholder_map or {}),
-                photo_marker=t.photo_marker, is_builtin=t.is_builtin,
-                active=False, version=1))
     with workspace(ws.id):
+        for row in sample_documents(ws.id):
+            session.add(row)
+        sample = sample_signature(ws.id)
+        if sample is not None:
+            session.add(sample)
         await sync_builtin_messages(session, signature=f"Team {ws.name}")
         await sync_builtin_dashboards(session)
         await session.flush()
+
+
+def samples_dir() -> str:
+    """templates/samples, beside the supplied designs' folder."""
+    import os
+    from app.config import get_settings
+    return os.path.join(os.path.dirname(os.path.abspath(
+        get_settings().server.document_templates_dir)), "samples")
+
+
+def sample_documents(workspace_id) -> list:
+    """The four sample documents as new rows of this workspace, switched off.
+    A sample file that is missing is logged and skipped, never replaced by
+    Eko's."""
+    import hashlib
+    import os
+    from app.models.document_template import DocumentTemplate
+    from app.models.enums import DocumentType
+    from app.services import template_service as ts
+    spot = None
+    sig = os.path.join(samples_dir(), "sample-signature.png")
+    if os.path.isfile(sig):
+        with open(sig, "rb") as f:
+            spot = "picture:" + hashlib.sha256(f.read()).hexdigest()
+    rows = []
+    for member in DocumentType:
+        name = ts.TEMPLATE_FILES.get(member) or ""
+        path = os.path.join(samples_dir(), name)
+        if name and not os.path.isfile(path) and os.path.isdir(samples_dir()):
+            # "ID Card.docx" and "ID_Card.docx" are the same file, as on the
+            # real path (template_service._same_name).
+            for entry in sorted(os.listdir(samples_dir())):
+                if entry.lower().endswith(".docx") and ts._same_name(entry, name):
+                    path = os.path.join(samples_dir(), entry)
+                    break
+        if not name or not os.path.isfile(path):
+            logger.error("workspace_service.sample_documents: the sample %s is "
+                         "missing (%s) — this document is not added", member.name, path)
+            continue
+        with open(path, "rb") as f:
+            data = f.read()
+        rows.append(DocumentTemplate(
+            workspace_id=workspace_id, code=member.name,
+            name=ts.BUILTIN_LABELS.get(member, member.name), filename=name,
+            file_data=data, file_size=len(data),
+            checksum=hashlib.sha256(data).hexdigest(),
+            placeholder_map=dict(ts.PLACEHOLDER_FIELDS.get(member, {})),
+            photo_marker=ts.PHOTO_MARKERS.get(member), is_builtin=True,
+            active=False, version=1, signature_spot=spot))
+    return rows
+
+
+def sample_signature(workspace_id):
+    """The made-up 'Sample signature' picture, for the Signatures screen."""
+    import os
+    from app.models.signature import Signature
+    from app.services import signature_rules
+    path = os.path.join(samples_dir(), "sample-signature.png")
+    if not os.path.isfile(path):
+        logger.error("workspace_service.sample_signature: %s is missing", path)
+        return None
+    with open(path, "rb") as f:
+        png, width, height = signature_rules.check_picture(f.read())
+    return Signature(workspace_id=workspace_id, name="Sample signature", image=png,
+                     width=width, height=height,
+                     checksum=signature_rules.sha256(png), created_by="ready-made start")
 
 
 async def memberships(session, email: str) -> List[tuple]:

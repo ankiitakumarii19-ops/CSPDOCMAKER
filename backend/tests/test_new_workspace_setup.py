@@ -97,4 +97,6 @@ async def test_adding_a_data_source_is_explained(strict_client, new_ws,
 
 async def test_why_no_csps_is_answered_honestly(strict_client, new_ws):
     body = await _ask(strict_client, new_ws, "why are there no CSPs?")
-    assert "only Eko's sheet is read" in body["reply"]
+    # No. 247: a new workspace's own sheet is read; no mention of Eko.
+    assert "connect it on Setup → Sheets" in body["reply"]
+    assert "Eko" not in body["reply"]

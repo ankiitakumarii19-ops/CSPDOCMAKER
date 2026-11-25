@@ -827,7 +827,7 @@ export default function AuthPage() {
                         onChange={(e) => setRegWorkspace(e.target.value)}
                         maxLength={100}
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-eko outline-none dark:text-white"
-                        placeholder="e.g. Patna Pilot"
+                        placeholder="e.g. Sunrise Services"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         A new workspace is created for you. Leave this
@@ -847,9 +847,10 @@ export default function AuthPage() {
                               onChange={() => setRegStarter("eko")}
                             />
                             <span>
-                              Eko&apos;s way of working — its message wordings,
-                              document templates (switched off for you to
-                              check) and dashboards. None of Eko&apos;s data.
+                              A ready-made start — message wordings, four sample
+                              documents with made-up details and a sample
+                              signature (switched off for you to check), and
+                              dashboards. Nothing from any other workspace.
                             </span>
                           </label>
                           <label className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">

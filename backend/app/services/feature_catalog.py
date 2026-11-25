@@ -152,8 +152,9 @@ FEATURES: List[Feature] = [
     # ---- setting up -----------------------------------------------------
     Feature("templates", "setup", "Document templates",
             "Upload and change the Word templates.",
-            (ADMIN,), (("*", "/api/admin/templates"),),
-            words=("templates", "document templates")),
+            (ADMIN,), (("*", "/api/admin/templates"),
+                       ("*", "/api/admin/signatures")),
+            words=("templates", "document templates", "signatures")),
     Feature("messaging", "setup", "Messaging",
             "Message wordings and channels; ask many CSPs at once.",
             (ADMIN,), (("*", "/api/admin/messaging"),), all_csps=True,

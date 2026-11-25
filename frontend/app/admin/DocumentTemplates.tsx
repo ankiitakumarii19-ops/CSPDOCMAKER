@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
+import Signatures from "./Signatures";
 import TemplateVersions from "./TemplateVersions";
 import type {
   ApiError,
@@ -38,7 +39,8 @@ export default function DocumentTemplates() {
 
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [tab, setTab] = useState<"fields" | "wording" | "versions">("fields");
+  const [tab, setTab] = useState<"fields" | "wording" | "versions" | "signature">("fields");
+  const [showSignatures, setShowSignatures] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -166,13 +168,28 @@ export default function DocumentTemplates() {
             placeholders, then activate it.
           </p>
         </div>
-        <button
-          onClick={() => setShowUpload((v) => !v)}
-          className="px-4 py-2 bg-eko hover:bg-eko-dark text-white text-sm font-medium rounded-lg shadow-sm flex items-center gap-2"
-        >
-          <i className="fas fa-plus text-xs" /> Add Template
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setShowSignatures((v) => !v)}
+            className={`px-4 py-2 text-sm font-medium rounded-lg border flex items-center gap-2 ${
+              showSignatures
+                ? "border-eko text-eko"
+                : "border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            }`}
+          >
+            <i className="fas fa-signature text-xs" /> Signatures
+          </button>
+          <button
+            onClick={() => setShowUpload((v) => !v)}
+            className="px-4 py-2 bg-eko hover:bg-eko-dark text-white text-sm font-medium rounded-lg shadow-sm flex items-center gap-2"
+          >
+            <i className="fas fa-plus text-xs" /> Add Template
+          </button>
+        </div>
       </div>
+
+      {/* No. 247: signature pictures and the rules that choose them. */}
+      {showSignatures && <Signatures />}
 
       {error && (
         <div className="px-4 py-3 rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-sm text-red-700 dark:text-red-300">
@@ -388,7 +405,7 @@ export default function DocumentTemplates() {
           </div>
 
           <div className="px-5 pt-4 flex gap-1">
-            {(["fields", "wording", "versions"] as const).map((key) => (
+            {(["fields", "wording", "versions", "signature"] as const).map((key) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -398,10 +415,19 @@ export default function DocumentTemplates() {
                     : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
-                {key === "fields" ? "Fields" : key === "wording" ? "Wording" : "Versions & test"}
+                {key === "fields"
+                  ? "Fields"
+                  : key === "wording"
+                    ? "Wording"
+                    : key === "versions"
+                      ? "Versions & test"
+                      : "Signature"}
               </button>
             ))}
           </div>
+
+          {/* No. 247: where this document's signature goes and which one. */}
+          {tab === "signature" && <Signatures key={selected.code} code={selected.code} />}
 
           {/* No. 240 (Stage 5): versions, restore, test on a CSP, category. */}
           {tab === "versions" && (

@@ -39,6 +39,8 @@ CUSTOM = "custom"
 PLACEHOLDERS = ("{name}", "{csp_id}", "{missing_items}")
 EMAIL_SUBJECT = "A message from Eko Bharat Ventures"
 
+from app.services import org_identity as _org  # noqa: E402  No. 247: another workspace's own name
+
 
 def missing_labels(record) -> List[str]:
     """What this CSP could still give themselves (their own details)."""
@@ -183,7 +185,8 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
             return refuse("no usable WhatsApp number")
         # No. 195: a person pressed Send — sent even if the same words went
         # to this number in the last 15 minutes.
-        outcome = wa.send(phone, assistant_tools.WHATSAPP_WORDING,
+        from app.services import org_identity
+        outcome = wa.send(phone, org_identity.swap(assistant_tools.WHATSAPP_WORDING),
                           {"name": record.name or "CSP", "message": one_line},
                           source_name=message_log.source_name("chat", record.csp_id),
                           force=True)
@@ -204,7 +207,7 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
             return refuse("no email address")
         with send_reason.because(send_reason.MANUAL):
             ok, why = message_sender._send_email(
-                to, EMAIL_SUBJECT, body, kind="other",
+                to, _org.swap(EMAIL_SUBJECT), body, kind="other",
                 csp_id=record.csp_id, csp_name=record.name or "")
         result.update(sent=ok, reason=why or "", text=body)
     _audit(session, record, by, channel, result["text"], result)
@@ -244,7 +247,7 @@ def preview(session, record, kind: str, text: str) -> dict:
     return {"csp_id": record.csp_id, "name": record.name or "",
             "email_text": shown,
             "whatsapp_text": (shown if kind == DETAILS_FORM else
-                              assistant_tools.WHATSAPP_WORDING.format(
+                              _org.swap(assistant_tools.WHATSAPP_WORDING).format(
                                   name=record.name or "CSP",
                                   message=csp_replies.clean(shown))),
             "blocked": blocked}

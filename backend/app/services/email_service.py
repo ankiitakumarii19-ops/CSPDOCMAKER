@@ -37,8 +37,14 @@ LOGO_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)),
 LOGO_CID = "eko-logo"
 
 
+def _org_name() -> str:
+    """No. 247: Eko's name for Eko; another workspace's own name."""
+    from app.services import org_identity
+    return org_identity.organisation_name()
+
+
 def documents_subject(csp_id: str) -> str:
-    return f"Your CSP Documents — {csp_id} | {ORGANISATION_NAME}"
+    return f"Your CSP Documents — {csp_id} | {_org_name()}"
 
 
 def _build_otp_html(otp_code: str, user_name: Optional[str] = None) -> str:
@@ -93,7 +99,7 @@ def _build_otp_html(otp_code: str, user_name: Optional[str] = None) -> str:
           <tr>
             <td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
               <p style="margin:0;color:#9ca3af;font-size:11px;">
-                This is an automated message from CSP DocMaker — Internal EKO Platform.
+                This is an automated message from CSP DocMaker.
               </p>
             </td>
           </tr>
@@ -335,6 +341,7 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
                           with_logo: bool = True) -> str:
     """Build a professional HTML email for document delivery."""
     doc_list = "".join(f"<li style='margin:4px 0;'>{name}</li>" for name in doc_names)
+    org = _org_name()
     logo = (f'<img src="cid:{LOGO_CID}" alt="eko" width="94" height="46" '
             f'style="display:block;margin:0 auto 12px;border:0;">'
             if with_logo else "")
@@ -353,7 +360,7 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
           <tr>
             <td style="background:#ffffff;padding:28px 32px 20px;text-align:center;border-bottom:4px solid #fbb11b;">
               {logo}
-              <p style="margin:0;color:#1f2937;font-size:17px;font-weight:700;">{ORGANISATION_NAME}</p>
+              <p style="margin:0;color:#1f2937;font-size:17px;font-weight:700;">{org}</p>
               <p style="margin:4px 0 0;color:#6b7280;font-size:13px;">CSP Document Delivery</p>
             </td>
           </tr>
@@ -361,7 +368,7 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
             <td style="padding:32px;">
               <p style="margin:0 0 16px;color:#374151;font-size:15px;">Dear {csp_name},</p>
               <p style="margin:0 0 16px;color:#374151;font-size:15px;">
-                Please find attached your documents from {ORGANISATION_NAME}:
+                Please find attached your documents from {org}:
               </p>
               <div style="background:#f0f1ff;border:1px solid #e0e1ef;border-radius:8px;padding:16px;margin:0 0 20px;">
                 <p style="margin:0 0 8px;font-weight:600;color:#4338ca;font-size:13px;">CSP ID: {csp_id}</p>
@@ -377,7 +384,7 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
           <tr>
             <td style="padding:20px 32px;background:#f9fafb;border-top:1px solid #e5e7eb;text-align:center;">
               <p style="margin:0;color:#9ca3af;font-size:11px;">
-                This is an automated message from {ORGANISATION_NAME}.
+                This is an automated message from {org}.
               </p>
             </td>
           </tr>
@@ -392,13 +399,14 @@ def _build_documents_html(csp_name: str, csp_id: str, doc_names: List[str],
 def _build_documents_plain(csp_name: str, csp_id: str, doc_names: List[str]) -> str:
     """Build a plain-text email for document delivery."""
     doc_list = "\n".join(f"  - {name}" for name in doc_names)
+    org = _org_name()
     return (
         f"Dear {csp_name},\n\n"
-        f"Please find attached your documents from {ORGANISATION_NAME}.\n\n"
+        f"Please find attached your documents from {org}.\n\n"
         f"CSP ID: {csp_id}\n\n"
         f"Documents:\n{doc_list}\n\n"
         f"If you have any questions, please contact your Relationship Manager.\n\n"
-        f"— {ORGANISATION_NAME}"
+        f"— {org}"
     )
 
 
@@ -409,6 +417,11 @@ def _logo_part():
     but the reason is logged, so a missing file does not go unnoticed.
     """
     from email.mime.image import MIMEImage
+    from app.services import org_identity
+    if not org_identity.is_eko():
+        # No. 247: Eko's logo goes on Eko's emails only; another workspace's
+        # email carries its name as text.
+        return None
     try:
         with open(LOGO_PATH, "rb") as fh:
             part = MIMEImage(fh.read(), _subtype="png")

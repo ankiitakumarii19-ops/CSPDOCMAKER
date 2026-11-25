@@ -23,6 +23,12 @@ logger = logging.getLogger(__name__)
 HIDDEN = "(hidden)"
 
 
+
+def _neutral(text):
+    """No. 247: Eko's own examples are not shown to another workspace."""
+    from app.services import org_identity
+    return org_identity.neutral(text)
+
 def _who(user: dict) -> str:
     return ((user or {}).get("sub") or (user or {}).get("email") or "").lower()
 
@@ -64,7 +70,7 @@ async def describe(session) -> dict:
             from_server = row is None and eko and bool(getattr(server, c.key, ""))
             items.append({
                 "key": c.key, "group": c.group, "label": c.label,
-                "help": c.help, "kind": c.kind, "choices": list(c.choices),
+                "help": _neutral(c.help), "kind": c.kind, "choices": list(c.choices),
                 "value": None, "secret_set": row is not None or from_server,
                 "own": row is not None, "from_server": from_server,
                 "changed_by": row.updated_by if row else None,
@@ -78,7 +84,7 @@ async def describe(session) -> dict:
         else:
             value, own = catalog.blank(c), False
         items.append({
-            "key": c.key, "group": c.group, "label": c.label, "help": c.help,
+            "key": c.key, "group": c.group, "label": c.label, "help": _neutral(c.help),
             "kind": c.kind, "choices": list(c.choices), "value": value,
             "own": own, "from_server": not own and eko and c.eko_only
             and bool(value),

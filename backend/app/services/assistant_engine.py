@@ -53,21 +53,21 @@ LIST_LIMIT = 10
 HELP = (
     "I answer from the app's own records and the Knowledge Base — no AI, "
     "so the same question always gets the same answer. Try:\n"
-    "- **Documents of 1A850466** (with Download buttons)\n"
-    "- **RBO number of 1A851727** — also RM, ASM, DC, branch, mobile, "
+    "- **Documents of 1A000101** (with Download buttons)\n"
+    "- **RBO number of 1A000202** — also RM, ASM, DC, branch, mobile, "
     "email, address\n"
-    "- **Is the photo of 1A851727 on file?** / **What is missing for "
-    "1A851727?**\n"
-    "- **Were the documents of 1A851727 mailed?** / **WhatsApp status of "
-    "1A851727**\n"
-    "- **How many CSPs in Bihar?** / **CSPs without photo**\n"
-    "- **Remind 1A851727 to send their photo by Friday** (a draft; nothing "
+    "- **Is the photo of 1A000202 on file?** / **What is missing for "
+    "1A000202?**\n"
+    "- **Were the documents of 1A000202 mailed?** / **WhatsApp status of "
+    "1A000202**\n"
+    "- **How many CSPs in Sample State?** / **CSPs without photo**\n"
+    "- **Remind 1A000202 to send their photo by Friday** (a draft; nothing "
     "goes until you press Send)\n"
     "- Questions about the process, e.g. **What is a BCP?**")
 
 SUGGESTIONS = [
-    "Documents of 1A850466",
-    "RBO number of 1A851727",
+    "Documents of 1A000101",
+    "RBO number of 1A000202",
     "How many CSPs without photo?",
     "What is a BCP?",
 ]
@@ -85,7 +85,7 @@ class Answer:
 
 # ---- reading the question ----------------------------------------------------------
 
-# A CSP code has letters and digits (1A850466; a Sub-KO adds 1-2). A mobile
+# A CSP code has letters and digits (1A000101; a Sub-KO adds 1-2). A mobile
 # number is digits only, so it is never taken for a code.
 CODE = re.compile(r"\b(?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{6,12}\b")
 
@@ -542,7 +542,7 @@ async def _draft(session, user, question: str, t: str,
                       kind="draft")
     if csp is None:
         return Answer("Which CSP should get the message? Say it with the "
-                      "CSP code, e.g. **Remind 1A851727 to send their photo "
+                      "CSP code, e.g. **Remind 1A000202 to send their photo "
                       "by Friday**.", kind="draft")
     code = next((c for c in _codes(question)), None)
     said = _message_words(question, code)
@@ -794,9 +794,8 @@ async def _setup(session, user, question: str, t: str) -> Optional[Answer]:
             f"Connect tab “{tab}” as your CSP sheet",
             "The sheet opens and has this tab. Once connected you can see and "
             "edit it on Setup → Sheets.",
-            ["Note: the app does not yet load a new workspace's CSPs from its "
-             "own sheet into the app (only Eko's sheet is read) — see "
-             "**setup status**."])
+            ["Next: once it is connected and read, your CSPs appear in the "
+             "app — see **setup status**."])
         return Answer("The sheet opens. Press **Do it** to connect it, or "
                       "Cancel.", [card], kind="setup")
 
@@ -889,7 +888,7 @@ async def _setting_by_chat(session, user, question: str, t: str,
         now = getattr(get_settings(), s.key)
         return Answer(
             f"**{s.label}** — {s.help} Now: "
-            f"{settings_catalog.show(s, now)} (standard, Eko's: "
+            f"{settings_catalog.show(s, now)} (standard: "
             f"{settings_catalog.show(s, workspace_settings.standard_value(s.key))})."
             f" What changing it does: {s.effect} Change it on Setup → "
             "Settings, or ask me “set " + s.label.lower() + " to …”.",
@@ -926,7 +925,7 @@ async def _setting_by_chat(session, user, question: str, t: str,
         f"Change “{s.label}”",
         f"Now: {settings_catalog.show(s, now)} → new: "
         f"{settings_catalog.show(s, parsed.value)}. {s.effect}",
-        [f"Standard (Eko's) value: {settings_catalog.show(s, standard)}. "
+        [f"Standard value: {settings_catalog.show(s, standard)}. "
          "You can undo this on Setup → Settings → History."])
     return Answer("Here is the change. Press **Do it** to save it, or "
                   "Cancel.", [card], kind="setup")

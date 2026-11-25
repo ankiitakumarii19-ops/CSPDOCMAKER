@@ -247,7 +247,7 @@ async def test_a_sheet_is_checked_before_it_is_offered(client, db, monkeypatch):
 
     [card] = (await _reply(client, f"connect sheet {URL} tab KOData"))["cards"]
     assert card["kind"] == "connect_sheet"
-    assert "does not yet load" in card["extra"][0]
+    assert "once it is connected and read" in card["extra"][0]  # No. 247
     assert (await _do(client, card)).json()["ok"]
     db.expire_all()
     [source] = db.execute(select(DataSource)).scalars().all()

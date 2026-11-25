@@ -34,6 +34,7 @@ from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 from app import telemetry
 
+from app.services import org_identity  # No. 247
 logger = logging.getLogger(__name__)
 
 LINK_DAYS = 7
@@ -133,7 +134,7 @@ def notify(session, csp, job, document_names: List[str],
             return _skip(csp, "no usable mobile number")
 
         outcome = wa.send(
-            number, BODY,
+            number, org_identity.swap(BODY),
             {"name": csp.name or csp.csp_id,
              "documents": ", ".join(document_names),
              "email": csp.email or "your email"},

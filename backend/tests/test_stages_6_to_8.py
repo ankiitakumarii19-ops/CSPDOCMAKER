@@ -181,7 +181,9 @@ async def test_the_apps_own_name_and_colour(strict_client, ws):
     assert me["look"] == {"name": "Kiosk Docs", "color": "#1E40AF",
                           "theme": "classic", "style": "standard",
                           "color_2": "", "own_colours": True, "logo": None,
-                          "org_name": ws.name}
+                          "org_name": ws.name,
+                          # No. 247: whose name CSP messages carry.
+                          "sender_org": ws.name, "sender_short": ws.name}
     r = await strict_client.put("/api/admin/settings/brand_color",
                                 json={"value": "blue"}, headers=_h(ws))
     assert r.status_code == 400

@@ -33,11 +33,11 @@ interface Entry {
 }
 
 const EXAMPLES = [
-  "Do you have the documents of CSP 1A850466?",
-  "RBO contact number of CSP 1A851727",
-  "What is missing for 1A851727?",
+  "Do you have the documents of CSP 1A000101?",
+  "RBO contact number of CSP 1A000202",
+  "What is missing for 1A000202?",
   "How many CSPs without photo?",
-  "Remind CSP 1A851727 to send their photo by Friday",
+  "Remind CSP 1A000202 to send their photo by Friday",
   "What is a BCP?",
 ];
 
@@ -736,7 +736,7 @@ export default function AssistantChat() {
               }}
               rows={1}
               maxLength={2000}
-              placeholder="e.g. RBO number of 1A851727"
+              placeholder="e.g. RBO number of 1A000202"
               className="flex-1 resize-none px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white focus:outline-none focus:border-eko"
             />
             <button
