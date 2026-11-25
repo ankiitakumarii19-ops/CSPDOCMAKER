@@ -12,6 +12,7 @@ import FreshnessBadges from "../components/FreshnessBadges";
 import AssistantChat from "../components/AssistantChat";
 import CspPhoto from "../components/CspPhoto";
 import RmMessages from "../components/RmMessages";
+import RmDashboard from "../components/RmDashboard";
 import Database from "../admin/Database";
 import Sheets from "../admin/Sheets";
 import { api, DOCUMENT_TYPES } from "../lib/api";
@@ -51,6 +52,9 @@ interface AlertItem {
     fields: { field: string; label: string; type: string; blocks: string[] }[];
   };
 }
+
+// The RM portal's tabs (No. 234: Dashboard first).
+type RmView = "dashboard" | "documents" | "sheets" | "database" | "messages";
 
 type Step =
   | "dashboard"
@@ -98,12 +102,19 @@ export default function RMDashboard() {
   // CSP's record, read-only. The documents flow keeps its place meanwhile.
   // The tab and the CSP open are in the address (?view=…&csp=…), so a
   // refresh comes back to them instead of an empty Documents tab (No. 171).
-  const [view, setView] = useUrlParam("view", "documents");
-  // "messages" (No. 192): send a CSP their verification link, any number of times.
-  const rmView = (["sheets", "database", "messages"].includes(view) ? view : "documents") as
-    "documents" | "sheets" | "database" | "messages";
-  const setRmView = (next: "documents" | "sheets" | "database" | "messages") => setView(next);
+  const [view, setView] = useUrlParam("view", "");
   const [cspParam, setCspParam] = useUrlParam("csp");
+  // "messages" (No. 192): send a CSP their verification link, any number of times.
+  // "dashboard" (No. 234): CSPs left to send documents — the first screen,
+  // unless the address names a CSP (then its card on Documents).
+  const rmView = (
+    ["dashboard", "documents", "sheets", "database", "messages"].includes(view)
+      ? view
+      : cspParam
+        ? "documents"
+        : "dashboard"
+  ) as RmView;
+  const setRmView = (next: RmView) => setView(next);
   const [theme, toggleTheme] = useTheme();
   const [alertsMenu, setAlertsMenu] = useState(false);
   const [logoutMenu, setLogoutMenu] = useState(false);
@@ -405,7 +416,7 @@ export default function RMDashboard() {
             <i className={`fas ${navMenu ? "fa-xmark" : "fa-bars"}`}></i>
           </button>
           <BrandLogo height={36} />
-          <span className="font-bold text-lg hidden xl:block text-gray-900 dark:text-white whitespace-nowrap">
+          <span className="font-bold text-lg hidden 2xl:block text-gray-900 dark:text-white whitespace-nowrap">
             {access?.look?.name || "CSPdocMaker"}
             <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
               RM Portal
@@ -415,6 +426,7 @@ export default function RMDashboard() {
           <nav className="hidden lg:flex items-center gap-1 shrink-0">
             {(
               [
+                ["dashboard", "fa-chart-pie", "Dashboard"],
                 ["documents", "fa-file-signature", "Documents"],
                 ["messages", "fa-paper-plane", "Messages"],
                 ["sheets", "fa-table", "Sheets"],
@@ -424,14 +436,16 @@ export default function RMDashboard() {
               <button
                 key={view}
                 onClick={() => setRmView(view)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                title={label}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all ${
                   rmView === view
                     ? "bg-eko/10 text-eko"
                     : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
               >
-                <i className={`fas ${icon} mr-1.5 text-xs`}></i>
-                <span>{label}</span>
+                <i className={`fas ${icon} xl:mr-1.5 text-xs`}></i>
+                {/* No. 234: icons only on a mid-size screen, so the search keeps its room. */}
+                <span className="hidden xl:inline">{label}</span>
               </button>
             ))}
           </nav>
@@ -533,7 +547,7 @@ export default function RMDashboard() {
             className="flex items-center gap-3 cursor-pointer group relative"
             onClick={() => setLogoutMenu(!logoutMenu)}
           >
-            <div className="text-right hidden xl:block">
+            <div className="text-right hidden 2xl:block">
               <div className="text-sm font-semibold text-gray-900 dark:text-white">
                 {user.name}
               </div>
@@ -559,6 +573,7 @@ export default function RMDashboard() {
         <nav className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex flex-col gap-1 z-20">
           {(
             [
+              ["dashboard", "fa-chart-pie", "Dashboard"],
               ["documents", "fa-file-signature", "Documents"],
               ["messages", "fa-paper-plane", "Messages"],
               ["sheets", "fa-table", "Sheets"],
@@ -585,6 +600,11 @@ export default function RMDashboard() {
       {/* RM Main Scrollable Area */}
       {/* Room at the bottom for the chat button and the phone's bar (No. 176). */}
       <main className="flex-grow overflow-y-auto px-3 sm:px-6 lg:px-8 pt-4 lg:pt-8 pb-[calc(6rem+env(safe-area-inset-bottom))]">
+        {rmView === "dashboard" && (
+          <div className="max-w-7xl mx-auto">
+            <RmDashboard onOpenCsp={openFromSearch} />
+          </div>
+        )}
         {rmView === "sheets" && (
           <div className="max-w-6xl mx-auto">
             <Sheets canManage={false} />

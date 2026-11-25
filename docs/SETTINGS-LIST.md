@@ -42,6 +42,9 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `HEALTH_EMAIL_HOUR` | 9 | **Workspace setting now** | Setup → Settings → Look and weekly email: “Weekly email: hour” |
 | `HEALTH_EMAIL_ON` | True | **Workspace setting now** | Setup → Settings → Look and weekly email: “Weekly health email” |
 | `HEALTH_EMAIL_TO` | '' | **Workspace setting now** | Setup → Settings → Look and weekly email: “Weekly email: to” |
+| `CONTACT_REPORT_ON` (No. 237) | True | **Workspace setting** | Setup → Settings → Look and weekly email: “Daily contact email” |
+| `CONTACT_REPORT_HOUR` (No. 237) | 20 | **Workspace setting** | Setup → Settings → Look and weekly email: “Daily contact email: hour” |
+| `CONTACT_REPORT_TO` (No. 237) | '' | **Workspace setting** | Setup → Settings → Look and weekly email: “Daily contact email: to” (blank = every Super Admin) |
 | `INFO_AUTO_FIX_ENABLED` | True | **Workspace setting now** | Setup → Settings → Fixing data by itself: “Fix the lookup table by itself” |
 | `JOB_CONTACT_LOOP_EVERY` | 0 | **Workspace setting now** | Setup → Settings → Background jobs: “Finding another way to reach a CSP: at most every” |
 | `JOB_CONTACT_LOOP_ON` | True | **Workspace setting now** | Setup → Settings → Background jobs: “Finding another way to reach a CSP” |
@@ -88,7 +91,7 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `RESEND_FAILED_BATCH` | 20 | **Workspace setting now** | Setup → Settings → When a message fails: “Failed WhatsApps sent again per run” |
 | `RESEND_FAILED_ENABLED` | True | **Workspace setting now** | Setup → Settings → When a message fails: “Send a failed WhatsApp again” |
 | `RESEND_FIRST_WAIT_MINUTES` (was in the code) | 30 | **Workspace setting now** | Setup → Settings → When a message fails: “First wait before sending again” |
-| `RESEND_GIVE_UP_DAYS` (was in the code) | 7 | **Workspace setting now** | Setup → Settings → When a message fails: “Stop sending again after” |
+| `RESEND_HANDOVER_TRIES` (No. 237; replaces `RESEND_GIVE_UP_DAYS` - a failed WhatsApp is never given up on) | 5 | **Workspace setting** | Setup → Settings → When a message fails: “Try the alternate number after” |
 | `RESEND_LONGEST_WAIT_HOURS` (was in the code) | 4 | **Workspace setting now** | Setup → Settings → When a message fails: “Longest wait between tries” |
 | `SEND_DAYS` | 'mon,tue,wed,thu,fri,sat,sun' | **Workspace setting now** | Setup → Settings → Sending hours: “Sending days” |
 | `SEND_HOLIDAYS` | '' | **Workspace setting now** | Setup → Settings → Sending hours: “Holidays (no sending)” |

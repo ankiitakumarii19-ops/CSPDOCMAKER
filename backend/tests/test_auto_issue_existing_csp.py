@@ -26,7 +26,10 @@ from app.models.csp_record import CSPRecord
 from app.workspace_context import workspace
 from tests.conftest import DEFAULT_WORKSPACE_ID
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 
 @pytest.fixture(scope="module")

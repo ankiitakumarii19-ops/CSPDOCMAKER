@@ -168,6 +168,8 @@ def _send_email(to: str, subject: str, body: str, *,
     track = email_log.tracker(get_settings().smtp_from_email
                               or get_settings().smtp_username)
     from app.services import send_guard
+    from app.services.csp_mapping import clean_email
+    to = clean_email(to)                          # No. 237: "mailto:..."
     real, to = to, send_guard.email_to(to)        # No. 215: test mode
     if to != real:
         subject = send_guard.test_prefix(real) + subject

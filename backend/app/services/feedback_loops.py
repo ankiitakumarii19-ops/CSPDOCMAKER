@@ -21,6 +21,12 @@ again: the documents email to the new address, the "documents ready"
 WhatsApp to the new number. Anything else that failed (a details request)
 is replaced by the ask itself.
 
+When every way has been tried — the main number, each alternate, and an
+email that bounced or is not there — the CSP is marked UNREACHABLE with why
+(No. 231), nothing more goes to the bad number / address, and the Admins see
+them under "Can't reach". A new number / email in CSPDATA sends again by
+itself; a new alternate (Calling sheet, Zoho) is looked for once a day.
+
 Rules kept: nothing goes to a CSP on hold; EMAILS_PAUSED holds emails (and
 does not use up a try); at most CONTACT_LOOP_BATCH sends per run; at most 3
 tries per fix; never from a copy of the app that is not on a public address
@@ -51,6 +57,13 @@ WHATSAPP_UNDELIVERED = "whatsapp_undelivered"
 EMAIL_BOUNCED = "email_bounced"
 PROBLEM_LABEL = {WHATSAPP_UNDELIVERED: "WhatsApp did not reach the phone",
                  EMAIL_BOUNCED: "Email bounced"}
+
+# No. 231: every way was tried — main number, each alternate, email — and
+# none reaches the CSP. Shown to Admins with why; looked at again by itself
+# when CSPDATA gets a new number / email, and once a day for a new alternate.
+UNREACHABLE = "unreachable"
+UNREACHABLE_PREFIX = "Can't reach: "
+RECHECK_UNREACHABLE_HOURS = 24
 
 
 # ---- loop 1: suggested INFO fixes ---------------------------------------
@@ -175,7 +188,8 @@ def _phone(value) -> str:
 
 
 def _email(value) -> str:
-    return (value or "").strip().lower()
+    from app.services.csp_mapping import clean_email
+    return clean_email(value).lower()
 
 
 def find_problems(session) -> int:
@@ -207,11 +221,14 @@ def find_problems(session) -> int:
         # "Did not reach the phone", or no delivery after 24 hours — or
         # refused at send time because the number is not on WhatsApp
         # (No. 164: every other send error is tried again instead).
+        # No. 237: also a number the send-again job gave up on after its
+        # tries (HANDED_OVER) — the alternate number, then email, is next.
         stage = message_log.stage(m)
         if (phone and (csp_id, phone) not in tried
                 and (stage == message_log.NOT_RECEIVED
                      or (stage == message_log.NOT_SENT
-                         and resend_failed.not_on_whatsapp(m.send_error)))):
+                         and (resend_failed.not_on_whatsapp(m.send_error)
+                              or m.retry_status == resend_failed.HANDED_OVER)))):
             found.append((csp_id, WHATSAPP_UNDELIVERED, phone, m.kind))
 
     emails = session.execute(
@@ -411,16 +428,91 @@ def _calling_numbers(record) -> List[str]:
     return out
 
 
+# ---- an alternate-number column in the CSP sheet (No. 237) -------------
+
+# A CSP-sheet column is an alternate number of the CSP's own when its heading
+# says so; two numbers in one cell are split by "/" ("98.../ 70...").
+_ALTERNATE_HEADING = ("alternate", "alternative", "alt no", "alt mob",
+                      "alt. no", "alt number", "other number", "other mobile",
+                      "second number", "second mobile", "whatsapp")
+
+
+def sheet_alternate_columns(headings: List[str]) -> List[str]:
+    """The CSP's own alternate-number columns of the CSP sheet (never the
+    main mobile column, never a DC / RM / ASM / branch number)."""
+    from app.services import csp_mapping
+    out = []
+    for h in calling_phone_columns(headings):
+        n = " ".join((h or "").lower().replace("_", " ").split())
+        if csp_mapping.field_for_header(h) == "mobile":
+            continue                         # the main number itself
+        if any(w in n for w in _ALTERNATE_HEADING):
+            out.append(h)
+    return out
+
+
+def _csp_sheet_rows() -> List[Dict[str, str]]:
+    """Every row of the CSP sheet (its own function so tests replace it)."""
+    from app.services import csp_gsheet_service
+    return csp_gsheet_service.read_csp_sheet()
+
+
+def _sheet_alternates(record) -> List[str]:
+    """The numbers in the CSP's alternate-number column(s) of the CSP sheet
+    (KOData / SUBKOData), in order — "/" separates two. Read once per run.
+    Never raises: a sheet that cannot be read is logged."""
+    if "csp_rows" not in _calling_cache:
+        rows_by_code: Dict[str, List[str]] = {}
+        try:
+            rows = _csp_sheet_rows()
+        except Exception as e:
+            logger.error("feedback_loops: the CSP sheet could not be read for "
+                         "alternate numbers: %s: %s", type(e).__name__, e)
+            rows = []
+        columns = sheet_alternate_columns(list(rows[0].keys())) if rows else []
+        if columns:
+            logger.info("feedback_loops: CSP sheet alternate-number columns: %s",
+                        columns)
+        for r in rows:
+            code = (r.get("CSP Code") or "").strip().upper()
+            if code and columns:
+                rows_by_code[code] = [r.get(c, "") for c in columns]
+        _calling_cache["csp_rows"] = rows_by_code
+    out: List[str] = []
+    code = (record.csp_code or record.csp_id or "").strip().upper()
+    for cell in _calling_cache["csp_rows"].get(code, []):
+        for n in _numbers(cell):
+            if n not in out:
+                out.append(n)
+    return out
+
+
+def alternate_numbers(record) -> List[str]:
+    """Every number known for the CSP besides the main one, in the order
+    they are tried (Zoho's are looked up only when needed): the other
+    numbers in the mobile cell, the CSP sheet's alternate column, the
+    Calling sheet."""
+    main = _phone(record.mobile)
+    out: List[str] = []
+    for n in (_numbers(record.mobile) + _sheet_alternates(record)
+              + _calling_numbers(record)):
+        if n != main and n not in out:
+            out.append(n)
+    return out
+
+
 def next_alternate(session, fix: ContactFix, record) -> Optional[str]:
     """The next number to try for this CSP, or None: the other numbers in
-    their mobile cell first, then their Calling-sheet row's (No. 157), then
-    their Zoho Lead's. Never the bad one, one already tried, or one with a
-    problem of its own."""
+    their mobile cell first, then the CSP sheet's alternate-number column
+    (No. 237, "/" between two), then their Calling-sheet row's (No. 157),
+    then their Zoho Lead's. Never the bad one, one already tried, or one
+    with a problem of its own."""
     bad_numbers = {f.bad_value for f in session.execute(select(ContactFix).where(
         ContactFix.csp_id == record.csp_id,
         ContactFix.problem == WHATSAPP_UNDELIVERED)).scalars()}
     skip = bad_numbers | set(fix.alternates_tried or []) | {fix.bad_value}
-    for n in _numbers(record.mobile) + _calling_numbers(record):
+    for n in (_numbers(record.mobile) + _sheet_alternates(record)
+              + _calling_numbers(record)):
         if n not in skip:
             return n
     for n in _zoho_numbers(session, record):
@@ -543,6 +635,141 @@ def _ask(session, fix: ContactFix, record) -> tuple:
     return None, f"waiting: {reason}"
 
 
+def why_unreachable(session, record, fixes: List[ContactFix]) -> List[str]:
+    """Why none of the ways reaches this CSP, one plain line each — or []
+    when some way is still left (a working or untried email, a WhatsApp
+    number not known to be bad, an alternate not tried yet, a correction on
+    its way). Email is looked at first: it costs nothing, and only when it
+    is dead are the alternate numbers (Calling sheet, Zoho) searched."""
+    from app.services import whatsapp_platform as wa
+
+    if any(f.status in ("trying_alternate", "corrected") for f in fixes):
+        return []                      # something is being tried right now
+    stuck = [f for f in fixes if f.status in ("open", "asked", "stopped",
+                                              UNREACHABLE)]
+
+    email = _email(record.email)
+    bounced = [f for f in stuck if f.problem == EMAIL_BOUNCED and f.bad_value == email]
+    if not email:
+        email_says = ["no email address in CSPDATA"]
+    elif bounced:
+        email_says = [f"the email to {email} bounced"]
+    else:
+        return []
+
+    mobile = _phone(record.mobile)
+    bad_whatsapp = [f for f in stuck
+                    if f.problem == WHATSAPP_UNDELIVERED and f.bad_value == mobile]
+    if not mobile and not wa.phone_for_whatsapp(record.mobile or ""):
+        whatsapp_says = ["no mobile number in CSPDATA"]
+    elif not bad_whatsapp:
+        return []                      # the number is not known to be bad
+    else:
+        fix = bad_whatsapp[0]
+        if next_alternate(session, fix, record):
+            return []                  # an alternate is still to be tried
+        whatsapp_says = [f"WhatsApp did not reach the main number {fix.bad_value}"]
+        whatsapp_says += [f"the alternate number {n} did not reach them either"
+                          for n in (fix.alternates_tried or [])]
+        if not fix.alternates_tried:
+            whatsapp_says.append("no other number in CSPDATA, the Calling "
+                                 "sheet or Zoho")
+    stopped = [f"gave up after {f.tries} failed tries: "
+               + (f.note or "").split(" — ", 1)[-1][:200]
+               for f in stuck if f.status == "stopped"]
+    return whatsapp_says + email_says + stopped
+
+
+def check_unreachable(session, now: datetime) -> int:
+    """Mark the CSPs no way reaches (No. 231). Their open / asked fixes
+    become UNREACHABLE with why — nothing more is sent to a bad number or a
+    bounced address. One already marked is looked at again once a day (a
+    new alternate may have appeared in the Calling sheet or Zoho); a new
+    number / email in CSPDATA is picked up by run() at once. Returns how
+    many CSPs were newly marked."""
+    from datetime import timedelta
+
+    from app.models.csp_record import CSPRecord
+
+    stuck_ids = set(session.execute(select(ContactFix.csp_id).where(
+        ContactFix.status.in_(("open", "asked", "stopped", UNREACHABLE)))).scalars())
+    newly = 0
+    for csp_id in sorted(stuck_ids):
+        fixes = session.execute(select(ContactFix).where(
+            ContactFix.csp_id == csp_id)).scalars().all()
+        marked = [f for f in fixes if f.status == UNREACHABLE]
+        ended = [f for f in fixes if f.status in (UNREACHABLE, "stopped")]
+        if (ended and len(ended) == len([f for f in fixes if f.status in (
+                "open", "asked", "stopped", UNREACHABLE)])
+                and all(f.updated_at and f.updated_at > now - timedelta(
+                    hours=RECHECK_UNREACHABLE_HOURS) for f in ended)):
+            continue                   # looked at within the day
+        record = session.execute(select(CSPRecord).where(
+            CSPRecord.csp_id == csp_id)).scalar_one_or_none()
+        if record is None:
+            continue
+        try:
+            reasons = why_unreachable(session, record, fixes)
+        except Exception as e:         # logged; the CSP is looked at next run
+            logger.error("feedback_loops: could not check whether %s can be "
+                         "reached: %s: %s", csp_id, type(e).__name__, e,
+                         exc_info=True)
+            continue
+        if reasons:
+            note = UNREACHABLE_PREFIX + "; ".join(reasons)
+            fresh = False
+            for f in fixes:
+                if f.status in ("open", "asked"):
+                    f.status, fresh = UNREACHABLE, True
+                if f.status == UNREACHABLE:
+                    f.note, f.updated_at = note, now
+                elif f.status == "stopped":
+                    f.updated_at = now     # looked at; again in a day
+            if fresh and not marked:
+                newly += 1
+                logger.warning("feedback_loops: %s cannot be reached after "
+                               "trying everything — %s", csp_id, note)
+        else:
+            for f in marked:
+                f.status, f.updated_at = "open", now
+                f.note = "a new way to reach them was found — trying again"
+                logger.info("feedback_loops: %s — a new way to reach them; "
+                            "trying again", csp_id)
+    session.flush()
+    return newly
+
+
+def unreachable_list(session) -> List[dict]:
+    """The CSPs no way reaches, with why and what did not arrive (for the
+    Admin page). Includes fixes the loop gave up on after its tries."""
+    from app.models.csp_record import CSPRecord
+
+    rows = session.execute(
+        select(ContactFix, CSPRecord.name, CSPRecord.rm_email)
+        .outerjoin(CSPRecord, CSPRecord.csp_id == ContactFix.csp_id)
+        .where(ContactFix.status.in_((UNREACHABLE, "stopped")))
+        .order_by(ContactFix.created_at)).all()
+    out: Dict[str, dict] = {}
+    for f, name, rm in rows:
+        item = out.setdefault(f.csp_id, {
+            "csp_id": f.csp_id, "csp_name": name or "", "rm_email": rm or "",
+            "since": f.created_at.isoformat() if f.created_at else None,
+            "reasons": [], "did_not_arrive": [], "checked_at": None})
+        note = f.note or ""
+        reasons = (note[len(UNREACHABLE_PREFIX):].split("; ")
+                   if note.startswith(UNREACHABLE_PREFIX)
+                   else [f"{PROBLEM_LABEL.get(f.problem, f.problem)} ({f.bad_value}) — {note}"])
+        for r in reasons:
+            if r and r not in item["reasons"]:
+                item["reasons"].append(r)
+        if f.failed_kind and f.failed_kind not in item["did_not_arrive"]:
+            item["did_not_arrive"].append(f.failed_kind)
+        at = f.updated_at.isoformat() if f.updated_at else None
+        if at and (item["checked_at"] is None or at > item["checked_at"]):
+            item["checked_at"] = at
+    return list(out.values())
+
+
 def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
     """One pass of the contact loop for the workspace in force."""
     from app.models.csp_record import CSPRecord
@@ -552,12 +779,16 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
     counts = {"found": find_problems(session), "asked": 0, "corrected": 0,
               "resent": 0, "stopped": 0}
     session.commit()
+    # Before anything is sent: a CSP no way reaches gets nothing more to a
+    # bad number / bounced address, and is listed for the Admins (No. 231).
+    counts["unreachable"] = check_unreachable(session, now)
+    session.commit()
     budget = max(int(settings.contact_loop_batch), 0)
 
     fixes = session.execute(
         select(ContactFix).where(
             ContactFix.status.in_(("open", "asked", "corrected",
-                                   "trying_alternate")))
+                                   "trying_alternate", UNREACHABLE)))
         .order_by(ContactFix.created_at)).scalars().all()
     for fix in fixes:
         record = session.execute(select(CSPRecord).where(
@@ -583,10 +814,13 @@ def run(session, settings, now: Optional[datetime] = None) -> Dict[str, int]:
                 continue
         current = (_phone(record.mobile) if fix.problem == WHATSAPP_UNDELIVERED
                    else _email(record.email))
-        if fix.status in ("open", "asked") and current and current != fix.bad_value:
+        if (fix.status in ("open", "asked", UNREACHABLE)
+                and current and current != fix.bad_value):
             fix.status, fix.corrected_value = "corrected", current
             fix.note = "corrected in the records"
             counts["corrected"] += 1
+        if fix.status == UNREACHABLE:
+            continue                  # waits for a new number / email
         if fix.status == "open" and record.send_hold:
             fix.note = f"waiting: {record.send_hold}"
             continue
@@ -671,6 +905,7 @@ def list_contact_fixes(session, status: str = "", limit: int = 100) -> dict:
         select(ContactFix.status, func.count()).group_by(ContactFix.status)).all())
     return {
         "totals": totals,
+        "unreachable": unreachable_list(session),   # No. 231
         "fixes": [{
             "csp_id": f.csp_id,
             "csp_name": name or "",
@@ -771,6 +1006,9 @@ def contact_status(session) -> dict:
         "in_progress": len(busy),
         "fixed": sum(1 for f in fixes if f.status in ("resent", "done")),
         "stopped": sum(1 for f in fixes if f.status == "stopped"),
+        # CSPs no way reaches, after trying everything (No. 231).
+        "unreachable": len({f.csp_id for f in fixes
+                            if f.status in (UNREACHABLE, "stopped")}),
         "waiting": [{"note": n, "count": c} for n, c in waiting.most_common(3)],
         "found": len(fixes),
     }

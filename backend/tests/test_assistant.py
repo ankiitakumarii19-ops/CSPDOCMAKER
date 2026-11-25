@@ -25,7 +25,10 @@ from app.models.whatsapp_message import WhatsAppMessage
 from app.services import assistant_tools, whatsapp_platform
 from tests.conftest import MINIMAL_PDF
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 MINE, THEIRS, NOBODYS, NO_MOBILE = "1A910001", "1A910002", "1A910003", "1A910004"
 

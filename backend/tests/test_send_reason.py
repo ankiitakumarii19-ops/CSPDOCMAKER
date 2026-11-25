@@ -63,10 +63,14 @@ def _capture(monkeypatch):
 
 
 def test_the_contact_loop_says_why(ldb, senders, monkeypatch):
+    # Two CSPs: one whose email bounced, one whose WhatsApp did not arrive.
+    # (One CSP with both, and no alternate, is "can't reach" — No. 231 /
+    # 237 — and is sent nothing more.)
     seen = _capture(monkeypatch)
     _csp(ldb)
     _bounce(ldb)                              # email bounced -> WhatsApp ask
-    _wa(ldb, phone="919812345601")            # WhatsApp unreachable -> email
+    _csp(ldb, code="1A996002", mobile="9812345609")
+    _wa(ldb, phone="919812345609", code="1A996002")   # unreachable -> email
     fl.run(ldb, SETTINGS)
     assert sorted(seen) == ["email_bounced", "whatsapp_unreachable"]
 

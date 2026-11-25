@@ -106,6 +106,14 @@ def _no_photos_from_the_real_sheet(monkeypatch):
                         lambda refresh=False: empty)
 
 
+@pytest.fixture(autouse=True)
+def _no_alternates_from_the_real_sheet(monkeypatch):
+    """The contact loop reads the live CSP sheet's alternate-number column
+    (No. 237). Tests never do: no rows unless a test says otherwise."""
+    from app.services import feedback_loops
+    monkeypatch.setattr(feedback_loops, "_csp_sheet_rows", lambda: [])
+
+
 @pytest.fixture
 async def db(migrated_db):
     from sqlalchemy import text
@@ -119,6 +127,40 @@ async def db(migrated_db):
         ))
         await session.commit()
         yield session
+
+
+@pytest.fixture
+async def rms_keep_to_own_csps(migrated_db):
+    """The test workspace is Eko's, where every RM acts on every CSP (No. 234).
+    Tests of the "own CSPs only" choice (No. 175 / 206, still offered on
+    Feature access) switch it on for themselves and put it back after."""
+    from sqlalchemy import text
+    from app.database import async_session_factory
+    from app.services import feature_access
+
+    async def put(scope):
+        async with async_session_factory() as session:
+            before = (await session.execute(text(
+                "SELECT record_scope FROM access_roles WHERE workspace_id = :w "
+                "AND key = 'rm'"), {"w": DEFAULT_WORKSPACE_ID})).scalar()
+            if scope is None:
+                await session.execute(text(
+                    "DELETE FROM access_roles WHERE workspace_id = :w AND "
+                    "key = 'rm'"), {"w": DEFAULT_WORKSPACE_ID})
+            else:
+                await session.execute(text(
+                    "INSERT INTO access_roles (workspace_id, key, name, "
+                    "base_role, record_scope, created_by) VALUES (:w, 'rm', "
+                    "'RM', 'rm', :s, 'test') ON CONFLICT (workspace_id, key) "
+                    "DO UPDATE SET record_scope = :s"),
+                    {"w": DEFAULT_WORKSPACE_ID, "s": scope})
+            await session.commit()
+        feature_access.forget()
+        return before
+
+    before = await put("own")
+    yield
+    await put(before)
 
 
 # A byte string that is a real, if minimal, PDF: enough for the strictness

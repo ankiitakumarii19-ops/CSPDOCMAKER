@@ -412,7 +412,10 @@ class Settings(BaseSettings):
                                            alias="RESEND_FIRST_WAIT_MINUTES")
     resend_longest_wait_hours: int = Field(default=4,
                                            alias="RESEND_LONGEST_WAIT_HOURS")
-    resend_give_up_days: int = Field(default=7, alias="RESEND_GIVE_UP_DAYS")
+    # No. 237: a failed WhatsApp is never given up on; after this many
+    # failed tries to the same number the contact loop takes over
+    # (alternate number, then email). Replaces RESEND_GIVE_UP_DAYS.
+    resend_handover_tries: int = Field(default=5, alias="RESEND_HANDOVER_TRIES")
     contact_fix_max_tries: int = Field(default=3, alias="CONTACT_FIX_MAX_TRIES")
     whatsapp_not_received_hours: int = Field(
         default=24, alias="WHATSAPP_NOT_RECEIVED_HOURS")
@@ -482,6 +485,11 @@ class Settings(BaseSettings):
     health_email_day: str = Field(default="mon", alias="HEALTH_EMAIL_DAY")
     health_email_hour: int = Field(default=9, alias="HEALTH_EMAIL_HOUR")
     health_email_to: str = Field(default="", alias="HEALTH_EMAIL_TO")
+    # No. 237: the daily contact email — messages sent today, how many
+    # times each CSP has been contacted, and who cannot be reached and why.
+    contact_report_on: bool = Field(default=True, alias="CONTACT_REPORT_ON")
+    contact_report_hour: int = Field(default=20, alias="CONTACT_REPORT_HOUR")
+    contact_report_to: str = Field(default="", alias="CONTACT_REPORT_TO")
     brand_name: str = Field(default="CSPdocMaker", alias="BRAND_NAME")
     brand_color: str = Field(default="#00B259", alias="BRAND_COLOR")
     # No. 228: the look of the app for everyone in the workspace (Setup →

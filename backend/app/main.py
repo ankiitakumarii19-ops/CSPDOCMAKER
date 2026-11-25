@@ -266,6 +266,7 @@ async def _trace_request(request, call_next):
 from app.routers.auth_router import router as auth_router
 from app.routers.profile_router import router as profile_router
 from app.routers.search_router import router as search_router
+from app.routers.rm_dashboard_router import router as rm_dashboard_router
 from app.routers.csp_router import router as csp_router
 from app.routers.document_router import router as document_router
 from app.routers.alert_router import router as alert_router
@@ -284,6 +285,7 @@ from app.routers.admin_router import router as admin_router
 app.include_router(auth_router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(profile_router)   # /api/profile — your own profile picture (No. 171)
 app.include_router(search_router)    # /api/search — the header's search across the app (No. 175)
+app.include_router(rm_dashboard_router)  # /api/rm-dashboard — CSPs still waiting for documents (No. 234)
 app.include_router(csp_router, prefix="/api/csps", tags=["CSP"])
 app.include_router(document_router)  # already has /api/documents prefix
 app.include_router(workflow_router)  # already has /api/workflows prefix

@@ -14,7 +14,10 @@ from app.models.csp_record import CSPRecord
 from app.services import csp_editor, jwt_service
 from app.services import sheet_admin_service as admin
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 RM = "rm.edit@eko.co.in"
 OTHER = "rm.other@eko.co.in"

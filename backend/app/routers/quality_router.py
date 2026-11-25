@@ -411,7 +411,7 @@ async def decide_suggestion(
             summary="Loop 2: bad numbers / bounced emails and what was done")
 async def contact_fixes(
     status_: str = Query("", alias="status",
-                         pattern="^(|open|asked|trying_alternate|corrected|resent|done|stopped)$"),
+                         pattern="^(|open|asked|trying_alternate|corrected|resent|done|stopped|unreachable)$"),
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role(*ADMINS)),
 ):

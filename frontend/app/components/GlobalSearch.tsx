@@ -101,7 +101,7 @@ export default function GlobalSearch({
       >
         <i className="fas fa-search text-xs"></i>
         <span className="flex-1 text-left truncate hidden sm:inline">Search CSPs, documents, chats…</span>
-        <kbd className="hidden md:inline text-xs px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600">Ctrl K</kbd>
+        <kbd className="hidden xl:inline shrink-0 whitespace-nowrap text-xs px-1.5 py-0.5 rounded border border-gray-300 dark:border-gray-600">Ctrl K</kbd>
       </button>
 
       {/* On <body>, not inside the header (No. 176): the header is its own

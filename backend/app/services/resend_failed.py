@@ -8,6 +8,24 @@ wording waiting for Meta's approval, ...) is tried again, with a longer
 wait each time — 30 minutes, 1 hour, 2 hours, then every 4 hours — until it
 is sent or WINDOW (7 days) has passed.
 
+Changed 25 Nov 2026 (No. 237, the owner's rule: "every
+CSP will get WhatsApp, even if it fails. You will have to try again, and if
+the main number is not reachable, then try the alternate; if the alternate
+is not available, email them"):
+
+  * there is no giving up any more — a failed WhatsApp is sent again however
+    old it is (also the ones that failed before No. 164 existed, e.g.
+    1A850674's of 17 Oct), until it goes or is no longer needed;
+  * after RESEND_HANDOVER_TRIES failed tries to the same number (5: about
+    half a day of tries) for a reason that is the number's, not the
+    platform's, that number counts as not reachable: the message is marked
+    HANDED_OVER and the contact loop takes it — the alternate number(s),
+    then email (services/feedback_loops.py). An outage of the WhatsApp
+    platform or Meta (PLATFORM_SIDE) is not the number's fault: those are
+    simply tried again on the same number;
+  * a failed REPLY to a CSP keeps the 7-day limit — it answers something
+    the CSP asked, and a month-old answer would only confuse them.
+
 Not sent again here:
 
   * a number that is not on WhatsApp — the contact loop's (alternate
@@ -39,15 +57,48 @@ from sqlalchemy import func, or_, select
 logger = logging.getLogger(__name__)
 
 # Eko's values; each workspace may set its own (No. 204):
-# RESEND_GIVE_UP_DAYS, RESEND_FIRST_WAIT_MINUTES, RESEND_LONGEST_WAIT_HOURS.
+# RESEND_FIRST_WAIT_MINUTES, RESEND_LONGEST_WAIT_HOURS, and (No. 237)
+# RESEND_HANDOVER_TRIES. WINDOW is only how far back summary() counts.
 WINDOW = timedelta(days=7)
 FIRST_WAIT = timedelta(minutes=30)
 LONGEST_WAIT = timedelta(hours=4)
 
+# No. 237: the number did not take the WhatsApp after this many tries — the
+# contact loop takes over (alternate number, then email).
+HANDED_OVER = "handed_over"
 
-def window() -> timedelta:
+# A failure that is the WhatsApp platform's or Meta's, not the number's: it
+# is tried again on the same number and never counts towards handing over.
+PLATFORM_SIDE = re.compile(
+    r"platform unreachable|could not reach|unreachable:|connect(ion)?error|"
+    r"timed? ?out|temporar|rate.?limit|too many|try again later|"
+    r"waiting for meta|approv|no active|public address|\b50[0-4]\b", re.I)
+
+
+def handover_tries() -> int:
     from app.config import get_settings
-    return timedelta(days=get_settings().resend_give_up_days)
+    return max(int(get_settings().resend_handover_tries), 1)
+
+
+def number_failures(messages, now: datetime) -> int:
+    """How many of the newest failed tries, to the same number as the last
+    one, failed for a reason that is the number's (not the platform's).
+    Messages oldest first."""
+    from app.models.whatsapp_message import SEND_PENDING
+    from app.services import message_log
+    if not messages:
+        return 0
+    phone = (messages[-1].phone or "")[-10:]
+    count = 0
+    for m in reversed(messages):
+        if message_log.stage(m, now) != message_log.NOT_SENT:
+            break
+        if (m.phone or "")[-10:] != phone:
+            break
+        if m.send_status == SEND_PENDING or PLATFORM_SIDE.search(m.send_error or ""):
+            continue
+        count += 1
+    return count
 
 # The number is not on WhatsApp (or not a number at all): the contact
 # loop's business, not something a second try fixes.
@@ -108,7 +159,8 @@ def _fixing(session) -> Set[str]:
 
 def due(session, settings, now: datetime):
     """(message, tries) for each failed message whose next try is due —
-    the newest message of each CSP's details / documents messages."""
+    the newest message of each CSP's details / documents messages. No age
+    limit (No. 237): however old, it is tried until it goes."""
     from app.models.whatsapp_message import SEND_REJECTED, WhatsAppMessage
     from app.services import message_log
 
@@ -118,8 +170,7 @@ def due(session, settings, now: datetime):
             select(WhatsAppMessage).where(
                 WhatsAppMessage.kind.in_(list(groups)),
                 WhatsAppMessage.is_test.is_(False),
-                WhatsAppMessage.csp_id.isnot(None),
-                WhatsAppMessage.sent_at >= now - window())
+                WhatsAppMessage.csp_id.isnot(None))
             .order_by(WhatsAppMessage.sent_at)).scalars():
         chains.setdefault((m.csp_id, groups[m.kind]), []).append(m)
     owned = fixing = None
@@ -141,6 +192,15 @@ def due(session, settings, now: datetime):
         if fixing is None:
             owned, fixing = _owned(session, settings), _fixing(session)
         if csp_id in fixing or (group == DETAILS and csp_id in owned):
+            continue
+        if number_failures(messages, now) >= handover_tries():
+            last.retry_status = HANDED_OVER
+            last.retry_note = (f"the number did not take the WhatsApp after "
+                               f"{handover_tries()} tries — handed to the "
+                               f"contact job: alternate number, then email")
+            logger.warning("resend_failed: %s %s for CSP %s — %s", last.kind,
+                           last.id, csp_id, last.retry_note)
+            session.commit()
             continue
         yield last, tries
 
@@ -190,9 +250,12 @@ def _due_replies(session, now: datetime):
     from app.models.csp_reply import CspReply
     from app.models.whatsapp_message import (KIND_OTHER, SEND_SENT,
                                              WhatsAppMessage)
+    # A reply answers what the CSP asked: one older than WINDOW would answer
+    # a question from long ago, so replies keep the 7-day limit (No. 237
+    # removed it only for the app's own messages).
     for reply in session.execute(select(CspReply).where(
             CspReply.status == "failed",
-            CspReply.updated_at >= now - window())
+            CspReply.updated_at >= now - WINDOW)
             .order_by(CspReply.updated_at)).scalars().all():
         if not_on_whatsapp(reply.note):
             continue
@@ -276,7 +339,7 @@ def summary(session, now: Optional[datetime] = None) -> dict:
     rows = dict(session.execute(
         select(WhatsAppMessage.send_status, func.count())
         .where(WhatsAppMessage.sent_because == send_reason.RETRY,
-               WhatsAppMessage.sent_at >= now - window())
+               WhatsAppMessage.sent_at >= now - WINDOW)
         .group_by(WhatsAppMessage.send_status)).all())
     return {"sent": rows.get(SEND_SENT, 0),
             "failed": sum(v for k, v in rows.items() if k != SEND_SENT)}

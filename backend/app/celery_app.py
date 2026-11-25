@@ -111,6 +111,12 @@ celery_app.conf.update(
             "schedule": 3600,
             "options": {"expires": 3600 - 5},
         },
+        # The daily contact email, asked every 30 minutes (No. 237).
+        "contact-report": {
+            "task": "workers.contact_report",
+            "schedule": 1800,
+            "options": {"expires": 1800 - 5},
+        },
         # Alerts to the Super Admins (No. 173).
         "send-alerts": {
             "task": "workers.send_alerts",
@@ -203,6 +209,7 @@ celery_app.conf.include = [
     "app.workers.agent_worker",
     "app.workers.whatsapp_status_worker",
     "app.workers.weekly_health_worker",
+    "app.workers.contact_report_worker",
 ]
 
 

@@ -176,7 +176,9 @@ async def test_the_apps_own_name_and_colour(strict_client, ws):
     await _set(strict_client, ws, "brand_name", "Kiosk Docs")
     await _set(strict_client, ws, "brand_color", "#1E40AF")
     me = (await strict_client.get("/api/me/access", headers=_h(ws))).json()
-    assert me["look"] == {"name": "Kiosk Docs", "color": "#1E40AF"}
+    # No. 228-229 added the Display look and design style to "look".
+    assert me["look"] == {"name": "Kiosk Docs", "color": "#1E40AF",
+                          "theme": "classic", "style": "standard"}
     r = await strict_client.put("/api/admin/settings/brand_color",
                                 json={"value": "blue"}, headers=_h(ws))
     assert r.status_code == 400

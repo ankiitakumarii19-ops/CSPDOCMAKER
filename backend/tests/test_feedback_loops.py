@@ -272,13 +272,17 @@ def test_a_number_that_later_worked_is_not_a_problem(ldb, senders):
     assert fl.run(ldb, SETTINGS)["found"] == 0
 
 
-def test_no_email_to_ask_on_waits(ldb, senders):
+def test_no_email_to_ask_on_is_reported(ldb, senders):
+    # Before No. 231 this waited quietly for ever; now, with no other number
+    # and no email, the Admins are told the CSP cannot be reached, and why.
     _csp(ldb, email=None)
     _whatsapp(ldb)
     fl.run(ldb, SETTINGS)
     fix = _fix(ldb)
-    assert (fix.status, fix.tries, fix.note) == ("open", 0,
-                                                 "no email address to ask on")
+    assert (fix.status, fix.tries) == (fl.UNREACHABLE, 0)
+    assert fix.note.startswith(fl.UNREACHABLE_PREFIX)
+    assert "no email address in CSPDATA" in fix.note
+    assert senders["ask"] == []
 
 
 def test_the_job_never_runs_from_a_laptop_or_when_off(ldb, monkeypatch):

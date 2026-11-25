@@ -187,8 +187,28 @@ def map_sheet_row(row: Dict[str, str]) -> Dict[str, str]:
     for header, value in row.items():
         field = cols.get(normalize_header(header))
         if field:
-            mapped[field] = (value or "").strip()
+            value = (value or "").strip()
+            if field in EMAIL_FIELDS:
+                value = clean_email(value)
+            mapped[field] = value
     return mapped
+
+
+# Record fields that hold an email address.
+EMAIL_FIELDS = ("email", "dc_email", "asm_email", "rm_email")
+
+_MAILTO = re.compile(r"^\s*mailto\s*:\s*", re.IGNORECASE)
+
+
+def clean_email(value) -> str:
+    """An email address as it can be sent to. A sheet cell pasted from a
+    link carries "mailto:" in front ("mailto:name@gmail.com",
+    No. 237) — removed here, so the address is the CSP's real one. Also
+    drops a "?subject=..." a mailto link may carry."""
+    text = _MAILTO.sub("", str(value or "")).strip()
+    if text != str(value or "").strip() and "?" in text:
+        text = text.split("?", 1)[0].strip()
+    return text
 
 
 def csp_id_from_row(mapped: Dict[str, str]) -> Optional[str]:

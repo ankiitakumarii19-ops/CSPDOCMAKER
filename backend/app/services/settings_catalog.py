@@ -185,11 +185,14 @@ SETTINGS: List[Setting] = [
             "Shorter = tried more often after many failures.",
             unit="hours", min=1, max=48,
             words=("longest wait", "max wait")),
-    Setting("resend_give_up_days", "retries", "Stop sending again after",
-            "After this long a failed WhatsApp is no longer sent again.",
-            "Longer = keeps trying for longer.",
-            unit="days", min=1, max=30,
-            words=("give up", "stop retrying", "retry days")),
+    Setting("resend_handover_tries", "retries", "Try the alternate number after",
+            "A failed WhatsApp is never given up on (No. 237). After this "
+            "many failed tries to the same number, the alternate number(s) "
+            "are tried, then email. A WhatsApp or Meta outage does not count.",
+            "Fewer = moves to the alternate number sooner.",
+            unit="tries", min=1, max=20,
+            words=("handover", "alternate after", "tries before alternate",
+                   "give up", "stop retrying")),
     Setting("resend_failed_batch", "retries", "Failed WhatsApps sent again per run",
             "How many are sent again each time the job runs.",
             "Higher = clears a backlog faster.",
@@ -530,6 +533,20 @@ SETTINGS += [
             "Email addresses, comma separated. Blank = every Super Admin.",
             "The weekly email goes to these addresses.", kind=TEXT, min=0,
             max=1000, words=("weekly email to",)),
+    Setting("contact_report_on", "look", "Daily contact email",
+            "Each evening: how many messages went out today, how many times "
+            "each CSP has been contacted, and who cannot be reached and why.",
+            "Off: no daily contact email.", kind=BOOL,
+            words=("daily email", "contact email", "daily report",
+                   "contact report")),
+    Setting("contact_report_hour", "look", "Daily contact email: hour",
+            "On the workspace's clock (24-hour).", "The email goes at this "
+            "hour each day.", unit="o'clock", min=0, max=23,
+            words=("daily email hour", "contact report hour")),
+    Setting("contact_report_to", "look", "Daily contact email: to",
+            "Email addresses, comma separated. Blank = every Super Admin.",
+            "The daily contact email goes to these addresses.", kind=TEXT,
+            min=0, max=1000, words=("daily email to", "contact report to")),
     Setting("brand_name", "look", "App name",
             "Shown at the top of every page (Eko: CSPdocMaker).",
             "Every page shows this name.", kind=TEXT, min=1, max=40,
@@ -702,7 +719,8 @@ def check_together(values: Dict[str, Any]) -> None:
                                         or values.get("test_mode_email")):
         raise SettingError("Set a test WhatsApp number or test email first, "
                            "then switch test mode on.")
-    for key in ("alert_to", "health_email_to", "test_mode_email"):
+    for key in ("alert_to", "health_email_to", "contact_report_to",
+                "test_mode_email"):
         for part in str(values.get(key) or "").split(","):
             part = part.strip()
             if part and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", part):

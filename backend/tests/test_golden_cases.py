@@ -170,10 +170,15 @@ def test_message(case):
 
 
 @pytest.mark.parametrize("case", _cases("access"))
-def test_access(case):
-    from app.services import csp_access
+def test_access(case, monkeypatch):
+    from app.services import csp_access, feature_access
 
     i = case["input"]
+    # Which CSPs RMs act on is the workspace's choice (No. 206 / 233): a
+    # case that names it runs with it.
+    if i.get("scope"):
+        monkeypatch.setattr(feature_access, "record_scope",
+                            lambda user, _s=i["scope"]: _s)
     csp = SimpleNamespace(rm_email=i["csp_rm_email"], rm_resolution=i["rm_resolution"])
     user = {"role": i["role"], "sub": i["user"]}
     assert csp_access.can_access(csp, user) == case["expect"]["allowed"]

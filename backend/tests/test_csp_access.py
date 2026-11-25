@@ -13,7 +13,10 @@ from app.models.enums import AccountStatus, UserRole
 from app.services import jwt_service
 from app.services.rm_resolution import BY_LHO, BY_SHEET, UNRESOLVED
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 
 @pytest.fixture(autouse=True)

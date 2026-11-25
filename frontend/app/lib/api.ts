@@ -1623,7 +1623,28 @@ class ApiClient {
     return this.request<ActionDetail>(`/alerts/${encodeURIComponent(id)}`);
   }
 
-  /** Message one CSP now (RMs: their own CSPs only). */
+  // ---- RM dashboard: CSPs still waiting for documents (No. 234) ----
+  /** Every CSP not yet sent all its documents, times contacted, counts,
+   *  a per-RM / DC / state / district table and each filter's values. */
+  async documentsLeft(params: DocumentsLeftParams) {
+    return this.request<DocumentsLeft>(`/rm-dashboard/pending?${documentsLeftQuery(params)}`);
+  }
+
+  /** The same list, every row, as a CSV file. */
+  async documentsLeftCsv(params: DocumentsLeftParams): Promise<Blob> {
+    const path = `/rm-dashboard/pending.csv?${documentsLeftQuery(params)}`;
+    const token = this.getToken();
+    const response = await this.send(`${API_BASE}${path}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) {
+      throw await this.failure(response, path, "Could not download the list");
+    }
+    return response.blob();
+  }
+
+  /** Message one CSP now (No. 234: any RM, any CSP, unless the workspace
+   *  keeps RMs to their own). */
   async messageCsp(
     cspId: string,
     body: { kind: "custom" | "details_form"; channel: string; text?: string }
@@ -2901,3 +2922,73 @@ class ApiClient {
 
 export const api = new ApiClient();
 export type { ApiError };
+
+
+// ---- RM dashboard: CSPs still waiting for documents (No. 234) ----
+
+export interface DocumentsLeftParams {
+  rm?: string;
+  dc?: string;
+  state?: string;
+  district?: string;
+  /** "" | "never" | "1-2" | "3+" */
+  contacted?: string;
+  /** "" (all) | "hide" (not on hold) | "only" (on hold only) */
+  hold?: string;
+  q?: string;
+  /** "contacts" | "-contacts" | "last_contacted" | "name" */
+  sort?: string;
+  /** "rm" | "dc" | "state" | "district" */
+  group_by?: string;
+  page?: number;
+  page_size?: number;
+}
+
+export interface DocumentsLeftRow {
+  csp_id: string;
+  csp_code: string | null;
+  name: string;
+  mobile: string | null;
+  rm: string;
+  dc: string;
+  state: string;
+  district: string;
+  origin: string;
+  on_hold: string;
+  documents_left: string[];
+  documents_sent: number;
+  documents_due: number;
+  whatsapp: number;
+  email: number;
+  contacts: number;
+  last_contacted: string | null;
+}
+
+export interface DocumentsLeft {
+  summary: {
+    left: number;
+    never: number;
+    once_or_twice: number;
+    three_plus: number;
+    on_hold: number;
+    contacts: number;
+  };
+  all_left: number;
+  old_not_listed: number;
+  groups: { name: string; left: number; never: number; contacts: number; average: number }[];
+  group_by: string;
+  options: { rm: string[]; dc: string[]; state: string[]; district: string[] };
+  total: number;
+  page: number;
+  page_size: number;
+  pages: number;
+  csps: DocumentsLeftRow[];
+}
+
+function documentsLeftQuery(params: DocumentsLeftParams): string {
+  const q = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== null && v !== "") q.set(k, String(v));
+  }
+  return q.toString();
+}

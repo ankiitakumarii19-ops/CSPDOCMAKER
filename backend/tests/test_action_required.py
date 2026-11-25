@@ -17,7 +17,10 @@ from app.models.rm_alert import MISSING_DATA, OPEN, RESOLVED, RMAlert
 from app.models.whatsapp_message import WhatsAppMessage
 from app.services import jwt_service
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 RM = "rm.one@eko.co.in"
 OTHER_RM = "rm.two@eko.co.in"

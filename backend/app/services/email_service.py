@@ -136,8 +136,10 @@ def _send_via_smtp(
     html_body: str,
     plain_body: str,
     message_id: Optional[str] = None,
+    attachments: Optional[List[tuple]] = None,
 ) -> bool:
-    """Send an email via SMTP."""
+    """Send an email via SMTP. attachments: (filename, bytes, "type/subtype")
+    each (No. 237: the daily contact email's CSV)."""
     from_email = settings.smtp_from_email or settings.smtp_username
     if not from_email:
         logger.error(
@@ -152,16 +154,28 @@ def _send_via_smtp(
         )
         return False
 
-    msg = MIMEMultipart("alternative")
+    text_part = MIMEMultipart("alternative")
+    # Attach plain text first, then HTML (email clients prefer the last alternative)
+    text_part.attach(MIMEText(plain_body, "plain", "utf-8"))
+    text_part.attach(MIMEText(html_body, "html", "utf-8"))
+    if attachments:
+        msg = MIMEMultipart("mixed")
+        msg.attach(text_part)
+        for filename, data, mime in attachments:
+            main, _, sub = (mime or "application/octet-stream").partition("/")
+            part = MIMEBase(main, sub or "octet-stream")
+            part.set_payload(data)
+            encoders.encode_base64(part)
+            part.add_header("Content-Disposition", "attachment",
+                            filename=filename)
+            msg.attach(part)
+    else:
+        msg = text_part
     msg["From"] = f"{settings.smtp_from_name} <{from_email}>"
     msg["To"] = to_email
     msg["Subject"] = subject
     if message_id:
         msg["Message-ID"] = message_id   # No. 127: matches a bounce back
-
-    # Attach plain text first, then HTML (email clients prefer the last alternative)
-    msg.attach(MIMEText(plain_body, "plain", "utf-8"))
-    msg.attach(MIMEText(html_body, "html", "utf-8"))
 
     from app import telemetry
 
@@ -428,6 +442,26 @@ def paused() -> bool:
     return bool(s.emails_paused or s.test_copy or send_guard.refusal())
 
 
+def send_with_attachment(to_email: str, subject: str, plain_body: str,
+                         data: bytes, filename: str, mime: str) -> bool:
+    """A plain-text email to a staff member with one file attached (No. 237:
+    the daily contact email). Not for CSPs. The caller checks paused()."""
+    from app.services import send_guard
+    real, to_email = to_email, send_guard.email_to(to_email)   # test mode
+    if to_email != real:
+        subject = send_guard.test_prefix(real) + subject
+    html = ('<div style="font-family:system-ui,sans-serif;font-size:14px;'
+            'line-height:1.5;white-space:pre-wrap">'
+            + plain_body.replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;") + "</div>")
+    if settings.email_method.lower().strip() == "console":
+        print(f"[CONSOLE EMAIL] To: {to_email}\nSubject: {subject}\n"
+              f"{plain_body}\n[attached: {filename}, {len(data)} bytes]")
+        return True
+    return _send_via_smtp(to_email, subject, html, plain_body,
+                          attachments=[(filename, data, mime)])
+
+
 def send_documents_email(
     to_email: str,
     csp_name: str,
@@ -450,7 +484,8 @@ def send_documents_email(
                   or settings.gmail_sender_email)
     track = email_log.tracker(from_email)
     from app.services import send_guard
-    to_email = send_guard.email_to(to_email)       # No. 215: test mode
+    from app.services.csp_mapping import clean_email
+    to_email = send_guard.email_to(clean_email(to_email))  # No. 215 / 237
     ok = _send_documents_email(to_email, csp_name, csp_id, doc_names,
                                doc_filepaths, track)
     if settings.email_method.lower().strip() != "console":

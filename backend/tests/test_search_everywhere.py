@@ -15,7 +15,10 @@ from app.models.stored_document import StoredDocument
 from app.services import jwt_service, search_match
 from tests.conftest import MINIMAL_PDF
 
-pytestmark = pytest.mark.asyncio(loop_scope="session")
+# These test the "own CSPs only" choice; Eko now lets every RM act on
+# every CSP (No. 234), so they switch it on for themselves.
+pytestmark = [pytest.mark.asyncio(loop_scope="session"),
+              pytest.mark.usefixtures("rms_keep_to_own_csps")]
 
 RM = "rm.search@eko.co.in"
 
