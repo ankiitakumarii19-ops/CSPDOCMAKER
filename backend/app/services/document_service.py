@@ -144,7 +144,8 @@ def generate_document(
     photo_path = resolve_photo(csp) if doc_type in template_service.PHOTO_MARKERS else None
     filename = f"{output_prefix(doc_type)}_{csp.csp_id}_{uuid.uuid4().hex[:8]}.docx"
     filepath = os.path.join(output_dir, filename)
-    template_service.fill_template(doc_type, values, filepath, photo_path=photo_path)
+    template_service.fill_template(doc_type, values, filepath, photo_path=photo_path,
+                                   lho=csp.lho)
     logger.info("document_service: generated %s → %s", registry.code_of(doc_type), filepath)
     return filepath
 
@@ -202,6 +203,10 @@ def generate_documents(
     """
     document_types = list(document_types)
     _check_daily_ceiling(len(document_types))
+    # No. 240 (Stage 6): the workspace's plan, when it has a monthly limit
+    # (no plan / Unlimited — Eko and every workspace today — = no limit).
+    from app.services import plan_limits
+    plan_limits.check_documents(len(document_types))
     output_dir = _ensure_output_dir(csp.csp_id)
     results: List[Tuple[DocumentType, str]] = []
 

@@ -36,12 +36,22 @@ from app.models.field_provenance import FieldCorrection, FieldProvenance
 from app.models.feedback_loop import ContactFix, CspFeedback, QualitySuggestion
 from app.models.csp_reply import CspReply
 from app.models.user_photo import UserPhoto
+from app.models.user_preference import UserPreference
+from app.models.workspace_file import WorkspaceFile
+from app.models.document_template_version import DocumentTemplateVersion
+from app.models.platform import Plan, PlatformAnnouncement, WorkspaceSubscription
 from app.models.workspace_setting import (WorkspaceSecret, WorkspaceSetting,
                                           WorkspaceSettingChange)
 from app.models.feature_access import AccessRole, FeatureAccess
 
 __all__ = [
     "UserPhoto",
+    "UserPreference",
+    "WorkspaceFile",
+    "DocumentTemplateVersion",
+    "Plan",
+    "PlatformAnnouncement",
+    "WorkspaceSubscription",
     "CspFeedback",
     "CspReply",
     "QualitySuggestion",

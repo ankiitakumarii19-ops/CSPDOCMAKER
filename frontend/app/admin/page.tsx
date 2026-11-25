@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
 import BrandLogo from "../components/BrandLogo";
+import AnnouncementBanner from "../components/AnnouncementBanner";
+import PlatformMenuItem from "../components/PlatformMenuItem";
 import AssistantChat from "../components/AssistantChat";
 import DocumentTemplates from "./DocumentTemplates";
 import AccessControl from "./AccessControl";
@@ -312,20 +314,20 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
+    <div data-shell className="flex h-screen bg-gray-50 dark:bg-navy-900 w-full overflow-hidden">
       {/* Admin Sidebar */}
       {navMenu && (
         <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setNavMenu(false)}></div>
       )}
       {/* The side menu; a drawer below 1024px (No. 176: phones and tablets). */}
-      <aside className={`w-64 max-w-[85vw] bg-navy-900 text-gray-300 flex-col shrink-0 lg:flex lg:static pt-[env(safe-area-inset-top)] lg:pt-0 ${
+      <aside data-shell-menu className={`w-64 max-w-[85vw] bg-navy-900 text-gray-300 flex-col shrink-0 lg:flex lg:static pt-[env(safe-area-inset-top)] lg:pt-0 ${
         navMenu ? "flex fixed inset-y-0 left-0 z-50 overflow-y-auto" : "hidden"}`}>
         {/* The name was being clipped by the sidebar's edge: the logo at
             36px plus the title at text-lg needed more room than w-56 left
             after its padding. */}
-        <div className="h-16 flex items-center gap-2 px-4 bg-navy-800 border-b border-gray-700 overflow-hidden">
-          <BrandLogo height={30} className="shrink-0" />
-          <span className="font-bold text-base text-white whitespace-nowrap">
+        <div data-shell-brand className="h-16 flex items-center gap-2 px-4 bg-navy-800 border-b border-gray-700 overflow-hidden">
+          <BrandLogo height={30} className="shrink-0" logo={access?.look?.logo} name={access?.look?.org_name} />
+          <span data-shell-name className="font-bold text-base text-white whitespace-nowrap">
             {access?.look?.name || "CSPdocMaker"}
           </span>
         </div>
@@ -624,7 +626,7 @@ export default function AdminDashboard() {
             </>
           )}
         </nav>
-        <div className="px-6 py-4 text-xs text-gray-500 border-t border-gray-800">
+        <div data-shell-foot className="px-6 py-4 text-xs text-gray-500 border-t border-gray-800">
           {!canConfigure
             ? `${access.role_name} — the screens your Super Admin gave you.`
             : isOwner
@@ -676,6 +678,14 @@ export default function AdminDashboard() {
               {logoutMenu && (
                 <div className="absolute top-12 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                   <ProfilePhotoMenuItems photo={photo} />
+                  {/* No. 240: each person's own look and choices. */}
+                  <button
+                    onClick={() => router.push("/settings")}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  >
+                    <i className="fas fa-sliders-h mr-2"></i> Settings &amp; appearance
+                  </button>
+                  <PlatformMenuItem />
                   <button
                     onClick={logout}
                     className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -687,6 +697,8 @@ export default function AdminDashboard() {
             </div>
           </div>
         </header>
+        {/* No. 240 (Stage 6): the platform's announcements. */}
+        <AnnouncementBanner />
         {summaryCsp && <CspSummaryPanel cspId={summaryCsp} onClose={() => setSummaryCsp(null)} />}
 
         {/* Scrollable Area */}

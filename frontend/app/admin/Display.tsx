@@ -20,6 +20,7 @@ import { useEffect, useState } from "react";
 import { api } from "../lib/api";
 import type { ApiError } from "../lib/api";
 import { applyStyle, applyTheme, forgetMyAccess } from "../lib/useMyAccess";
+import Branding from "./Branding";
 
 interface Look {
   key: string;
@@ -262,6 +263,9 @@ export default function Display() {
 
       {theme && style && (
         <>
+          {/* No. 240 (Stage 3): logo, second colour, own colours on / off. */}
+          <Branding canChange={canChange} />
+
           <section className="space-y-3">
             <h3 className="text-base font-bold text-gray-900 dark:text-white">Design style ({STYLES.length})</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "./api";
 import type { MyAccess } from "./api";
+import { loadMyLook, setOwnColoursAllowed } from "./myLook";
 
 let cached: Promise<MyAccess> | null = null;
 
@@ -82,6 +83,17 @@ function applyLook(access: MyAccess) {
     root.setProperty("--color-eko-light", shade(color, 0.9));
   }
   if (access.look?.name) document.title = access.look.name;
+  // No. 240 (Stage 3): the second colour, on the strip behind the logo
+  // (app/globals.css [data-brand-2]); none = as it has always looked.
+  const second = access.look?.color_2;
+  if (second && /^#[0-9a-fA-F]{6}$/.test(second)) {
+    root.setProperty("--color-brand-2", second);
+    document.documentElement.setAttribute("data-brand-2", "");
+  } else {
+    root.removeProperty("--color-brand-2");
+    document.documentElement.removeAttribute("data-brand-2");
+  }
+  setOwnColoursAllowed(access.look?.own_colours !== false);
 }
 
 export function forgetMyAccess() {
@@ -98,6 +110,8 @@ export function useMyAccess(enabled = true): MyAccess | null | undefined {
     cached
       .then((a) => {
         applyLook(a);
+        // No. 240: then the person's own look, on top of the workspace's.
+        void loadMyLook();
         if (alive) setAccess(a);
       })
       .catch(() => {

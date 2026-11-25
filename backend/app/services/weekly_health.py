@@ -161,6 +161,9 @@ def run(session, now: Optional[datetime] = None, send=None) -> dict:
     n = numbers(session, now - timedelta(days=7))
     fixes = what_to_fix(session)
     to = recipients(session)
+    # No. 240: minus anyone who switched the weekly email off for themselves.
+    from app.services import notification_prefs
+    to = notification_prefs.keep_wanted(session, "weekly_health", to)
     send = send or (lambda addr, subject, text: message_sender._send_email(
         addr, subject, text, kind="other"))
     text = body(n, fixes, s.brand_name)

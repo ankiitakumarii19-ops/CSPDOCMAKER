@@ -38,6 +38,17 @@ try {
     document.documentElement.setAttribute('data-ui-style', st);
     if (st === 'neon') document.documentElement.classList.add('dark');
   }
+  // No. 240: this person's own look (lib/myLook.ts), kept per person.
+  var who = JSON.parse(localStorage.getItem('user') || 'null');
+  var mine = who && who.email && JSON.parse(localStorage.getItem('myLook:' + String(who.email).toLowerCase()) || 'null');
+  if (mine && mine.css) {
+    var el = document.createElement('style'); el.id = 'my-look'; el.textContent = mine.css;
+    document.head.appendChild(el);
+  }
+  if (mine && mine.font && String(mine.font).indexOf('https://fonts.googleapis.com/') === 0) {
+    var ln = document.createElement('link'); ln.id = 'my-look-font'; ln.rel = 'stylesheet'; ln.href = mine.font;
+    document.head.appendChild(ln);
+  }
 } catch (e) {}
 `;
 

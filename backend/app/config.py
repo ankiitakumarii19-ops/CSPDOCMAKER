@@ -278,6 +278,9 @@ class Settings(BaseSettings):
     document_templates_dir: str = Field(
         default="../templates/documents", alias="DOCUMENT_TEMPLATES_DIR")
     document_output_dir: str = Field(default="generated_documents", alias="DOCUMENT_OUTPUT_DIR")
+    # No. 242: the signature-and-stamp pictures. default.png is the one in
+    # the templates; an LHO with its own (e.g. patna.png) gets that instead.
+    signatures_dir: str = Field(default="../templates/signatures", alias="SIGNATURES_DIR")
 
     # TEMPORARY: while CSP photos are still being extracted from the CRM,
     # documents are generated with a placeholder photo box. Set to false and
@@ -322,6 +325,17 @@ class Settings(BaseSettings):
                     "Kiosk CSP come from the SuperAdmins tab of the "
                     "Authorization sheet. Kept only so an old .env loads.",
     )
+
+    # No. 240 (SaaS upgrade Stage 6): the platform's Supreme Owner(s), above
+    # every workspace (the console at /platform). Comma-separated emails.
+    # Server setting only — never a workspace setting, a sheet or a screen.
+    # Blank = nobody (the console is closed).
+    supreme_owner_emails: str = Field(default="", alias="SUPREME_OWNER_EMAILS")
+
+    @property
+    def supreme_owners(self) -> tuple[str, ...]:
+        return tuple(e.strip().lower() for e in (self.supreme_owner_emails or "").split(",")
+                     if e.strip())
 
     @property
     def super_admins(self) -> tuple[str, ...]:
@@ -498,6 +512,12 @@ class Settings(BaseSettings):
     # No. 229: the design style (shapes, shadows, surfaces) on top of the
     # look's colours. "standard" = the app as it has always looked.
     ui_style: str = Field(default="standard", alias="UI_STYLE")
+    # No. 240 (SaaS upgrade Stage 3): a second brand colour ("" = none, the
+    # app as it has always looked) and whether each person may pick their
+    # own colours and font on Settings -> Appearance (accessibility choices
+    # are always theirs).
+    brand_color_2: str = Field(default="", alias="BRAND_COLOR_2")
+    allow_personal_look: bool = Field(default=True, alias="ALLOW_PERSONAL_LOOK")
     # ---- No. 215 (Stage 8): going live, test mode, pause all ----
     # The server's value is Eko's (live); any other workspace starts not
     # live (workspace_settings.NOT_EKO_DEFAULTS).

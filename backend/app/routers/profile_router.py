@@ -5,6 +5,8 @@ CSP DocMaker — your profile picture (No. 171)
                                       member of the workspace you are in)
   PUT    /api/profile/photo           upload / change your own
   DELETE /api/profile/photo           remove your own — initials again
+  GET/PUT/PATCH/DELETE /api/profile/appearance
+                                      your own look (No. 240; see below)
 
 Optional: nobody must have one. Every signed-in role may set their own and
 only their own. JPEG, PNG or WEBP up to 10 MB (the CSP photo rules,
@@ -18,6 +20,7 @@ import io
 import logging
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,7 +28,8 @@ from app.database import get_session
 from app.dependencies import require_any_role
 from app.models.audit_log import AuditLog
 from app.models.user_photo import UserPhoto
-from app.services import photo_intake
+from app.models.user_preference import UserPreference
+from app.services import my_look, notification_prefs, photo_intake
 from app.workspace_context import current_workspace_id
 
 logger = logging.getLogger(__name__)
@@ -140,3 +144,252 @@ async def get_photo(
     return Response(row.image, media_type=row.content_type,
                     headers={"Cache-Control": "private, no-store",
                              "X-Photo-Version": row.checksum[:12]})
+
+
+# ---- Your own look (No. 240, SaaS upgrade Stage 2) ------------------------
+#
+#   GET    /api/profile/appearance   your saved choices + what may be changed
+#   PUT    /api/profile/appearance   save the whole set (replaces it)
+#   PATCH  /api/profile/appearance   change some choices (null = as the
+#                                    workspace has it); the header's
+#                                    light / dark button uses this
+#   DELETE /api/profile/appearance   back to the workspace's look
+#
+# Always and only the signed-in person's own row: no email in the path, so
+# nobody can read or change someone else's. Checked by services/my_look.py.
+
+class AppearanceBody(BaseModel):
+    appearance: dict
+
+
+def _own_colours_allowed() -> bool:
+    from app.config import get_settings
+    return bool(get_settings().allow_personal_look)
+
+
+def _appearance_view(row: UserPreference | None, warnings=None) -> dict:
+    return {
+        "own_colours_allowed": _own_colours_allowed(),
+        "appearance": dict(row.appearance or {}) if row else {},
+        "updated_at": row.updated_at.isoformat() if row and row.updated_at else None,
+        "options": my_look.options(),
+        "warnings": warnings or [],
+    }
+
+
+async def _save_appearance(session, user, wanted: dict, how: str) -> dict:
+    try:
+        clean, warnings = my_look.check(wanted)
+    except my_look.LookError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    email = _email(user)
+    row = await session.get(UserPreference, email)
+    before = dict(row.appearance or {}) if row else {}
+    # No. 240 (Stage 3): the workspace may keep colours and font its own.
+    # Then what was saved before stays as it was (and is not shown), and a
+    # new colour or font is not taken.
+    if not _own_colours_allowed():
+        tried = sorted(k for k in my_look.WORKSPACE_LOCKABLE
+                       if clean.get(k) != before.get(k))
+        for k in my_look.WORKSPACE_LOCKABLE:
+            clean.pop(k, None)
+            if k in before:
+                clean[k] = before[k]
+        if tried:
+            warnings.append("Your workspace sets the colours and font, so "
+                            f"these were not changed: {', '.join(tried)}.")
+    if row is None:
+        row = UserPreference(email=email, appearance=clean, notifications={},
+                             dashboards={})
+        session.add(row)
+    else:
+        row.appearance = clean
+    changed = sorted(k for k in set(before) | set(clean)
+                     if before.get(k) != clean.get(k))
+    if changed:
+        _audit(session, user, "appearance_change", {"how": how, "changed": changed})
+    await session.commit()
+    await session.refresh(row)
+    logger.info("profile_router: %s %s their appearance (%s)", email, how,
+                ", ".join(changed) or "no change")
+    return _appearance_view(row, warnings)
+
+
+@router.get("/appearance", summary="Your own look and what you may change")
+async def get_appearance(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    return _appearance_view(await session.get(UserPreference, _email(user)))
+
+
+@router.put("/appearance", summary="Save your own look")
+async def put_appearance(
+    body: AppearanceBody,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    return await _save_appearance(session, user, body.appearance, "saved")
+
+
+@router.patch("/appearance", summary="Change some of your own look")
+async def patch_appearance(
+    body: AppearanceBody,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    row = await session.get(UserPreference, _email(user))
+    merged = dict(row.appearance or {}) if row else {}
+    merged.update(body.appearance)
+    return await _save_appearance(session, user, merged, "changed")
+
+
+@router.delete("/appearance", summary="Back to the workspace's look")
+async def reset_appearance(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    row = await session.get(UserPreference, _email(user))
+    if row is not None:
+        had = sorted(row.appearance or {})
+        await session.delete(row)
+        if had:
+            _audit(session, user, "appearance_reset", {"changed": had})
+        await session.commit()
+        logger.info("profile_router: %s reset their appearance", _email(user))
+    return _appearance_view(None)
+
+
+# ---- What you are told, and how (No. 240, Stage 3) ------------------------
+#
+#   GET /api/profile/notifications   every staff notification, by channel
+#   PUT /api/profile/notifications   {kind: {channel: on/off}}; a mandatory
+#                                    one cannot be switched off (400)
+
+class NotificationsBody(BaseModel):
+    notifications: dict
+
+
+@router.get("/notifications", summary="Your notifications")
+async def get_notifications(
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    row = await session.get(UserPreference, _email(user))
+    return {"notifications": notification_prefs.view(row.notifications if row else {})}
+
+
+@router.put("/notifications", summary="Change your notifications")
+async def put_notifications(
+    body: NotificationsBody,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    try:
+        clean = notification_prefs.check(body.notifications)
+    except notification_prefs.NotificationError as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    email = _email(user)
+    row = await session.get(UserPreference, email)
+    if row is None:
+        row = UserPreference(email=email, appearance={}, notifications=clean,
+                             dashboards={})
+        session.add(row)
+    else:
+        row.notifications = clean
+    _audit(session, user, "notifications_change",
+           {"off": sorted(f"{k}:{c}" for k, chs in clean.items() for c in chs)})
+    await session.commit()
+    logger.info("profile_router: %s changed their notifications (%d off)",
+                email, sum(len(v) for v in clean.values()))
+    return {"notifications": notification_prefs.view(clean)}
+
+
+# ---- Your own dashboard arrangement (No. 240, Stage 5) --------------------
+#
+#   GET    /api/profile/dashboards/{slug}   your order / hidden / columns
+#   PUT    /api/profile/dashboards/{slug}   save them
+#   DELETE /api/profile/dashboards/{slug}   back to the workspace's
+#
+# Only how YOUR screen arranges the workspace's widgets. The widgets, their
+# numbers and who may see a dashboard are unchanged (dashboard_router).
+
+class DashboardLayoutBody(BaseModel):
+    order: list = []
+    hidden: list = []
+    columns: int | None = None
+
+
+def _check_layout(body: DashboardLayoutBody) -> dict:
+    import uuid as _uuid
+    for name, ids in (("order", body.order), ("hidden", body.hidden)):
+        if len(ids) > 200:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Too many widgets in {name}.")
+        for i in ids:
+            try:
+                _uuid.UUID(str(i))
+            except ValueError:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    f"{name}: {i!r} is not a widget.")
+    if body.columns is not None and body.columns not in (1, 2, 3, 4):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Columns: 1, 2, 3 or 4.")
+    out = {"order": [str(i) for i in body.order], "hidden": [str(i) for i in body.hidden]}
+    if body.columns is not None:
+        out["columns"] = body.columns
+    return out
+
+
+def _layout_key(slug: str) -> str:
+    import re as _re
+    if not _re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,79}", slug or ""):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Not a dashboard.")
+    # Per workspace: the same slug in two workspaces is two dashboards.
+    return f"{current_workspace_id()}:{slug}"
+
+
+@router.get("/dashboards/{slug}", summary="Your arrangement of a dashboard")
+async def get_dashboard_layout(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    key = _layout_key(slug)
+    row = await session.get(UserPreference, _email(user))
+    return {"layout": ((row.dashboards or {}) if row else {}).get(key)}
+
+
+@router.put("/dashboards/{slug}", summary="Save your arrangement of a dashboard")
+async def put_dashboard_layout(
+    slug: str,
+    body: DashboardLayoutBody,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    key = _layout_key(slug)
+    layout = _check_layout(body)
+    email = _email(user)
+    row = await session.get(UserPreference, email)
+    if row is None:
+        row = UserPreference(email=email, appearance={}, notifications={},
+                             dashboards={key: layout})
+        session.add(row)
+    else:
+        row.dashboards = {**(row.dashboards or {}), key: layout}
+    _audit(session, user, "dashboard_layout_change", {"dashboard": slug})
+    await session.commit()
+    return {"layout": layout}
+
+
+@router.delete("/dashboards/{slug}", summary="Back to the workspace's arrangement")
+async def reset_dashboard_layout(
+    slug: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_any_role),
+):
+    key = _layout_key(slug)
+    row = await session.get(UserPreference, _email(user))
+    if row is not None and key in (row.dashboards or {}):
+        row.dashboards = {k: v for k, v in row.dashboards.items() if k != key}
+        _audit(session, user, "dashboard_layout_reset", {"dashboard": slug})
+        await session.commit()
+    return {"layout": None}

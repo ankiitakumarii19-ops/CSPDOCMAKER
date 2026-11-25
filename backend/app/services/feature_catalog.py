@@ -217,6 +217,9 @@ FEATURES: List[Feature] = [
     Feature("setup_guide", "owner", "Setup guide",
             "Every setup step, test mode, going live, the dry run.", (),
             (("*", "/api/admin/setup-guide"),), can_give_to=(), locked=True),
+    Feature("branding", "owner", "Logo",
+            "Upload or remove the organisation's logo (No. 240).", (),
+            (("*", "/api/admin/branding"),), can_give_to=(), locked=True),
     Feature("workspace_admin", "owner", "Export or close the workspace",
             "Download all its data; switch the workspace off.", (),
             (("*", "/api/admin/workspace/"),), can_give_to=(), locked=True),
@@ -229,7 +232,10 @@ BY_KEY: Dict[str, Feature] = {f.key: f for f in FEATURES}
 assert len(BY_KEY) == len(FEATURES)
 
 # Paths every signed-in person keeps.
-BASICS = ("/api/profile/", "/api/quality/freshness", "/api/me/", "/api/auth/")
+BASICS = ("/api/profile/", "/api/quality/freshness", "/api/me/", "/api/auth/",
+          # No. 240: the Supreme Owner's console has its own check
+          # (platform_router.supreme_owner), above every workspace.
+          "/api/platform/")
 
 
 def _matches(rule: Tuple[str, str], method: str, path: str) -> int:

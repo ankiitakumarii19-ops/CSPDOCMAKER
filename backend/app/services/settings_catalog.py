@@ -567,6 +567,18 @@ SETTINGS += [
             "A colour like #00B259 (Eko's green).",
             "Buttons and highlights use this colour.", kind=TEXT, min=7,
             max=7, words=("colour", "color", "main colour")),
+    # ---- No. 240 (SaaS upgrade Stage 3) ----------------------------------
+    Setting("brand_color_2", "look", "Second colour",
+            "A colour like #12305C, or blank for none (Eko: none).",
+            "The strip behind the logo and the profile circles use it.",
+            kind=TEXT, min=0, max=7,
+            words=("second colour", "second color", "secondary colour")),
+    Setting("allow_personal_look", "look", "People may pick their own colours",
+            "On: each person may choose their own colours and font on "
+            "Settings -> Appearance. Off: everyone sees the workspace's; "
+            "light / dark, sizes, layout and accessibility stay theirs.",
+            "Off: people's own colours and fonts are no longer shown.",
+            kind=BOOL, words=("own colours", "personal look")),
     # ---- No. 215 (Stage 8) ---------------------------------------------
     Setting("workspace_live", "golive", "Live",
             "On: messages and emails go to real people. A new workspace "
@@ -715,6 +727,9 @@ def check_together(values: Dict[str, Any]) -> None:
     color = values.get("brand_color")
     if color is not None and not re.fullmatch(r"#[0-9A-Fa-f]{6}", str(color)):
         raise SettingError("Main colour: a colour like #00B259.")
+    color2 = values.get("brand_color_2")
+    if color2 and not re.fullmatch(r"#[0-9A-Fa-f]{6}", str(color2)):
+        raise SettingError("Second colour: a colour like #12305C, or blank.")
     if values.get("test_mode") and not (values.get("test_mode_phone")
                                         or values.get("test_mode_email")):
         raise SettingError("Set a test WhatsApp number or test email first, "

@@ -57,6 +57,7 @@ each feature for a role (RM, Admin, or a role they make) or one person.
 | Connections | The workspace's own sheets, email, WhatsApp and CRM; their passwords and keys. | Super Admin only | — (locked) |  |
 | Columns | Which sheet column is which field (guessed from the sheet). | Super Admin only | — (locked) |  |
 | Setup guide | Every setup step, test mode, going live, the dry run. | Super Admin only | — (locked) |  |
+| Logo | Upload or remove the organisation's logo (No. 240). | Super Admin only | — (locked) |  |
 | Export or close the workspace | Download all its data; switch the workspace off. | Super Admin only | — (locked) |  |
 | Setup done by the chat (Do it) | — | Super Admin only | — (locked) |  |
 
@@ -66,3 +67,11 @@ chips, and “what may I use”.
 **Which CSPs:** an RM acts on their own CSPs and unowned ones (as today); the Super Admin can
 set an RM-type role to “every CSP”. Admins always see every CSP. Splitting by team or state
 waits for each workspace's own data shape (Stage 4).
+
+## Added by No. 240 (SaaS upgrade)
+
+- **Everyone keeps** (not features; each person's own): Settings → Appearance & Personalization, Settings → Notifications, Arrange my view on a dashboard (`/api/profile/*`), the organisation logo and announcements (`/api/me/logo`, `/api/me/announcements`).
+- **Ready-made roles** (Feature access → Add ready-made roles): Manager (an Admin who may also run agents and set the reply mode), Employee (an RM), Reviewer (RM-based, every CSP; sees dashboard, WhatsApp, emails, replies, data quality; cannot make documents, message, edit or use the Sheets tab), Viewer (RM-based, every CSP; finds CSPs and sees the dashboard only). Ordinary own roles afterwards.
+- **The brief's permission words → features**: view records = Find CSPs / Database; create & edit records = Edit a CSP / Sheets; delete records = not in the app (records come from the sheet); generate & download documents = Make and send documents; approve documents = not a separate step (the verification agent decides, D28); manage templates = Document templates; manage users = Access; configure integrations = Connections; view reports = Dashboard overview / Build dashboards.
+- **Supreme Owner console** (`/api/platform/*`): not a workspace feature; only SUPREME_OWNER_EMAILS.
+

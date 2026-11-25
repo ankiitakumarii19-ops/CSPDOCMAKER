@@ -493,6 +493,12 @@ async def grant_access(
     workspace_id = require_workspace_id()
     email = str(request.email).strip().lower()
     by = _who(user).lower()
+    # No. 240 (Stage 6): the plan's people limit, when it has one.
+    from app.services import plan_limits
+    try:
+        await plan_limits.check_users(session, email)
+    except plan_limits.LimitError as e:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(e))
     existing = (await session.execute(
         select(WorkspaceMember).where(WorkspaceMember.email == email)
     )).scalars().first()

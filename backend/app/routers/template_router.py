@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_session
 from app.dependencies import require_role
 from app.models.document_template import DocumentTemplate
+from app.models.document_template_version import DocumentTemplateVersion
 from app.services import csp_mapping
 from app.services import document_template_service as dts
 from app.services import template_service as ts
@@ -59,6 +60,12 @@ class TemplateSettings(BaseModel):
     placeholder_map: Optional[Dict[str, str]] = None
     photo_marker: Optional[str] = None
     active: Optional[bool] = None
+    # No. 240 (Stage 5): "" = no category.
+    category: Optional[str] = Field(default=None, max_length=80)
+
+
+class TestRun(BaseModel):
+    csp_id: str = Field(..., min_length=1, max_length=60)
 
 
 class ContentEdit(BaseModel):
@@ -139,7 +146,33 @@ def _summarise(template: DocumentTemplate, placeholders: List[str]) -> dict:
         "placeholder_count": len(placeholders),
         "unmapped_count": len(unmapped),
         "ready": not unmapped,
+        # No. 240 (Stage 5)
+        "category": template.category,
+        # Every mapped field must have a value, or the document is not made
+        # (template_service.fill_template) — the mandatory fields.
+        "required_fields": sorted(set((mapping or _builtin_map(template.code)).values())),
     }
+
+
+def _builtin_map(code: str) -> dict:
+    """A supplied document's own map, used by generation when its row has
+    none stored (document_registry)."""
+    from app.services import document_registry
+    spec = document_registry._builtin_specs().get(code)
+    return dict(spec.placeholder_map) if spec else {}
+
+
+async def _keep_version(session: AsyncSession, template: DocumentTemplate,
+                        reason: str, user: dict) -> None:
+    """No. 240 (Stage 5): keep what the template is now, before it changes."""
+    data = _file_bytes(template)
+    session.add(DocumentTemplateVersion(
+        template_code=template.code, version=template.version or 1,
+        name=template.name, filename=template.filename, file_data=data,
+        file_size=len(data), checksum=dts.checksum(data),
+        placeholder_map=dict(template.placeholder_map or {}) or _builtin_map(template.code),
+        photo_marker=template.photo_marker, was_active=bool(template.active),
+        reason=reason, saved_by=_who(user)))
 
 
 # ---- endpoints -----------------------------------------------------------
@@ -284,6 +317,7 @@ async def upload_new_version(
     info = dts.inspect(data)
     kept = {p: f for p, f in (template.placeholder_map or {}).items()
             if p in info["placeholders"]}
+    await _keep_version(session, template, "new_upload", user)
     template.file_data = data
     template.file_size = len(data)
     template.checksum = dts.checksum(data)
@@ -340,6 +374,9 @@ async def update_template(
     if settings.photo_marker is not None:
         template.photo_marker = settings.photo_marker.strip() or None
 
+    if settings.category is not None:
+        template.category = " ".join(settings.category.split()) or None
+
     if settings.active is not None:
         if settings.active:
             unmapped = [p for p in placeholders
@@ -380,6 +417,7 @@ async def edit_content(
         raise HTTPException(status.HTTP_400_BAD_REQUEST,
                             f"Could not apply that edit: {e}")
 
+    await _keep_version(session, template, "wording_edit", user)
     template.file_data = data
     template.file_size = len(data)
     template.checksum = dts.checksum(data)
@@ -418,3 +456,175 @@ async def delete_template(
     logger.info("template_router.delete_template: %s deleted by %s",
                 code, _who(user))
     return {"deleted": code}
+
+
+
+# ---- No. 240 (Stage 5): versions, restore, test -----------------------------
+#
+#   GET  /api/admin/templates/{code}/versions                 earlier versions
+#   GET  /api/admin/templates/{code}/versions/{id}/file       download one
+#   POST /api/admin/templates/{code}/versions/{id}/restore    put it back
+#   POST /api/admin/templates/{code}/test                     make it for one
+#        CSP and download it — nothing is stored, sent or counted
+#
+# Generation is unchanged: documents are made only from the live template.
+
+@router.get("/{code}/versions")
+async def list_versions(
+    code: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    template = await _get(session, code)
+    rows = (await session.execute(
+        select(DocumentTemplateVersion)
+        .where(DocumentTemplateVersion.template_code == template.code)
+        .order_by(DocumentTemplateVersion.saved_at.desc())
+    )).scalars().all()
+    return {
+        "code": template.code,
+        "current_version": template.version,
+        "versions": [{
+            "id": str(v.id), "version": v.version, "name": v.name,
+            "filename": v.filename, "file_size": v.file_size,
+            "was_active": v.was_active, "reason": v.reason,
+            "saved_by": v.saved_by,
+            "saved_at": v.saved_at.isoformat() if v.saved_at else None,
+            "mapped": len(v.placeholder_map or {}),
+        } for v in rows],
+    }
+
+
+async def _version(session: AsyncSession, code: str, version_id: str):
+    import uuid as _uuid
+    try:
+        vid = _uuid.UUID(version_id)
+    except ValueError:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such version.")
+    row = (await session.execute(select(DocumentTemplateVersion).where(
+        DocumentTemplateVersion.id == vid,
+        DocumentTemplateVersion.template_code == code))).scalars().first()
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such version.")
+    return row
+
+
+@router.get("/{code}/versions/{version_id}/file")
+async def download_version(
+    code: str, version_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    from fastapi import Response
+    template = await _get(session, code)
+    v = await _version(session, template.code, version_id)
+    name = f"{template.code}_v{v.version}.docx"
+    return Response(bytes(v.file_data), headers={
+        "Content-Disposition": f'attachment; filename="{name}"'},
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
+
+
+@router.post("/{code}/versions/{version_id}/restore")
+async def restore_version(
+    code: str, version_id: str,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Put an earlier version back. What is live now is kept first, so this
+    can be undone the same way. It goes live only if every placeholder is
+    still mapped and it was live before; otherwise it waits switched off."""
+    from app.models.audit_log import AuditLog
+    from app.services import document_registry
+    from app.workspace_context import current_workspace_id
+
+    template = await _get(session, code)
+    v = await _version(session, template.code, version_id)
+    await _keep_version(session, template, "restore", user)
+    data = bytes(v.file_data)
+    template.file_data = data
+    template.file_size = len(data)
+    template.checksum = dts.checksum(data)
+    template.filename = v.filename or template.filename
+    # As a new upload does: what was mapped then, and the sure guesses for
+    # the rest (a supplied template's row may never have stored its map).
+    info = dts.inspect(data)
+    template.placeholder_map = {**info["mapped"], **dict(v.placeholder_map or {})}
+    template.photo_marker = v.photo_marker or info["photo_marker"]
+    template.version = (template.version or 1) + 1
+    placeholders = info["placeholders"]
+    unmapped = [p for p in placeholders if not template.placeholder_map.get(p)]
+    if unmapped or not v.was_active:
+        template.active = False
+    session.add(AuditLog(workspace_id=current_workspace_id(),
+                         action="template_restore", resource_type="document_template",
+                         resource_id=template.code, result="success",
+                         metadata_json={"by": _who(user), "restored_version": v.version,
+                                        "now_version": template.version}))
+    await session.commit()
+    document_registry.invalidate(current_workspace_id())
+    logger.info("template_router.restore_version: %s v%d put back as v%d by %s",
+                template.code, v.version, template.version, _who(user))
+    return {**_summarise(template, placeholders), "unmapped": unmapped,
+            "restored_version": v.version}
+
+
+@router.post("/{code}/test")
+async def test_template(
+    code: str, body: TestRun,
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Make this document for one CSP, exactly as the real path would, and
+    download it. Nothing is stored, sent, counted or written to the CSP."""
+    import shutil
+    import tempfile
+    from fastapi import Response
+    from starlette.concurrency import run_in_threadpool
+    from app.models.audit_log import AuditLog
+    from app.models.csp_record import CSPRecord
+    from app.services import document_registry, document_service
+    from app.services.template_service import TemplateError
+    from app.workspace_context import current_workspace_id
+
+    template = await _get(session, code)
+    csp = (await session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == body.csp_id.strip()))).scalars().first()
+    if csp is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND,
+                            f"No CSP {body.csp_id.strip()} in this workspace.")
+    document_registry.invalidate(current_workspace_id())
+    folder = tempfile.mkdtemp(prefix="cspdm_template_test_")
+    ws = current_workspace_id()
+
+    # The supplied four go by their DocumentType, as on the real path.
+    from app.models.enums import DocumentType
+    doc_type = (DocumentType[template.code]
+                if template.code in DocumentType.__members__ else template.code)
+
+    def make() -> bytes:
+        from app.workspace_context import workspace
+        with workspace(ws):
+            path = document_service.generate_document(csp, doc_type, folder)
+        with open(path, "rb") as handle:
+            return handle.read()
+
+    try:
+        data = await run_in_threadpool(make)
+    except (TemplateError, ValueError, KeyError) as e:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            f"The test could not make {template.code} for "
+                            f"{csp.csp_id}: {e}")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+    session.add(AuditLog(workspace_id=ws, action="template_test",
+                         resource_type="document_template",
+                         resource_id=template.code, result="success",
+                         metadata_json={"by": _who(user), "csp_id": csp.csp_id,
+                                        "version": template.version}))
+    await session.commit()
+    logger.info("template_router.test_template: %s v%d tried on %s by %s",
+                template.code, template.version, csp.csp_id, _who(user))
+    name = f"TEST_{template.code}_{csp.csp_id}.docx"
+    return Response(data, headers={
+        "Content-Disposition": f'attachment; filename="{name}"'},
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document")

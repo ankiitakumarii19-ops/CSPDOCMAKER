@@ -2,6 +2,9 @@
 
 import { useSyncExternalStore } from "react";
 
+import { api } from "./api";
+import { keepSavedLook, savedLook } from "./myLook";
+
 /** The theme lives as a class on <html>, applied before paint by the inline
  *  script in layout.tsx. Reading it through the DOM keeps one source of
  *  truth; a MutationObserver keeps React in step. */
@@ -35,6 +38,14 @@ export function useTheme(): ["dark" | "light", () => void] {
     } catch {
       // Private browsing: the choice will not persist.
     }
+    // No. 240: kept with the person's own look, so it follows them to any
+    // computer. The page has already changed; a failed save only means the
+    // next computer will not know.
+    keepSavedLook({ ...savedLook(), mode: next });
+    api
+      .changeAppearance({ mode: next })
+      .then((v) => keepSavedLook(v.appearance))
+      .catch((e) => console.warn("useTheme: light / dark not saved to your account", e));
   };
 
   return [theme, toggle];

@@ -15,10 +15,28 @@ import { withBase } from "../lib/basePath";
 export default function BrandLogo({
   className = "",
   height = 40,
+  logo = null,
+  name = "",
 }: {
   className?: string;
   height?: number;
+  /** No. 240 (Stage 3): the organisation's own logo version, from
+   *  /api/me/access (look.logo). None = the app's own, as before. */
+  logo?: string | null;
+  name?: string;
 }) {
+  if (logo) {
+    // Same site, so the sign-in cookie goes with it; ?v= changes with the file.
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={withBase(`/api/me/logo?v=${encodeURIComponent(logo)}`)}
+        alt={name ? `${name} logo` : "Logo"}
+        style={{ height, width: "auto", maxWidth: height * 4 }}
+        className={`object-contain ${className}`}
+      />
+    );
+  }
   const width = Math.round((139 / 78) * height);
   return (
     <Image

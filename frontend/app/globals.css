@@ -321,3 +321,11 @@
     background-color: rgb(17 24 39 / 0.7); border-color: rgb(255 255 255 / 0.08);
   }
 }
+
+/* ---- No. 240 (Stage 3): the workspace's second colour ------------------
+   Setup -> Display -> Second colour sets --color-brand-2 and data-brand-2 on
+   <html> (lib/useMyAccess.ts). Only the strip behind the logo uses it; none
+   set = the app as it has always looked. */
+@layer utilities {
+  :root[data-brand-2] [data-shell-brand] { background-color: var(--color-brand-2); }
+}

@@ -36,6 +36,7 @@ import uuid
 from typing import Dict, List, Optional
 
 from app.services import feature_catalog as catalog
+from app.services import workspace_files
 
 logger = logging.getLogger(__name__)
 
@@ -216,7 +217,12 @@ def mine(user: dict) -> dict:
     return {"role": base, "own_role": key, "role_name": name,
             # No. 214: the workspace's own name and colour.
             "look": {"name": s.brand_name, "color": s.brand_color,
-                     "theme": s.ui_theme, "style": s.ui_style},
+                     "theme": s.ui_theme, "style": s.ui_style,
+                     # No. 240 (Stage 3)
+                     "color_2": s.brand_color_2,
+                     "own_colours": bool(s.allow_personal_look),
+                     "logo": workspace_files.logo_version(),
+                     "org_name": workspace_files.workspace_name()},
             "features": keys, "record_scope": record_scope(user),
             "admin_area": base in (ADMIN, SUPER)
             or any(k in ADMIN_AREA for k in keys)}
@@ -592,3 +598,49 @@ async def history(session, limit: int = 100) -> List[dict]:
                     "via": c.via,
                     "at": c.created_at.isoformat() if c.created_at else None})
     return out
+
+
+# ---- Starter roles (No. 240, SaaS upgrade Stage 4) --------------------------
+#
+# Ready-made own roles a Super Admin may add in one press: ordinary roles
+# afterwards (rename, change, remove on Feature access). Nobody is moved into
+# them; existing people and the built-in RM / Admin are untouched.
+#
+#   Manager  - an Admin who may also run agents and set the reply mode
+#   Employee - an RM as today
+#   Reviewer - sees every CSP and what was sent; changes, sends and makes
+#              nothing
+#   Viewer   - finds CSPs and sees the dashboard; nothing else
+
+STARTER_ROLES = (
+    ("Manager", ADMIN, "all", {"agents": True, "reply_mode": True}),
+    ("Employee", RM, None, {}),
+    ("Reviewer", RM, "all", {
+        "documents": False, "csp_message": False, "csp_edit": False,
+        "sheets": False, "dashboard": True, "whatsapp": True, "emails": True,
+        "replies": True, "data_quality": True}),
+    ("Viewer", RM, "all", {
+        "documents": False, "csp_message": False, "csp_edit": False,
+        "sheets": False, "chat": False, "dashboard": True}),
+)
+
+
+async def add_starter_roles(session, user) -> List[str]:
+    """Add the starter roles this workspace does not have yet (by name).
+    Returns the names added."""
+    grants, roles, members = await _rows(session)
+    have = {r.name.lower() for r in roles.values()} | {
+        v.lower() for v in BUILT_IN.values()}
+    added = []
+    for name, base, scope, features in STARTER_ROLES:
+        if name.lower() in have:
+            continue
+        role = await create_role(session, name, base, user)
+        if scope and scope != role["record_scope"]:
+            await change_role(session, role["key"], user, record_scope=scope)
+        for feature, value in features.items():
+            await set_for_role(session, role["key"], feature, value, user)
+        added.append(name)
+    logger.info("feature_access: %s added starter roles %s", _who(user),
+                added or "(all were there)")
+    return added

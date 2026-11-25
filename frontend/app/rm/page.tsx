@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 
 import Avatar, { ProfilePhotoMenuItems, useProfilePhoto } from "../components/Avatar";
 import BrandLogo from "../components/BrandLogo";
+import AnnouncementBanner from "../components/AnnouncementBanner";
+import PlatformMenuItem from "../components/PlatformMenuItem";
 import GlobalSearch from "../components/GlobalSearch";
 import ActionHistory from "../components/ActionHistory";
 import ActionRequiredDetail from "../components/ActionRequiredDetail";
@@ -415,7 +417,7 @@ export default function RMDashboard() {
           >
             <i className={`fas ${navMenu ? "fa-xmark" : "fa-bars"}`}></i>
           </button>
-          <BrandLogo height={36} />
+          <BrandLogo height={36} logo={access?.look?.logo} name={access?.look?.org_name} />
           <span className="font-bold text-lg hidden 2xl:block text-gray-900 dark:text-white whitespace-nowrap">
             {access?.look?.name || "CSPdocMaker"}
             <span className="text-xs font-normal text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-0.5 rounded ml-2">
@@ -558,6 +560,14 @@ export default function RMDashboard() {
             {logoutMenu && (
               <div className="absolute top-12 right-0 w-52 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                 <ProfilePhotoMenuItems photo={photo} />
+                {/* No. 240: each person's own look and choices. */}
+                <button
+                  onClick={() => router.push("/settings")}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <i className="fas fa-sliders-h mr-2"></i> Settings &amp; appearance
+                </button>
+                <PlatformMenuItem />
                 <button
                   onClick={logout}
                   className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
@@ -569,6 +579,8 @@ export default function RMDashboard() {
           </div>
         </div>
       </header>
+      {/* No. 240 (Stage 6): the platform's announcements. */}
+      <AnnouncementBanner />
       {navMenu && (
         <nav className="lg:hidden bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-3 py-2 flex flex-col gap-1 z-20">
           {(

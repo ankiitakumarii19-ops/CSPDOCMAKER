@@ -316,6 +316,28 @@ export default function FeatureAccess() {
             Add role
           </button>
         </div>
+        {/* No. 240 (Stage 4): ready-made roles, ordinary roles afterwards. */}
+        {["Manager", "Employee", "Reviewer", "Viewer"].some((n) => !view.roles.some((r) => r.name === n)) && (
+          <div className="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center gap-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 flex-1">
+              Or add ready-made roles: <strong>Manager</strong> (an Admin who may also run agents),{" "}
+              <strong>Employee</strong> (an RM), <strong>Reviewer</strong> (sees every CSP and what was sent; changes
+              nothing) and <strong>Viewer</strong> (finds CSPs and sees the dashboard). Nobody is moved into them.
+            </p>
+            <button
+              className={`${btn} border border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-200`}
+              disabled={busy}
+              onClick={() =>
+                change(async () => {
+                  const r = await api.addStarterRoles();
+                  return r;
+                }, "Added the ready-made roles that were missing.")
+              }
+            >
+              Add ready-made roles
+            </button>
+          </div>
+        )}
       </section>
 
       <section className={`${card} overflow-x-auto`}>

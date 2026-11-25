@@ -9,7 +9,7 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 
 | Where it stands | How many |
 |---|---|
-| **Workspace setting now** | 94 |
+| **Workspace setting now** | 96 |
 | **Workspace connection now** | 27 |
 | Server only (base timer) | 11 |
 | Workspace Rules (already per workspace) | 3 |
@@ -25,6 +25,8 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `ASKED_ONCE_FIELDS` | 'ao,rbo_name' | **Workspace setting now** | Setup → Settings → Records and words: “Office fields asked once” |
 | `AUTO_DOCUMENTS_NEW` | True | **Workspace setting now** | Setup → Settings → Records and words: “Make documents for new records by itself” |
 | `BRAND_COLOR` | '#00B259' | **Workspace setting now** | Setup → Settings → Look and weekly email: “Main colour” |
+| `BRAND_COLOR_2` | '' | **Workspace setting now** | Setup → Display → Branding: “Second colour” (No. 240) |
+| `ALLOW_PERSONAL_LOOK` | True | **Workspace setting now** | Setup → Display → Branding: “People pick their own colours” (No. 240) |
 | `BRAND_NAME` | 'CSPdocMaker' | **Workspace setting now** | Setup → Settings → Look and weekly email: “App name” |
 | `CONTACT_FIX_MAX_TRIES` (was in the code) | 3 | **Workspace setting now** | Setup → Settings → When a message fails: “Tries before giving up on a contact” |
 | `CONTACT_LOOP_BATCH` | 10 | **Workspace setting now** | Setup → Settings → When a message fails: “CSPs tried per run” |
@@ -154,6 +156,7 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `WHATSAPP_STATUS_MINUTES` | 10 | Server only (base timer) | How often the server wakes the job; each workspace switches it off or slows it on Settings → Background jobs. |
 | `ALLOWED_EMAIL_DOMAIN` | 'eko.co.in,ekosupport.in' | Workspace Rules (already per workspace) | Set on Setup → Workspace Rules since No. 120; this server value is the starting point. |
 | `SESSION_HOURS` | 24 | Workspace Rules (already per workspace) | Set on Setup → Workspace Rules since No. 120; this server value is the starting point. |
+| `SUPREME_OWNER_EMAILS` | '' | Server only | Who may open the Supreme Owner console (/platform), above every workspace (No. 240). Never a workspace setting. |
 | `SUPER_ADMIN_EMAILS` | '' | Workspace Rules (already per workspace) | Set on Setup → Workspace Rules since No. 120; this server value is the starting point. |
 | `APP_DEBUG` | True | Server only | How this server runs (addresses, keys, folders); never one workspace's choice. |
 | `APP_ENV` | 'development' | Server only | How this server runs (addresses, keys, folders); never one workspace's choice. |

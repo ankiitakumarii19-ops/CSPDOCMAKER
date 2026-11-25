@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../lib/api";
+import TemplateVersions from "./TemplateVersions";
 import type {
   ApiError,
   TemplateDetail,
@@ -37,7 +38,7 @@ export default function DocumentTemplates() {
 
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [tab, setTab] = useState<"fields" | "wording">("fields");
+  const [tab, setTab] = useState<"fields" | "wording" | "versions">("fields");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -293,6 +294,11 @@ export default function DocumentTemplates() {
                   {t.is_builtin && (
                     <span className="text-xs text-gray-500">supplied</span>
                   )}
+                  {t.category && (
+                    <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                      {t.category}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-sm font-mono text-gray-600 dark:text-gray-400">
                   {t.code}
@@ -382,7 +388,7 @@ export default function DocumentTemplates() {
           </div>
 
           <div className="px-5 pt-4 flex gap-1">
-            {(["fields", "wording"] as const).map((key) => (
+            {(["fields", "wording", "versions"] as const).map((key) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
@@ -392,10 +398,24 @@ export default function DocumentTemplates() {
                     : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 }`}
               >
-                {key === "fields" ? "Fields" : "Wording"}
+                {key === "fields" ? "Fields" : key === "wording" ? "Wording" : "Versions & test"}
               </button>
             ))}
           </div>
+
+          {/* No. 240 (Stage 5): versions, restore, test on a CSP, category. */}
+          {tab === "versions" && (
+            <TemplateVersions
+              template={selected}
+              summary={templates.find((t) => t.code === selected.code)}
+              onChanged={async (msg) => {
+                setNotice(msg);
+                await load();
+                await open(selected.code);
+                setTab("versions");
+              }}
+            />
+          )}
 
           {/* Fields tab */}
           {tab === "fields" && (

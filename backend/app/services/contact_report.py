@@ -327,6 +327,13 @@ def run(session, now: Optional[datetime] = None, send=None) -> dict:
                      "to — set Settings → Daily contact email: to, or add a "
                      "Super Admin")
         return {"skipped": "no recipient"}
+    # No. 240: minus anyone who switched the daily email off for themselves.
+    from app.services import notification_prefs
+    to = notification_prefs.keep_wanted(session, "daily_contact", to)
+    if not to:
+        logger.info("contact_report: everyone listed switched the daily "
+                    "contact email off for themselves — not sent")
+        return {"skipped": "everyone switched it off"}
     send = send or _send
     text = body(data, s.brand_name)
     day = data["since"].strftime("%d %b %Y")

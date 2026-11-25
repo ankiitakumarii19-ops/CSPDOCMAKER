@@ -6,6 +6,7 @@
  */
 
 import { BASE_PATH, withBase } from "./basePath";
+import type { Appearance, AppearanceView } from "./myLook";
 
 const API_BASE = withBase("/api");
 
@@ -374,6 +375,13 @@ export interface DashboardSummary {
   can_hide: boolean;
 }
 
+/** No. 240 (Stage 5): one person's own arrangement of a dashboard. */
+export interface DashboardLayout {
+  order: string[];
+  hidden: string[];
+  columns?: number;
+}
+
 export interface WidgetData {
   id: string;
   kind: string;
@@ -542,6 +550,24 @@ export interface TemplateSummary {
   unmapped_count: number;
   ready: boolean;
   error?: string;
+  /** No. 240 (Stage 5): optional group name. */
+  category?: string | null;
+  /** No. 240: every mapped field must have a value or the document is not made. */
+  required_fields?: string[];
+}
+
+/** No. 240 (Stage 5): an earlier version of a template. */
+export interface TemplateVersion {
+  id: string;
+  version: number;
+  name: string;
+  filename: string | null;
+  file_size: number;
+  was_active: boolean;
+  reason: "new_upload" | "wording_edit" | "restore";
+  saved_by: string | null;
+  saved_at: string | null;
+  mapped: number;
 }
 
 export interface TemplatePlaceholder {
@@ -1243,9 +1269,118 @@ export interface MyAccess {
   features: string[];
   record_scope: "own" | "all";
   /** No. 214: the workspace's own app name and main colour. */
-  look: { name: string; color: string; theme?: string; style?: string };
+  look: {
+    name: string;
+    color: string;
+    theme?: string;
+    style?: string;
+    /** No. 240 (Stage 3): second colour ("" = none). */
+    color_2?: string;
+    /** No. 240: may people pick their own colours and font. */
+    own_colours?: boolean;
+    /** No. 240: the organisation's logo version, or null = the app's own. */
+    logo?: string | null;
+    /** No. 240: the organisation's name. */
+    org_name?: string;
+  };
   /** May open the Admin pages (always for Admins; for an RM given an Admin screen). */
   admin_area: boolean;
+}
+
+/** No. 240 (Stage 6): the Supreme Owner's console. Counts and health only. */
+export interface PlatformUsage {
+  documents: number;
+  documents_this_month: number;
+  storage_bytes: number;
+  people: number;
+  records: number;
+}
+
+export interface PlatformPlan {
+  key: string;
+  name: string;
+  description: string | null;
+  price_monthly_paise: number | null;
+  currency: string;
+  max_documents_month: number | null;
+  max_storage_mb: number | null;
+  max_users: number | null;
+  trial_days: number | null;
+  active: boolean;
+}
+
+export interface PlatformWorkspace {
+  id: string;
+  name: string;
+  slug: string;
+  active: boolean;
+  is_eko: boolean;
+  owner_email: string;
+  created_at: string | null;
+  usage: Partial<PlatformUsage>;
+  health: {
+    last_sheet_read?: string;
+    whatsapp_failed_24h?: number;
+    whatsapp_24h?: number;
+    email_failed_24h?: number;
+    failed_generations?: number;
+  };
+  subscription: null | {
+    plan_key: string;
+    plan_name: string;
+    status: string;
+    trial_ends_at: string | null;
+    current_period_end: string | null;
+    payment_provider: string;
+    white_label: boolean;
+    custom_domain: string | null;
+    notes: string | null;
+    limits: null | { max_documents_month: number | null; max_storage_mb: number | null; max_users: number | null };
+  };
+}
+
+export interface PlatformOverview {
+  workspaces: number;
+  active_workspaces: number;
+  inactive_workspaces: number;
+  people: number;
+  documents: number;
+  documents_this_month: number;
+  failed_generations: number;
+  storage_bytes: number;
+  whatsapp_failed_24h: number;
+  email_failed_24h: number;
+  health: Record<string, string>;
+}
+
+export interface PlatformAnnouncement {
+  id: string;
+  message: string;
+  level: "info" | "warning";
+  workspace_id: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  active: boolean;
+  created_by: string | null;
+  created_at: string | null;
+}
+
+/** No. 240 (Stage 3): one staff notification and its channels, for this person. */
+export interface NotificationKind {
+  key: string;
+  label: string;
+  about: string;
+  mandatory: boolean;
+  why_mandatory: string;
+  who: string;
+  channels: {
+    key: string;
+    name: string;
+    available: boolean;
+    on?: boolean;
+    locked?: boolean;
+    why?: string;
+  }[];
 }
 
 export interface AccessFeature {
@@ -1561,7 +1696,146 @@ class ApiClient {
       await this.request("/auth/logout", { method: "POST" });
     } finally {
       this.clearToken();
+      // No. 240: nothing of this person's own look stays on the page.
+      if (typeof document !== "undefined") {
+        document.getElementById("my-look")?.remove();
+        document.getElementById("my-look-font")?.remove();
+      }
     }
+  }
+
+  // ---- Your own look (No. 240) — always and only your own ----
+  async myAppearance() {
+    return this.request<AppearanceView>("/profile/appearance");
+  }
+
+  async saveAppearance(appearance: Appearance) {
+    return this.request<AppearanceView>("/profile/appearance", {
+      method: "PUT",
+      body: JSON.stringify({ appearance }),
+    });
+  }
+
+  /** Change some choices; null = as the workspace has it. */
+  async changeAppearance(appearance: Record<string, unknown>) {
+    return this.request<AppearanceView>("/profile/appearance", {
+      method: "PATCH",
+      body: JSON.stringify({ appearance }),
+    });
+  }
+
+  // ---- Your own dashboard arrangement (No. 240, Stage 5) ----
+  async myDashboardLayout(slug: string) {
+    return this.request<{ layout: DashboardLayout | null }>(`/profile/dashboards/${encodeURIComponent(slug)}`);
+  }
+
+  async saveDashboardLayout(slug: string, layout: DashboardLayout) {
+    return this.request<{ layout: DashboardLayout }>(`/profile/dashboards/${encodeURIComponent(slug)}`, {
+      method: "PUT",
+      body: JSON.stringify(layout),
+    });
+  }
+
+  async resetDashboardLayout(slug: string) {
+    return this.request<{ layout: null }>(`/profile/dashboards/${encodeURIComponent(slug)}`, {
+      method: "DELETE",
+    });
+  }
+
+  async resetAppearance() {
+    return this.request<AppearanceView>("/profile/appearance", { method: "DELETE" });
+  }
+
+  // ---- The Supreme Owner's console (No. 240, Stage 6) ----
+  async mePlatform() {
+    return this.request<{ supreme_owner: boolean }>("/me/platform");
+  }
+
+  async myAnnouncements() {
+    return this.request<{ announcements: { id: string; message: string; level: "info" | "warning" }[] }>(
+      "/me/announcements"
+    );
+  }
+
+  async platformOverview() {
+    return this.request<PlatformOverview>("/platform/overview");
+  }
+
+  async platformWorkspaces() {
+    return this.request<{ workspaces: PlatformWorkspace[] }>("/platform/workspaces");
+  }
+
+  async platformSuspend(id: string, on: boolean) {
+    return this.request<{ id: string; active: boolean }>(
+      `/platform/workspaces/${encodeURIComponent(id)}/${on ? "reactivate" : "suspend"}`,
+      { method: "POST" }
+    );
+  }
+
+  async platformSetSubscription(
+    id: string,
+    body: { plan_key: string; status: string; trial_ends_at?: string | null; white_label?: boolean; custom_domain?: string | null; notes?: string | null }
+  ) {
+    return this.request<{ workspaces: PlatformWorkspace[] }>(
+      `/platform/workspaces/${encodeURIComponent(id)}/subscription`,
+      { method: "PUT", body: JSON.stringify(body) }
+    );
+  }
+
+  async platformPlans() {
+    return this.request<{ plans: PlatformPlan[]; payment_gateway: string }>("/platform/plans");
+  }
+
+  async platformSavePlan(plan: Partial<PlatformPlan> & { name: string }, existingKey?: string) {
+    return this.request<PlatformPlan>(
+      existingKey ? `/platform/plans/${encodeURIComponent(existingKey)}` : "/platform/plans",
+      { method: existingKey ? "PUT" : "POST", body: JSON.stringify(plan) }
+    );
+  }
+
+  async platformAnnouncements() {
+    return this.request<{ announcements: PlatformAnnouncement[] }>("/platform/announcements");
+  }
+
+  async platformAnnounce(body: { message: string; level: string; workspace_id?: string | null }) {
+    return this.request<PlatformAnnouncement>("/platform/announcements", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  }
+
+  async platformEndAnnouncement(id: string) {
+    return this.request<PlatformAnnouncement>(`/platform/announcements/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    });
+  }
+
+  // ---- Your notifications (No. 240, Stage 3) ----
+  async myNotifications() {
+    return this.request<{ notifications: NotificationKind[] }>("/profile/notifications");
+  }
+
+  async saveNotifications(notifications: Record<string, Record<string, boolean>>) {
+    return this.request<{ notifications: NotificationKind[] }>("/profile/notifications", {
+      method: "PUT",
+      body: JSON.stringify({ notifications }),
+    });
+  }
+
+  // ---- The organisation's logo (No. 240, Stage 3; Super Admin) ----
+  async uploadLogo(file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    const path = "/admin/branding/logo";
+    const response = await this.send(`${API_BASE}${path}`, { method: "PUT", body });
+    if (!response.ok) throw await this.failure(response, path, "Could not upload the logo");
+    return response.json() as Promise<{ logo: string; bytes: number }>;
+  }
+
+  async removeLogo() {
+    return this.request<{ logo: null; removed: boolean }>("/admin/branding/logo", {
+      method: "DELETE",
+    });
   }
 
   // ---- CSP ----
@@ -2340,6 +2614,13 @@ class ApiClient {
     );
   }
 
+  /** No. 240 (Stage 4): Manager, Employee, Reviewer, Viewer (those missing). */
+  async addStarterRoles() {
+    return this.request<FeatureAccessView & { added: string[] }>("/admin/feature-access/starter-roles", {
+      method: "POST",
+    });
+  }
+
   async createAccessRole(name: string, copyFrom: string) {
     return this.request<FeatureAccessView & { role: AccessRoleItem }>("/admin/feature-access/roles", {
       method: "POST",
@@ -2493,6 +2774,49 @@ class ApiClient {
     );
   }
 
+  // ---- Template versions and test (No. 240, Stage 5) ----
+  async templateVersions(code: string) {
+    return this.request<{ code: string; current_version: number; versions: TemplateVersion[] }>(
+      `/admin/templates/${encodeURIComponent(code)}/versions`
+    );
+  }
+
+  async restoreTemplateVersion(code: string, id: string) {
+    return this.request<TemplateSummary & { restored_version: number; unmapped: string[] }>(
+      `/admin/templates/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/restore`,
+      { method: "POST" }
+    );
+  }
+
+  /** A file the server sends back (a kept version, a test document). */
+  private async fileFrom(path: string, init: RequestInit, fallback: string): Promise<{ blob: Blob; name: string }> {
+    const response = await this.send(`${API_BASE}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init.headers as Record<string, string>) },
+    });
+    if (!response.ok) throw await this.failure(response, path, fallback);
+    const disposition = response.headers.get("content-disposition") || "";
+    const name = /filename="([^"]+)"/.exec(disposition)?.[1] || "document.docx";
+    return { blob: await response.blob(), name };
+  }
+
+  async templateVersionFile(code: string, id: string) {
+    return this.fileFrom(
+      `/admin/templates/${encodeURIComponent(code)}/versions/${encodeURIComponent(id)}/file`,
+      {},
+      "Could not download that version"
+    );
+  }
+
+  /** Makes the document for one CSP; nothing is stored or sent. */
+  async testTemplate(code: string, cspId: string) {
+    return this.fileFrom(
+      `/admin/templates/${encodeURIComponent(code)}/test`,
+      { method: "POST", body: JSON.stringify({ csp_id: cspId }) },
+      "Could not make the test document"
+    );
+  }
+
   async updateTemplate(
     code: string,
     settings: {
@@ -2500,6 +2824,7 @@ class ApiClient {
       placeholder_map?: Record<string, string>;
       photo_marker?: string;
       active?: boolean;
+      category?: string;
     }
   ) {
     return this.request<TemplateSummary>(

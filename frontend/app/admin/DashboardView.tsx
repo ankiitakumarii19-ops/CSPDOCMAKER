@@ -13,12 +13,13 @@
  * generic cards would be a downgrade.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../lib/api";
 import type {
   ApiError,
   DashboardDetail,
+  DashboardLayout,
   MetricRecords,
   WidgetData,
 } from "../lib/api";
@@ -47,6 +48,12 @@ export default function DashboardView({
   // `field` is set when a row of a table widget was clicked rather than a
   // whole number — it says which row.
   const [openTitle, setOpenTitle] = useState("");
+  // No. 240 (Stage 5): this person's own arrangement (order, hidden,
+  // columns). null = the workspace's, as built on Build a dashboard.
+  const [mine, setMine] = useState<DashboardLayout | null>(null);
+  const [draft, setDraft] = useState<DashboardLayout | null>(null);
+  const [arrangeError, setArrangeError] = useState("");
+  const [arrangeBusy, setArrangeBusy] = useState(false);
 
   // The list opens underneath the widgets, which on a tall dashboard is
   // below the fold — so clicking a number appeared to do nothing until you
@@ -79,6 +86,12 @@ export default function DashboardView({
     try {
       setDashboard(await api.readDashboard(slug));
       setError("");
+      // One's own arrangement; failing to read it only means the
+      // workspace's arrangement is shown.
+      api
+        .myDashboardLayout(slug)
+        .then((r) => setMine(r.layout))
+        .catch((e) => console.warn("DashboardView: own arrangement not read", e));
     } catch (e) {
       setError((e as ApiError).detail || "Could not load that dashboard.");
     } finally {
@@ -111,6 +124,68 @@ export default function DashboardView({
     }
   }
 
+  const layout = draft ?? mine;
+  const arranging = draft !== null;
+  const shown = useMemo(() => {
+    const all = dashboard?.widgets ?? [];
+    if (!layout) return all;
+    const at = new Map(layout.order.map((id, i) => [id, i]));
+    const ordered = [...all].sort((a, b) => {
+      const x = at.has(a.id) ? at.get(a.id)! : layout.order.length + a.position;
+      const y = at.has(b.id) ? at.get(b.id)! : layout.order.length + b.position;
+      return x - y;
+    });
+    return arranging ? ordered : ordered.filter((w) => !layout.hidden.includes(w.id));
+  }, [dashboard, layout, arranging]);
+  const columns = layout?.columns ?? 4;
+
+  function move(id: string, by: number) {
+    const ids = shown.map((w) => w.id);
+    const i = ids.indexOf(id);
+    const j = i + by;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    setDraft((d) => ({ ...(d ?? { order: [], hidden: [] }), order: ids }));
+  }
+
+  function toggle(id: string) {
+    setDraft((d) => {
+      const base = d ?? { order: shown.map((w) => w.id), hidden: [] };
+      const hidden = base.hidden.includes(id) ? base.hidden.filter((h) => h !== id) : [...base.hidden, id];
+      return { ...base, hidden };
+    });
+  }
+
+  async function saveArrangement() {
+    if (!draft) return;
+    setArrangeBusy(true);
+    setArrangeError("");
+    try {
+      const r = await api.saveDashboardLayout(slug, { ...draft, order: shown.map((w) => w.id) });
+      setMine(r.layout);
+      setDraft(null);
+    } catch (e) {
+      setArrangeError((e as ApiError).detail || "Could not save your arrangement.");
+    } finally {
+      setArrangeBusy(false);
+    }
+  }
+
+  async function backToWorkspace() {
+    if (!window.confirm("Show this dashboard as your workspace arranged it?")) return;
+    setArrangeBusy(true);
+    setArrangeError("");
+    try {
+      await api.resetDashboardLayout(slug);
+      setMine(null);
+      setDraft(null);
+    } catch (e) {
+      setArrangeError((e as ApiError).detail || "Could not reset.");
+    } finally {
+      setArrangeBusy(false);
+    }
+  }
+
   if (loading) {
     return <p className="text-sm text-gray-500 py-12 text-center">Loading…</p>;
   }
@@ -134,6 +209,26 @@ export default function DashboardView({
             <p className="text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
               {dashboard.description}
             </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {!arranging && (
+            <button
+              onClick={() => setDraft({ order: shown.map((w) => w.id), hidden: mine?.hidden ?? [], columns: mine?.columns })}
+              className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              <i className="fas fa-grip mr-2 text-xs" />
+              Arrange my view
+            </button>
+          )}
+          {!arranging && mine && (
+            <button
+              onClick={backToWorkspace}
+              disabled={arrangeBusy}
+              className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:underline"
+            >
+              Workspace layout
+            </button>
           )}
         </div>
         {canManage && dashboard.can_remove && (
@@ -170,20 +265,98 @@ export default function DashboardView({
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {dashboard.widgets.map((widget) => (
-          <Widget
-            key={widget.id}
-            widget={widget}
-            onOpen={widget.drillable ? () => openRecords(widget) : undefined}
-            onOpenRow={
-              widget.drillable
-                ? (field, title) => openRecords(widget, field, title)
-                : undefined
-            }
-          />
-        ))}
+      {arranging && (
+        <div className="sticky top-0 z-10 flex flex-wrap items-center gap-3 rounded-xl border border-eko/40 bg-eko-light dark:bg-gray-800 px-4 py-3">
+          <span className="text-sm text-gray-800 dark:text-gray-100 mr-auto">
+            Arranging your own view — move, hide or show widgets. Only your screen changes.
+          </span>
+          <label className="text-sm text-gray-700 dark:text-gray-200 flex items-center gap-2">
+            Columns
+            <select
+              value={draft?.columns ?? 4}
+              onChange={(e) => setDraft((d) => ({ ...(d as DashboardLayout), columns: Number(e.target.value) }))}
+              className="px-2 py-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm"
+            >
+              {[4, 3, 2, 1].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={() => setDraft(null)}
+            disabled={arrangeBusy}
+            className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-200 hover:bg-white dark:hover:bg-gray-700"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={saveArrangement}
+            disabled={arrangeBusy}
+            className="px-3 py-1.5 text-sm rounded-lg bg-eko hover:bg-eko-dark text-white font-semibold disabled:opacity-50"
+          >
+            {arrangeBusy ? "Saving…" : "Save my view"}
+          </button>
+        </div>
+      )}
+      {arrangeError && <div role="alert" className="text-sm text-red-600 dark:text-red-400">{arrangeError}</div>}
+
+      <div className={`grid gap-4 ${GRID[columns] ?? GRID[4]}`}>
+        {shown.map((widget, i) => {
+          const hidden = Boolean(layout?.hidden.includes(widget.id));
+          return (
+            <Widget
+              key={widget.id}
+              widget={widget}
+              columns={columns}
+              dimmed={arranging && hidden}
+              controls={
+                arranging ? (
+                  <div className="flex items-center gap-1 mb-2">
+                    <button
+                      type="button"
+                      aria-label={`Move ${widget.title} earlier`}
+                      disabled={i === 0}
+                      onClick={() => move(widget.id, -1)}
+                      className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-30"
+                    >
+                      <i className="fas fa-arrow-left text-xs" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Move ${widget.title} later`}
+                      disabled={i === shown.length - 1}
+                      onClick={() => move(widget.id, 1)}
+                      className="w-8 h-8 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-600 dark:text-gray-300 disabled:opacity-30"
+                    >
+                      <i className="fas fa-arrow-right text-xs" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!hidden}
+                      onClick={() => toggle(widget.id)}
+                      className="ml-auto px-2 h-8 rounded-lg border border-gray-200 dark:border-gray-600 text-xs text-gray-700 dark:text-gray-200"
+                    >
+                      <i className={`fas ${hidden ? "fa-eye" : "fa-eye-slash"} mr-1`} />
+                      {hidden ? "Show" : "Hide"}
+                    </button>
+                  </div>
+                ) : null
+              }
+              onOpen={!arranging && widget.drillable ? () => openRecords(widget) : undefined}
+              onOpenRow={
+                !arranging && widget.drillable
+                  ? (field, title) => openRecords(widget, field, title)
+                  : undefined
+              }
+            />
+          );
+        })}
       </div>
+      {!arranging && layout && shown.length === 0 && dashboard.widgets.length > 0 && (
+        <p className="text-sm text-gray-500 py-6 text-center">
+          You have hidden every widget. Arrange my view → Show, or Workspace layout.
+        </p>
+      )}
 
       {dashboard.widgets.length === 0 && (
         <p className="text-sm text-gray-500 py-10 text-center">
@@ -291,29 +464,45 @@ function RecordList({
   );
 }
 
+// No. 240 (Stage 5): the grid for the number of columns a person chose
+// (4 = as the workspace built it).
+const GRID: Record<number, string> = {
+  4: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4",
+  3: "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3",
+  2: "grid-cols-1 sm:grid-cols-2",
+  1: "grid-cols-1",
+};
+
+function spanFor(width: number, columns: number): string {
+  const w = Math.min(width, columns);
+  if (columns === 4) return w >= 4 ? "lg:col-span-4" : w === 3 ? "lg:col-span-3" : w === 2 ? "lg:col-span-2" : "";
+  if (columns === 3) return w >= 3 ? "sm:col-span-2 lg:col-span-3" : w === 2 ? "lg:col-span-2" : "";
+  if (columns === 2) return w >= 2 ? "sm:col-span-2" : "";
+  return "";
+}
+
 function Widget({
   widget,
   onOpen,
   onOpenRow,
+  columns = 4,
+  dimmed = false,
+  controls = null,
 }: {
   widget: WidgetData;
   onOpen?: () => void;
   onOpenRow?: (field: string, title: string) => void;
+  columns?: number;
+  dimmed?: boolean;
+  controls?: React.ReactNode;
 }) {
-  const span =
-    widget.width >= 4
-      ? "lg:col-span-4"
-      : widget.width === 3
-      ? "lg:col-span-3"
-      : widget.width === 2
-      ? "lg:col-span-2"
-      : "";
+  const span = spanFor(widget.width, columns);
 
-  const shell = `p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${span}`;
+  const shell = `p-5 rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 ${span} ${dimmed ? "opacity-40" : ""}`;
 
   if (widget.error) {
     return (
-      <div className={shell}>
+      <div className={shell}>{controls}
         <p className="text-xs font-medium text-gray-500">{widget.title}</p>
         <p className="mt-2 text-sm text-red-600 dark:text-red-400">
           {widget.error}
@@ -341,7 +530,7 @@ function Widget({
     );
 
     if (!onOpen) {
-      return <div className={shell}>{body}</div>;
+      return <div className={shell}>{controls}{body}</div>;
     }
     return (
       <button
@@ -362,7 +551,7 @@ function Widget({
   // A breakdown.
   if (Array.isArray(data)) {
     return (
-      <div className={shell}>
+      <div className={shell}>{controls}
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
           {widget.title}
         </p>
@@ -395,7 +584,7 @@ function Widget({
       rows: Array<Record<string, unknown>>;
     };
     return (
-      <div className={shell}>
+      <div className={shell}>{controls}
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">
           {widget.title}
         </p>
@@ -471,7 +660,7 @@ function Widget({
   }
 
   return (
-    <div className={shell}>
+    <div className={shell}>{controls}
       <p className="text-xs font-medium text-gray-500">{widget.title}</p>
       <p className="mt-2 text-sm text-gray-400">No data.</p>
     </div>

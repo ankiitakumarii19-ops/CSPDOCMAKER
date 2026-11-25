@@ -111,6 +111,15 @@ async def create_role(body: RoleIn,
     return {"role": role, **(await feature_access.describe(session))}
 
 
+@router.post("/starter-roles", status_code=status.HTTP_201_CREATED)
+async def add_starter_roles(session: AsyncSession = Depends(get_session),
+                            user=Depends(owner)):
+    """No. 240 (Stage 4): Manager, Employee, Reviewer, Viewer — the ones
+    this workspace does not have yet."""
+    added = await _do(session, feature_access.add_starter_roles(session, user))
+    return {"added": added, **(await feature_access.describe(session))}
+
+
 @router.patch("/roles/{role}")
 async def change_role(role: str, body: RoleChange,
                       session: AsyncSession = Depends(get_session),

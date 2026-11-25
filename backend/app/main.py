@@ -330,4 +330,9 @@ from app.routers.quality_router import router as quality_router
 from app.routers.csp_reply_router import router as csp_reply_router
 app.include_router(csp_reply_router)        # /api/admin/csp-replies — replies to CSPs' WhatsApp messages (No. 151)
 app.include_router(quality_router)          # /api/quality/freshness (all roles), /api/admin/quality/* — Admin + Super Admin (No. 146)
+from app.routers.branding_router import router as branding_router
+app.include_router(branding_router)         # /api/admin/branding/logo (Super Admin), /api/me/logo (No. 240)
+from app.routers.platform_router import me_router as platform_me_router, router as platform_router
+app.include_router(platform_router)         # /api/platform/* — the Supreme Owner only (No. 240)
+app.include_router(platform_me_router)      # /api/me/platform, /api/me/announcements (No. 240)
 

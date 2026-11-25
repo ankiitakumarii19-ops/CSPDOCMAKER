@@ -88,6 +88,8 @@ class DocumentTemplate(Base):
         comment="Inactive templates are not offered, but stay for history",
     )
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    # No. 240 (Stage 5): an optional group for the Document Templates list.
+    category: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
