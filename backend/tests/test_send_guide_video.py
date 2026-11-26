@@ -258,3 +258,51 @@ def test_send_run_video_then_link_and_a_rerun_sends_nothing(vdb, monkeypatch, ca
     order.clear()
     assert g.main() == 0
     assert order == [] and "Will get the video: 0" in capsys.readouterr().out
+
+
+def _try_setup(monkeypatch, status="APPROVED", sent=1):
+    from app.config import get_settings
+    from app.services import message_sender
+    from app.services import whatsapp_platform as wa
+
+    calls = []
+
+    def call_tool(name, args):
+        calls.append((name, args))
+        return {"job_id": "jt"} if name == "upload_contacts" else {"sent": sent}
+    monkeypatch.setattr(get_settings(), "test_copy", False)
+    monkeypatch.setattr(message_sender, "link_is_reachable", lambda url: True)
+    monkeypatch.setattr(wa, "upload_media", lambda path: "media-ref")
+    monkeypatch.setattr(wa, "call_tool", call_tool)
+    monkeypatch.setattr(g, "template_status", lambda: status)
+    return calls
+
+
+def test_try_on_one_number_sends_only_there_and_times_it(vdb, monkeypatch, capsys):
+    _csp(vdb, "1A900050", link=False)
+    calls = _try_setup(monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["x", "--test-to", "98765 43210"])
+    assert g.main() == 0
+    out = capsys.readouterr().out
+    assert "given to the platform in" in out and "Sent to 9198******10 in" in out
+    (n1, up), (n2, send) = calls
+    assert up["contacts"][0]["phone"] == "919876543210"
+    assert send["header_type"] == "video" and send["template_name"] == g.TEMPLATE_NAME
+    vdb.expire_all()
+    assert vdb.query(WhatsAppMessage).count() == 0           # nothing per CSP
+
+
+def test_try_on_one_number_waits_for_meta_and_checks_the_number(vdb, monkeypatch, capsys):
+    calls = _try_setup(monkeypatch, status="PENDING")
+    monkeypatch.setattr(sys, "argv", ["x", "--test-to", "9876543210"])
+    assert g.main() == 1 and calls == []
+    assert "Meta has not approved" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "argv", ["x", "--test-to", "12345"])
+    assert g.main() == 1 and "Not a usable mobile number" in capsys.readouterr().out
+
+
+def test_try_on_one_number_says_when_the_platform_refuses(vdb, monkeypatch, capsys):
+    _try_setup(monkeypatch, sent=0)
+    monkeypatch.setattr(sys, "argv", ["x", "--test-to", "9876543210"])
+    assert g.main() == 1
+    assert "FAILED after" in capsys.readouterr().out

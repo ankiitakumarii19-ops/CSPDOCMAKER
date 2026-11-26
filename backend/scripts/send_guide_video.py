@@ -4,6 +4,10 @@ To: every CSP that has not yet RECEIVED its documents by email (No. 254-255)
 - KO or Sub-KO, sent a form link or not, form filled or not. One send per CSP
 code: the code is the unique key, so a code seen twice is sent to once.
 
+Try it first (No. 258): --test-to <your mobile> sends the video to that one
+number only - no CSP, nothing recorded against a CSP - and says how long the
+upload and the send took.
+
 With the video goes the CSP's verification link (No. 256): right after the
 video, the usual details-form WhatsApp with a NEW link (the same as the
 "Details form" button on Messaging - the earlier link closes once the new
@@ -193,26 +197,32 @@ def template_status() -> str:
     return "NOT LISTED"
 
 
-def _send_video(db, wa, r, phone, ref, body, by, message_log, send_reason,
-                _audit, s):
-    """The video to one CSP, logged; (sent?, reason)."""
-    name = r.name or "CSP"
+def _platform_send(wa, phone, name, ref, source_name, s):
+    """The video wording with the video to one number; the outcome dict."""
     try:
         job = wa.call_tool("upload_contacts", {
             "contacts": [{"phone": phone, "name": wa.one_line(name)}],
-            "source_name": message_log.source_name("guide_video", r.csp_id)})
+            "source_name": source_name})
         answer = wa.call_tool("send_template_message", {
             "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME,
             "phone_column": "phone", "language": s.whatsapp_language,
             "mapping": {"1": {"type": "column", "value": "name"}},
             "header_type": "video", "header_media_url": ref})
         ok = int(answer.get("sent", 0) or 0) >= 1
-        outcome = {"status": wa.SENT if ok else wa.FAILED,
-                   "reason": "" if ok else f"not sent: {str(answer)[:300]}",
-                   "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME}
+        return {"status": wa.SENT if ok else wa.FAILED,
+                "reason": "" if ok else f"not sent: {str(answer)[:300]}",
+                "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME}
     except wa.WhatsAppPlatformError as e:
-        ok, outcome = False, {"status": wa.FAILED, "reason": str(e)[:300],
-                              "job_id": None, "template_name": TEMPLATE_NAME}
+        return {"status": wa.FAILED, "reason": str(e)[:300],
+                "job_id": None, "template_name": TEMPLATE_NAME}
+
+
+def _send_video(db, wa, r, phone, ref, body, by, message_log, send_reason,
+                _audit, s):
+    """The video to one CSP, logged; (sent?, reason)."""
+    outcome = _platform_send(wa, phone, r.name or "CSP", ref,
+                             message_log.source_name("guide_video", r.csp_id), s)
+    ok = outcome["status"] == wa.SENT
     with send_reason.because(send_reason.GUIDE_VIDEO):
         message_log.record(db, kind=KIND_OTHER, mobile=phone, outcome=outcome,
                            csp_id=r.csp_id, csp_name=r.name or "",
@@ -243,6 +253,47 @@ def _send_link(db, r, channel, by, message_sender, send_reason, _audit):
     return ok, why
 
 
+def _try_on_one_number(mobile, s, wa, link_is_reachable) -> int:
+    """No. 258: the video to one number, timed. Nothing recorded per CSP."""
+    phone = wa.phone_for_whatsapp(mobile)
+    if not phone:
+        print(f"Not a usable mobile number: {mobile!r} (10 digits, or 91 + 10).")
+        return 1
+    if s.test_copy:
+        print("TEST_COPY: nothing is sent from the test copy.")
+        return 1
+    if not link_is_reachable(s.public_app_url):
+        print("This copy is not on a public address - only the server sends.")
+        return 1
+    status = template_status()
+    print(f"WhatsApp wording {TEMPLATE_NAME}: {status}")
+    if status in ("PENDING", "REJECTED") or status.startswith("unknown"):
+        print("Not sent: Meta has not approved the wording "
+              "(run --create-template once, then wait).")
+        return 1
+    size = os.path.getsize(VIDEO) / 1024 / 1024
+    start = time.monotonic()
+    try:
+        ref = wa.upload_media(VIDEO)
+    except wa.WhatsAppPlatformError as e:
+        print(f"FAILED: the platform did not take the video ({size:.1f} MB): {e}")
+        return 1
+    uploaded = time.monotonic()
+    print(f"Video ({size:.1f} MB) given to the platform in {uploaded - start:.1f} s.")
+    outcome = _platform_send(wa, phone, "Test", ref, "guide_video_test", s)
+    done = time.monotonic()
+    if outcome["status"] != wa.SENT:
+        print(f"FAILED after {done - uploaded:.1f} s: {outcome['reason']}")
+        return 1
+    print(f"Sent to {masked(phone)} in {done - uploaded:.1f} s "
+          f"(total {done - start:.1f} s, job {outcome['job_id']}).")
+    print("Check the phone: the video should arrive with the message. In a real "
+          "run the video is given to the platform once, then each CSP takes "
+          "about the send time above plus their verification link and the "
+          "pause (--pause, 1 s).")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -254,6 +305,8 @@ def main() -> int:
     ap.add_argument("--only", nargs="*", default=[], help="only these CSP codes")
     ap.add_argument("--limit", type=int, default=0, help="send to at most this many")
     ap.add_argument("--pause", type=float, default=1.0, help="seconds between sends")
+    ap.add_argument("--test-to", default="",
+                    help="send the video to this one mobile only (a try; no CSP)")
     a = ap.parse_args()
     telemetry.setup("cspdocmaker-script", "WARNING")
 
@@ -284,6 +337,9 @@ def main() -> int:
         print(f"Sent to Meta for approval: {answer}")
         print("Check again with this script (no options) - it shows the status.")
         return 0
+
+    if a.test_to:
+        return _try_on_one_number(a.test_to, s, wa, link_is_reachable)
 
     engine = create_engine(s.database_url.replace(
         "postgresql+asyncpg://", "postgresql+psycopg2://"))
@@ -345,7 +401,9 @@ def main() -> int:
             return 1
         ref = wa.upload_media(VIDEO)
         sent = failed = links = link_failed = 0
+        run_start = time.monotonic()
         for i, (r, phone, _, needs_video) in enumerate(chosen, 1):
+            one_start = time.monotonic()
             body = TEMPLATE_BODY.replace("{{1}}", r.name or "CSP")
             if needs_video:
                 ok, why = _send_video(db, wa, r, phone, ref, body, a.by.strip(),
@@ -366,10 +424,11 @@ def main() -> int:
             link_failed += not link_ok
             print(f"  [{i}/{len(chosen)}] {r.csp_id} "
                   f"{'video sent, ' if needs_video else 'video sent earlier, '}"
-                  f"{'link sent' if link_ok else 'link FAILED: ' + link_why}")
+                  f"{'link sent' if link_ok else 'link FAILED: ' + link_why}"
+                  f" ({time.monotonic() - one_start:.1f} s)")
             time.sleep(a.pause)
-        print(f"Done: videos {sent} sent, {failed} failed; "
-              f"links {links} sent, {link_failed} failed.")
+        print(f"Done in {time.monotonic() - run_start:.0f} s: videos {sent} sent, "
+              f"{failed} failed; links {links} sent, {link_failed} failed.")
         if failed or link_failed:
             print("Run again later: anyone who missed the video or the link "
                   "gets what they missed (nobody gets the video twice).")
