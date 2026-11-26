@@ -100,7 +100,7 @@ def _rows(tab: str) -> List[List[str]]:
 def load(code: str) -> dict:
     """The CSP's row as the form shows it: every column, its value, kind."""
     from app.services.sheet_writeback_service import (SheetWriteError,
-                                                      find_columns, find_row)
+                                                      find_row, locate_header)
 
     settings = get_settings()
     if not settings.google_sheets_csp_sheet_id:
@@ -110,12 +110,14 @@ def load(code: str) -> dict:
     rows = _rows(tab)
     if not rows:
         raise EditError(f"The {tab} tab is empty.", status_code=409)
-    header = rows[0]
-    columns = find_columns(header)
-    if csp_mapping.IDENTITY_FIELD not in columns:
-        raise EditError(f"The {tab} tab has no CSP Code column.", status_code=409)
     try:
-        number = find_row(rows, columns[csp_mapping.IDENTITY_FIELD], code)
+        header_row, columns = locate_header(rows, tab)
+    except SheetWriteError as e:
+        raise EditError(str(e), status_code=409)
+    header = rows[header_row]
+    try:
+        number = find_row(rows, columns[csp_mapping.IDENTITY_FIELD], code,
+                          header_row)
     except SheetWriteError as e:
         raise EditError(str(e), status_code=409)
     row = rows[number - 1]

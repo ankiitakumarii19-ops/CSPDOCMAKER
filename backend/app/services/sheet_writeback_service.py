@@ -59,12 +59,57 @@ def find_columns(header: List[str]) -> Dict[str, int]:
         field = csp_mapping.field_for_header(title)   # own columns (No. 211)
         if field and field not in columns:
             columns[field] = index
+    if csp_mapping.IDENTITY_FIELD not in columns:
+        # No. 263: a workspace's own name for the code column (Setup ->
+        # Columns) that is not in the sheet must not lose the row when the
+        # standard "CSP Code" heading is right there. Said, not silent.
+        eko = _norm(csp_mapping.FIELD_TO_SHEET_COLUMN[csp_mapping.IDENTITY_FIELD])
+        for index, title in enumerate(header):
+            if _norm(title) == eko:
+                columns[csp_mapping.IDENTITY_FIELD] = index
+                logger.warning(
+                    "sheet_writeback_service.find_columns: the code column's "
+                    "own name %r (Setup -> Columns) is not in the sheet; "
+                    "using the %r column", csp_mapping.header_for(
+                        csp_mapping.IDENTITY_FIELD), title)
+                break
     return columns
 
 
-def find_row(rows: List[List[str]], code_column: int, csp_code: str) -> int:
+# How far down the tab the heading row is looked for (No. 263).
+HEADER_SEARCH_ROWS = 5
+
+
+def locate_header(rows: List[List[str]], tab: str) -> Tuple[int, Dict[str, int]]:
+    """(0-based index of the heading row, its columns).
+
+    The heading is row 1. A row put above it (a title, a note) used to stop
+    every write with "no CSP Code column"; the first few rows are now looked
+    at. When none has it, the error says what row 1 actually reads, so the
+    cause can be seen from the Admin page without a server login.
+    """
+    for index, row in enumerate(rows[:HEADER_SEARCH_ROWS]):
+        columns = find_columns(row)
+        if csp_mapping.IDENTITY_FIELD in columns:
+            if index:
+                logger.warning(
+                    "sheet_writeback_service.locate_header: the headings of "
+                    "%s are on row %d, not row 1", tab, index + 1)
+            return index, columns
+
+    first = [str(h).strip() for h in (rows[0] if rows else []) if str(h).strip()]
+    shown = ", ".join(first[:6]) + (" ..." if len(first) > 6 else "")
+    wanted = csp_mapping.header_for(csp_mapping.IDENTITY_FIELD) or "CSP Code"
+    raise SheetWriteError(
+        f"The {tab} tab has no {wanted} column, so a row cannot be found. "
+        f"Row 1 reads: {shown or '(empty)'}.")
+
+
+def find_row(rows: List[List[str]], code_column: int, csp_code: str,
+             header_row: int = 0) -> int:
     """The 1-based sheet row for this CSP Code.
 
+    `header_row` is the 0-based index of the heading row; data starts below.
     Raises when the code appears twice or not at all: both mean the right
     row is not known, and writing to the wrong one is worse than failing.
     """
@@ -73,7 +118,8 @@ def find_row(rows: List[List[str]], code_column: int, csp_code: str) -> int:
         raise SheetWriteError("Cannot write back without a CSP Code.")
 
     matches = [
-        number for number, row in enumerate(rows[1:], start=2)
+        number for number, row in enumerate(rows[header_row + 1:],
+                                            start=header_row + 2)
         if code_column < len(row) and _norm(row[code_column]) == wanted
     ]
     if not matches:
@@ -130,12 +176,15 @@ def write_values(
     if not rows:
         raise SheetWriteError(f"The {tab} tab is empty.")
 
-    columns = find_columns(rows[0])
-    if csp_mapping.IDENTITY_FIELD not in columns:
-        raise SheetWriteError(
-            f"The {tab} tab has no CSP Code column, so a row cannot be found.")
+    try:
+        header_row, columns = locate_header(rows, tab)
+    except SheetWriteError as e:
+        logger.error("sheet_writeback_service.write_values: CSP %s: %s",
+                     csp_code, e)
+        raise
 
-    row_number = find_row(rows, columns[csp_mapping.IDENTITY_FIELD], csp_code)
+    row_number = find_row(rows, columns[csp_mapping.IDENTITY_FIELD], csp_code,
+                          header_row)
 
     data, written, skipped = [], {}, []
     for field, value in wanted.items():

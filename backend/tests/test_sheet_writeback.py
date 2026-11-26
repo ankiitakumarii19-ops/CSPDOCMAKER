@@ -182,3 +182,70 @@ async def test_a_sheet_with_no_code_column_stops_the_write(monkeypatch):
     monkeypatch.setattr(csp_gsheet_service, "_get_sheets_service", lambda: fake)
     with pytest.raises(w.SheetWriteError, match="no CSP Code column"):
         w.write_values("1A850466", {"gender": "Male"}, tab="CSPData")
+
+
+# ---- No. 263: "The KOData tab has no CSP Code column" -------------------
+
+def _fake(monkeypatch, rows):
+    from app.services import csp_gsheet_service
+    fake = _FakeSheets(rows)
+    monkeypatch.setattr(csp_gsheet_service, "_get_sheets_service", lambda: fake)
+    return fake
+
+
+async def test_no_code_column_says_what_row_1_reads(monkeypatch):
+    """The Admin page shows this message: it must show the cause."""
+    _fake(monkeypatch, [["CSP Name", "Gender"], ["Abhishek", "Male"]])
+    with pytest.raises(w.SheetWriteError, match="Row 1 reads: CSP Name, Gender"):
+        w.write_values("1A850466", {"gender": "Male"}, tab="KOData")
+
+
+async def test_a_row_above_the_headings_does_not_stop_the_write(monkeypatch):
+    fake = _fake(monkeypatch, [["CSP list - do not edit"], []] + ROWS)
+    written, _ = w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
+    assert written == {"gender": "Female"}
+    assert [d["range"] for d in fake.written["data"]] == ["KOData!E5"], \
+        "headings on row 3 -> Nitasha is on row 5"
+
+
+async def test_a_code_in_a_row_above_the_headings_is_not_taken(monkeypatch):
+    """Only rows BELOW the headings are CSP rows."""
+    rows = [["1A851727"], ROWS[0], ROWS[1]]
+    _fake(monkeypatch, rows)
+    with pytest.raises(w.SheetWriteError, match="not in the sheet"):
+        w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
+
+
+async def test_headings_further_down_than_5_rows_still_stop_it(monkeypatch):
+    fake = _fake(monkeypatch, [[]] * w.HEADER_SEARCH_ROWS + ROWS)
+    with pytest.raises(w.SheetWriteError, match="no CSP Code column.*empty"):
+        w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
+    assert fake.written is None
+
+
+async def test_own_code_column_name_not_in_sheet_falls_back_to_csp_code(monkeypatch):
+    """Setup -> Columns renamed the code column, the sheet still says CSP Code."""
+    from app.services import csp_mapping
+    monkeypatch.setattr(csp_mapping, "column_map", lambda: {"csp_code": "Agent Code"})
+    fake = _fake(monkeypatch, ROWS)
+    written, _ = w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
+    assert written == {"gender": "Female"}
+    assert [d["range"] for d in fake.written["data"]] == ["KOData!E3"]
+
+
+async def test_own_code_column_name_is_used_when_it_is_in_the_sheet(monkeypatch):
+    from app.services import csp_mapping
+    monkeypatch.setattr(csp_mapping, "column_map", lambda: {"csp_code": "Agent Code"})
+    rows = [["CSP Code", "Agent Code", "Gender"],
+            ["OLD-1", "1A851727", ""]]
+    fake = _fake(monkeypatch, rows)
+    w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
+    assert [d["range"] for d in fake.written["data"]] == ["KOData!C2"]
+
+
+async def test_own_name_missing_and_no_csp_code_names_the_own_heading(monkeypatch):
+    from app.services import csp_mapping
+    monkeypatch.setattr(csp_mapping, "column_map", lambda: {"csp_code": "Agent Code"})
+    _fake(monkeypatch, [["Name", "Gender"], ["A", "Male"]])
+    with pytest.raises(w.SheetWriteError, match="no Agent Code column"):
+        w.write_values("1A851727", {"gender": "Female"}, tab="KOData")
