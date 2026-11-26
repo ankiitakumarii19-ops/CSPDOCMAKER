@@ -453,6 +453,22 @@ export interface SendCandidate {
   on_hold?: string;
   /** In CSPDATA before the import: never the details form. */
   existing?: boolean;
+  /** No. 257: filters on Messaging. */
+  rm?: string;
+  dc?: string;
+  lho?: string;
+  ao?: string;
+  /** Every document they should get has been emailed (the RM dashboard's rule). */
+  documents_sent?: boolean;
+}
+
+/** A photo / video / file kept to send with a message (No. 257). */
+export interface MessageAttachmentInfo {
+  id: string;
+  filename: string;
+  media_kind: "image" | "video" | "document";
+  file_size: number;
+  content_type: string;
 }
 
 export interface SendResult {
@@ -3259,9 +3275,26 @@ class ApiClient {
     text?: string;
     template_id?: string | null;
     name?: string;
+    attachment_id?: string | null;
   }) {
     return this.request<{ asked: number; sent: number; failed: number; results: CspSendResult[] }>(
       "/admin/messaging/send-message", { method: "POST", body: JSON.stringify(body) });
+  }
+
+  /** Keep a photo / video / file to send with a message (No. 257). Sent as
+   *  multipart, so the JSON content type is not set here. */
+  async uploadMessageAttachment(file: File) {
+    const body = new FormData();
+    body.append("file", file);
+    const token = this.getToken();
+    const path = "/admin/messaging/attachments";
+    const response = await this.send(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body,
+    });
+    if (!response.ok) throw await this.failure(response, path, "The file could not be attached");
+    return (await response.json()) as MessageAttachmentInfo;
   }
 
   /** Reaches real people and cannot be taken back. Recipients are named. */

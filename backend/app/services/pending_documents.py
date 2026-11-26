@@ -46,6 +46,20 @@ def _text(value) -> str:
     return " ".join(str(value or "").split())
 
 
+def documents_due(code: str) -> list:
+    """Every document this CSP should get (a Sub-KO no BCP)."""
+    from app.models.enums import DocumentType
+    from app.services import ko_level
+
+    return ko_level.allowed_documents(code, list(DocumentType))
+
+
+def documents_left(code: str, sent: Set[str]) -> list:
+    """The documents this CSP should get that were not emailed yet (empty =
+    every document sent). One rule for this list and Messaging (No. 257)."""
+    return [d for d in documents_due(code) if d.value not in sent]
+
+
 def build_rows(records: Iterable, mailed: Dict[str, Set[str]],
                contacts: Dict[str, dict], imported: Set[str]) -> dict:
     """Every CSP still owed a document, as plain rows (no database here, so
@@ -56,8 +70,6 @@ def build_rows(records: Iterable, mailed: Dict[str, Set[str]],
     contacts  csp_id -> {"whatsapp": n, "email": n, "last": datetime|None}
     imported  CSP codes copied in by the Calling / Lead import
     """
-    from app.models.enums import DocumentType
-    from app.services import ko_level
     from app.services.missing_data_service import document_label
 
     rows: List[dict] = []
@@ -67,7 +79,7 @@ def build_rows(records: Iterable, mailed: Dict[str, Set[str]],
         if (r.origin or "") == "baseline" and code not in imported:
             old += 1
             continue
-        due = ko_level.allowed_documents(code, list(DocumentType))
+        due = documents_due(code)
         sent = mailed.get(r.csp_id, set())
         left = [d for d in due if d.value not in sent]
         if not left:

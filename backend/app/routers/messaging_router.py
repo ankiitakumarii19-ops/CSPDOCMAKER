@@ -14,7 +14,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -251,6 +251,23 @@ async def candidates(
     imported = set((await session.execute(
         select(SourceSheetState.csp_code).where(
             SourceSheetState.imported_as.isnot(None)))).scalars())
+    # No. 257: documents sent = every document the CSP should get was
+    # emailed - the RM dashboard's rule (pending_documents).
+    from app.models.email_document import EmailDocument
+    from app.models.email_job import EmailJob
+    from app.models.enums import EmailStatus
+    from app.models.processing_job import ProcessingJob
+    from app.services import pending_documents
+    mailed: Dict[str, set] = {}
+    for csp_id, doc_type in (await session.execute(
+            select(ProcessingJob.csp_id, EmailDocument.document_type)
+            .join(EmailJob, EmailJob.processing_job_id == ProcessingJob.id)
+            .join(EmailDocument, EmailDocument.email_job_id == EmailJob.id)
+            .where(EmailJob.status == EmailStatus.SENT))).all():
+        mailed.setdefault(csp_id, set()).add(getattr(doc_type, "value", doc_type))
+
+    def _text(value) -> str:
+        return " ".join(str(value or "").split())
 
     rows = []
     for record in (await session.execute(
@@ -272,6 +289,11 @@ async def candidates(
             "on_hold": record.send_hold or "",
             # In CSPDATA before the import: never the details form (D14).
             "existing": (record.origin or "") == "baseline" and code not in imported,
+            # No. 257: filters on Messaging.
+            "rm": _text(record.rm_name), "dc": _text(record.dc),
+            "lho": _text(record.lho), "ao": _text(record.ao),
+            "documents_sent": not pending_documents.documents_left(
+                code, mailed.get(record.csp_id, set())),
         })
     return {"candidates": rows, "total": len(rows)}
 
@@ -291,6 +313,31 @@ class MessageIn(BaseModel):
     text: str = Field("", max_length=2000)
     template_id: Optional[str] = None
     name: Optional[str] = Field(None, max_length=200)
+    # No. 257: a photo / video / file uploaded with POST /attachments.
+    attachment_id: Optional[str] = None
+
+
+@router.post("/attachments")
+async def upload_attachment(
+    file: UploadFile = File(...),
+    session: AsyncSession = Depends(get_session),
+    user=Depends(require_role("admin", "super_admin")),
+):
+    """Keep one photo, video or file to send with a message (No. 257).
+    Refused with the reason when WhatsApp cannot carry it."""
+    from app.services import message_attachments as ma
+
+    data = await file.read(ma.LIMIT[ma.VIDEO] + 1)
+    who = _who(user).lower()
+    try:
+        row = await session.run_sync(
+            lambda sync: ma.save(sync, file.filename or "", data, who))
+    except ma.AttachmentRefused as e:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e))
+    await session.commit()
+    return {"id": str(row.id), "filename": row.filename,
+            "media_kind": row.media_kind, "file_size": row.file_size,
+            "content_type": row.content_type}
 
 
 @router.post("/send-message")
@@ -307,11 +354,22 @@ async def send_message(
 
     if body.kind not in (mm.CUSTOM, mm.DETAILS_FORM):
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown message kind.")
-    if body.kind == mm.CUSTOM and not body.text.strip():
+    if body.kind == mm.CUSTOM and not body.text.strip() and not body.attachment_id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "The message is empty.")
+    if body.attachment_id and body.kind != mm.CUSTOM:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "A photo, video or file goes with your own message, "
+                            "not with the details form.")
     who = _who(user).lower()
 
     def _send(sync):
+        from app.services import message_attachments as ma
+        attachment = None
+        if body.attachment_id:
+            attachment = ma.get(sync, body.attachment_id)
+            if attachment is None:
+                raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                                    "The attached file was not found - attach it again.")
         results = []
         for csp_id in body.csp_ids:
             record = sync.execute(select(CSPRecord).where(
@@ -321,7 +379,8 @@ async def send_message(
                                 "reason": "no such CSP"})
                 continue
             results.append(mm.send(sync, record, kind=body.kind,
-                                   channel=body.channel, text=body.text, by=who))
+                                   channel=body.channel, text=body.text, by=who,
+                                   attachment=attachment))
         sent = sum(1 for r in results if r.get("sent"))
         failed = len(results) - sent
         template_id = None
@@ -337,7 +396,10 @@ async def send_message(
             status=SENT if failed == 0 else (PARTIAL if sent else FAILED),
             sent_count=sent, failed_count=failed,
             outcome={"kind": body.kind, "channel": body.channel,
-                     "text": body.text[:1000], "results": results},
+                     "text": body.text[:1000], "results": results,
+                     "attachment": None if attachment is None else {
+                         "id": str(attachment.id), "filename": attachment.filename,
+                         "media_kind": attachment.media_kind}},
             started_by=who, finished_at=datetime.now(timezone.utc)))
         return results, sent, failed
 

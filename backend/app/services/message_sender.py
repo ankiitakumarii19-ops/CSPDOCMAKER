@@ -156,9 +156,11 @@ def template_for(session: Session, record, verify: bool = False
 
 def _send_email(to: str, subject: str, body: str, *,
                 kind: str = "other", csp_id: Optional[str] = None,
-                csp_name: Optional[str] = None) -> Tuple[bool, str]:
+                csp_name: Optional[str] = None,
+                attachments: Optional[list] = None) -> Tuple[bool, str]:
     """Send plain text through the existing SMTP path, and record it
-    (No. 127): sent or failed, and later opened / bounced."""
+    (No. 127): sent or failed, and later opened / bounced.
+    attachments (No. 257): [(filename, bytes, "type/subtype")]."""
     from app.services import email_log, email_service
 
     if email_service.paused():
@@ -181,7 +183,8 @@ def _send_email(to: str, subject: str, body: str, *,
     )
     try:
         ok = email_service._send_via_smtp(to, subject, html, body,
-                                          message_id=track.message_id)
+                                          message_id=track.message_id,
+                                          attachments=attachments or None)
         why = "" if ok else "SMTP reported failure"
     except Exception as e:
         # Returned to the caller (recorded on the request as its delivery

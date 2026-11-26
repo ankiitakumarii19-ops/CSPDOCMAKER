@@ -11,6 +11,7 @@ from app.models.messaging import (
     MessageCampaign, MessageChannel, MessageTemplate,
 )
 from app.models.agent import AgentFinding, AgentRun, AgentState
+from app.models.message_attachment import MessageAttachment
 from app.models.agent_eval import (
     AgentEvalIssue, AgentEvalSnapshot, AgentImprovement, AssistantTurn,
 )
@@ -82,6 +83,7 @@ __all__ = [
     "MessageChannel",
     "MessageTemplate",
     "MessageCampaign",
+    "MessageAttachment",
     "AgentState",
     "AgentRun",
     "AgentEvalIssue",

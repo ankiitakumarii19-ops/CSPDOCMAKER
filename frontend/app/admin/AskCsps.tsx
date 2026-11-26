@@ -11,6 +11,11 @@
  *
  * Kept from before (owner's choices, 2 Nov 2026): a CSP on hold is never
  * messaged; an existing CSP never gets the details form (custom is fine).
+ *
+ * No. 257: filters by RM, DC, LHO, AO and documents sent / not sent, and a
+ * chat-like box to attach one photo, video or file to your own message -
+ * on WhatsApp it is the message's picture / video / file, by email an
+ * attachment.
  */
 
 import { useMemo, useRef, useState } from "react";
@@ -20,7 +25,7 @@ import { matches } from "../lib/searchMatch";
 import { api } from "../lib/api";
 import { useMyAccess } from "../lib/useMyAccess";
 import type {
-  ApiError, CspSendResult, MessageTemplateInfo, SendCandidate, SendChannel,
+  ApiError, CspSendResult, MessageAttachmentInfo, MessageTemplateInfo, SendCandidate, SendChannel,
 } from "../lib/api";
 
 const DETAILS = "__details__";
@@ -31,6 +36,29 @@ const WRAPPER = "Namaste {name}, here is a message from Eko Bharat Ventures: {me
 
 const input =
   "px-3 py-1.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white";
+
+// What WhatsApp carries (backend message_attachments.ALLOWED).
+const ACCEPT = ".jpg,.jpeg,.png,.mp4,.3gp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt";
+const KIND_WORD = { image: "Photo", video: "Video", document: "File" } as const;
+
+function size(bytes: number) {
+  return bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+/** The distinct, non-empty values of one field, sorted (filter choices). */
+function choices(rows: SendCandidate[], key: "rm" | "dc" | "lho" | "ao") {
+  return [...new Set(rows.map((c) => (c[key] || "").trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b));
+}
+
+function Clip() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2"
+      strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  );
+}
 
 function day(iso?: string | null) {
   return iso ? new Date(iso).toLocaleDateString("en-IN", { day: "numeric", month: "short" }) : "";
@@ -54,6 +82,10 @@ export default function AskCsps({
   const [q, setQ] = useState("");
   const [status, setStatus] = useState<"all" | "missing" | "asked" | "not_asked">("all");
   const [needs, setNeeds] = useState<string[]>([]);
+  // No. 257: who, by the people and offices around them, and documents.
+  const [by, setBy] = useState<{ rm: string; dc: string; lho: string; ao: string }>(
+    { rm: "", dc: "", lho: "", ao: "" });
+  const [docs, setDocs] = useState<"all" | "sent" | "not_sent">("all");
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   // What
@@ -61,6 +93,11 @@ export default function AskCsps({
   const [pick, setPick] = useState<string>(OWN);
   const [text, setText] = useState("Namaste {name}, please send us your {missing_items}.");
   const [newName, setNewName] = useState("");
+  // No. 257: one photo / video / file with your own message.
+  const [attachment, setAttachment] = useState<MessageAttachmentInfo | null>(null);
+  const [attachPreview, setAttachPreview] = useState<string>("");
+  const [attaching, setAttaching] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
   const [savingAs, setSavingAs] = useState(false);
   // How
   const usable = channels.filter((c) => c.can_send);
@@ -81,16 +118,28 @@ export default function AskCsps({
     [candidates]
   );
 
+  const options = useMemo(() => ({
+    rm: choices(candidates, "rm"), dc: choices(candidates, "dc"),
+    lho: choices(candidates, "lho"), ao: choices(candidates, "ao"),
+  }), [candidates]);
+
   const filtered = useMemo(() => {
     return candidates.filter((c) => {
       if (status === "missing" && c.missing.length === 0) return false;
       if (status === "asked" && !c.already_asked) return false;
       if (status === "not_asked" && c.already_asked) return false;
       if (needs.length && !needs.every((n) => c.missing.includes(n))) return false;
+      if (by.rm && (c.rm || "") !== by.rm) return false;
+      if (by.dc && (c.dc || "") !== by.dc) return false;
+      if (by.lho && (c.lho || "") !== by.lho) return false;
+      if (by.ao && (c.ao || "") !== by.ao) return false;
+      if (docs === "sent" && !c.documents_sent) return false;
+      if (docs === "not_sent" && c.documents_sent) return false;
       // The one way every search box matches (No. 175).
       return matches(q, [c.name, c.csp_id, c.email], [c.mobile]);
     });
-  }, [candidates, q, status, needs]);
+  }, [candidates, q, status, needs, by, docs]);
+  const filtering = !!(by.rm || by.dc || by.lho || by.ao || docs !== "all");
 
   const sendable = (c: SendCandidate) => !c.on_hold;
   const byId = useMemo(() => new Map(candidates.map((c) => [c.csp_id, c])), [candidates]);
@@ -115,6 +164,28 @@ export default function AskCsps({
     });
   const selectMany = (rows: SendCandidate[]) =>
     setChosen((s) => new Set([...s, ...rows.filter(sendable).map((c) => c.csp_id)]));
+
+  const attach = async (file: File | undefined) => {
+    if (!file) return;
+    setError("");
+    setAttaching(true);
+    try {
+      const info = await api.uploadMessageAttachment(file);
+      if (attachPreview) URL.revokeObjectURL(attachPreview);
+      setAttachPreview(info.media_kind === "document" ? "" : URL.createObjectURL(file));
+      setAttachment(info);
+    } catch (e) {
+      setError((e as ApiError).detail || "The file could not be attached.");
+    } finally {
+      setAttaching(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+  const unattach = () => {
+    if (attachPreview) URL.revokeObjectURL(attachPreview);
+    setAttachPreview("");
+    setAttachment(null);
+  };
 
   const saveNew = async () => {
     if (!newName.trim() || !text.trim()) return;
@@ -171,6 +242,7 @@ export default function AskCsps({
           csp_ids: ids.slice(i, i + PART), kind, channel,
           text: kind === "custom" ? text : "",
           template_id: template?.id ?? null,
+          attachment_id: kind === "custom" ? attachment?.id ?? null : null,
           name: `Message to ${ids.length} CSP(s) — ${template?.name ?? (kind === "details_form" ? "details form" : "own message")}`,
         });
         all.push(...r.results);
@@ -199,8 +271,9 @@ export default function AskCsps({
           Ask CSPs for their details
         </h3>
         <p className="text-xs text-gray-500">
-          Anyone can be messaged. A CSP on hold is never messaged, and an existing CSP is never
-          sent the details form. Every message is logged in the CSP&apos;s chat and Action Required.
+          Anyone can be messaged, with a photo, video or file if you like. A CSP on hold is never
+          messaged, and an existing CSP is never sent the details form. Every message is logged in
+          the CSP&apos;s chat and Action Required.
         </p>
       </div>
 
@@ -222,6 +295,40 @@ export default function AskCsps({
             <option value="asked">Already asked</option>
             <option value="not_asked">Not asked yet</option>
           </select>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {(["rm", "dc", "lho", "ao"] as const).map((k) => (
+            <select
+              key={k}
+              value={by[k]}
+              onChange={(e) => { setBy((b) => ({ ...b, [k]: e.target.value })); setShown(PAGE); }}
+              className={`${input} max-w-[12rem]`}
+              aria-label={`Filter by ${k.toUpperCase()}`}
+            >
+              <option value="">{`All ${k === "rm" ? "RMs" : k === "dc" ? "DCs" : k === "lho" ? "LHOs" : "AOs"}`}</option>
+              {options[k].map((v) => (
+                <option key={v} value={v}>{v}</option>
+              ))}
+            </select>
+          ))}
+          <select
+            value={docs}
+            onChange={(e) => { setDocs(e.target.value as typeof docs); setShown(PAGE); }}
+            className={input}
+            aria-label="Filter by documents"
+          >
+            <option value="all">Documents: all</option>
+            <option value="sent">Documents sent</option>
+            <option value="not_sent">Documents not sent</option>
+          </select>
+          {filtering && (
+            <button
+              onClick={() => { setBy({ rm: "", dc: "", lho: "", ao: "" }); setDocs("all"); setShown(PAGE); }}
+              className="text-xs text-gray-500 hover:underline"
+            >
+              Clear filters
+            </button>
+          )}
         </div>
         {kinds.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
@@ -279,7 +386,16 @@ export default function AskCsps({
                   {c.existing && label("bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300", "Existing CSP")}
                   {c.on_hold && label("bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-300", `On hold: ${c.on_hold}`)}
                   {!c.reachable && label("bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300", "No mobile or email")}
+                  {c.documents_sent
+                    ? label("bg-green-50 text-green-700 dark:bg-green-900/30 dark:text-green-300", "Documents sent")
+                    : label("bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300", "Documents not sent")}
                 </div>
+                {(c.rm || c.dc || c.lho || c.ao) && (
+                  <p className="text-xs text-gray-500">
+                    {[c.rm && `RM ${c.rm}`, c.dc && `DC ${c.dc}`, c.lho && `LHO ${c.lho}`, c.ao && `AO ${c.ao}`]
+                      .filter(Boolean).join(" · ")}
+                  </p>
+                )}
                 <p className="text-xs text-gray-500">
                   {c.missing.length ? `Missing: ${c.missing.join(", ")}` : "Nothing missing"}
                   {(c.mobile || c.email) && <> · {[c.mobile, c.email].filter(Boolean).join(" · ")}</>}
@@ -300,7 +416,7 @@ export default function AskCsps({
       <div className="rounded-lg border border-gray-200 dark:border-gray-700 p-3 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Message</span>
-          <select value={pick} onChange={(e) => choose(e.target.value)} className={input}>
+          <select value={pick} onChange={(e) => choose(e.target.value)} className={`${input} max-w-full`}>
             <option value={DETAILS}>Details form — the usual message with a link</option>
             <option value={OWN}>Write your own</option>
             {saved.length > 0 && (
@@ -315,20 +431,64 @@ export default function AskCsps({
         {kind === "details_form" ? (
           <p className="text-xs text-gray-500">
             The wording under &ldquo;What the messages say&rdquo; above, with a new link to their own
-            details form. Existing CSPs are skipped for this message.
+            details form. Existing CSPs are skipped for this message. A photo, video or file goes
+            only with your own message.
           </p>
         ) : (
           <>
-            <textarea
-              rows={4}
-              value={text}
-              maxLength={900}
-              onChange={(e) => setText(e.target.value)}
-              className={`${input} w-full`}
-            />
+            <div className="rounded-2xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 overflow-hidden">
+              {attachment && (
+                <div className="flex items-center gap-3 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/60">
+                  {attachment.media_kind === "image" && attachPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={attachPreview} alt="" className="h-16 w-16 rounded-lg object-cover" />
+                  ) : attachment.media_kind === "video" && attachPreview ? (
+                    <video src={attachPreview} className="h-16 w-24 rounded-lg object-cover bg-black" muted />
+                  ) : (
+                    <div className="h-16 w-16 rounded-lg bg-eko/10 text-eko flex items-center justify-center text-xs font-bold uppercase">
+                      {attachment.filename.split(".").pop()}
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1 text-sm">
+                    <div className="font-medium text-gray-900 dark:text-white truncate">{attachment.filename}</div>
+                    <div className="text-xs text-gray-500">{KIND_WORD[attachment.media_kind]} · {size(attachment.file_size)}</div>
+                  </div>
+                  <button onClick={unattach} className="px-2 text-gray-500 hover:text-red-600" aria-label="Remove the file">✕</button>
+                </div>
+              )}
+              <textarea
+                rows={4}
+                value={text}
+                maxLength={900}
+                onChange={(e) => setText(e.target.value)}
+                placeholder={attachment ? "Add a message (optional)" : "Type a message"}
+                className="w-full px-3 py-2 text-sm bg-transparent text-gray-900 dark:text-white outline-none resize-y"
+              />
+              <div className="flex items-center gap-2 px-2 py-1.5 border-t border-gray-200 dark:border-gray-700">
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept={ACCEPT}
+                  className="hidden"
+                  onChange={(e) => attach(e.target.files?.[0])}
+                />
+                <button
+                  onClick={() => fileRef.current?.click()}
+                  disabled={attaching}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50"
+                  title="Attach a photo, video or file"
+                >
+                  <Clip />
+                  {attaching ? "Attaching…" : attachment ? "Change file" : "Photo, video or file"}
+                </button>
+                <span className="text-xs text-gray-400 ml-auto">{text.length}/900</span>
+              </div>
+            </div>
             <p className="text-xs text-gray-500">
               {"{name}"}, {"{csp_id}"} and {"{missing_items}"} are filled in for each CSP. On WhatsApp
-              it goes inside the approved wording, on one line.
+              it goes inside the approved wording, on one line. A photo (JPG, PNG, up to 5 MB), video
+              (MP4, up to 16 MB) or file (PDF, Word, Excel, PowerPoint, up to 16 MB) goes with it; the
+              first time each kind is sent, Meta approves its wording once (minutes to about a day).
             </p>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {template && text !== template.body && (
@@ -362,10 +522,18 @@ export default function AskCsps({
               </div>
             ) : (
               <div className="text-gray-700 dark:text-gray-300">
+                {attachment && (
+                  <div className="font-medium">
+                    📎 {KIND_WORD[attachment.media_kind]}: {attachment.filename}
+                  </div>
+                )}
                 {channel === "whatsapp"
-                  ? WRAPPER.replace("Eko Bharat Ventures", senderShort)
+                  ? (attachment
+                      ? WRAPPER.replace("a message", `a ${KIND_WORD[attachment.media_kind].toLowerCase()}`)
+                      : WRAPPER).replace("Eko Bharat Ventures", senderShort)
                       .replace("{name}", first.name || "CSP").replace(
-                      "{message}", fillPlaceholders(text, first.name, first.csp_id, first.missing).split(/\s+/).join(" "))
+                      "{message}", (fillPlaceholders(text, first.name, first.csp_id, first.missing).split(/\s+/).join(" ").trim()
+                        || (attachment ? `please see the ${KIND_WORD[attachment.media_kind].toLowerCase()} with this message.` : "")))
                   : fillPlaceholders(text, first.name, first.csp_id, first.missing)}
               </div>
             )}
@@ -414,6 +582,7 @@ export default function AskCsps({
           <>
             <span className="text-sm text-amber-800 dark:text-amber-300">
               You are about to message {selected.length} CSP{selected.length === 1 ? "" : "s"} on {channelLabel}
+              {kind === "custom" && attachment && ` with the ${KIND_WORD[attachment.media_kind].toLowerCase()} ${attachment.filename}`}
               {skippedExisting > 0 && ` (${skippedExisting} existing CSP${skippedExisting === 1 ? "" : "s"} will be skipped)`}.
               There is no undo. Continue?
             </span>
@@ -425,7 +594,8 @@ export default function AskCsps({
         ) : (
           <button
             onClick={() => setConfirming(true)}
-            disabled={selected.length === 0 || usable.length === 0 || (kind === "custom" && !text.trim())}
+            disabled={selected.length === 0 || usable.length === 0 || attaching
+              || (kind === "custom" && !text.trim() && !attachment)}
             className="px-4 py-2 text-sm rounded-lg bg-eko hover:bg-eko-dark text-white font-medium disabled:opacity-40"
           >
             Message {selected.length || ""} {selected.length === 1 ? "CSP" : "CSPs"}

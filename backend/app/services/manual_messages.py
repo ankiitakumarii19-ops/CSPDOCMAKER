@@ -18,6 +18,11 @@ Rules that stay (owner's choices, 2 Nov 2026):
   * only the server sends (a laptop copy never messages anyone), and a test
     copy never does (TEST_COPY).
 
+A custom message may carry one photo, video or file (No. 257,
+services/message_attachments.py): on WhatsApp as the message's header inside
+the wording for that kind, by email as an attachment. The details form never
+carries one.
+
 Every send is logged: whatsapp_messages (with the words and who sent them)
 or email_messages, plus an audit row "csp_message" with the text, channel,
 result and the person.
@@ -129,7 +134,7 @@ def _audit(session, record, by: str, channel: str, text: str,
 
 
 def send(session, record, *, kind: str, channel: str, text: str = "",
-         by: str, wa=None) -> dict:
+         by: str, wa=None, attachment=None) -> dict:
     """Send one CSP one message. Never raises for a refusal: the result says
     {csp_id, sent, reason, channel, kind, text}. The caller commits."""
     from app.services import (assistant_tools, csp_replies, message_log,
@@ -173,6 +178,9 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
         return result
 
     body = render(text, record).strip()
+    if not body and attachment is not None:
+        from app.services import message_attachments as ma
+        body = f"please see the {ma.WORD[attachment.media_kind]} with this message."
     if not body:
         return refuse("the message is empty")
     if channel == WHATSAPP:
@@ -186,16 +194,31 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
         # No. 195: a person pressed Send — sent even if the same words went
         # to this number in the last 15 minutes.
         from app.services import org_identity
-        outcome = wa.send(phone, org_identity.swap(assistant_tools.WHATSAPP_WORDING),
+        wording, media = assistant_tools.WHATSAPP_WORDING, {}
+        if attachment is not None:
+            from app.services import message_attachments as ma
+            try:
+                ref = ma.platform_ref(session, attachment, wa)
+            except wa.WhatsAppPlatformError as e:
+                logger.warning("manual_messages: the %s could not be given to "
+                               "WhatsApp for %s: %s", attachment.media_kind,
+                               record.csp_id, e)
+                return refuse(f"the {ma.WORD[attachment.media_kind]} could not "
+                              f"be given to WhatsApp: {e}")
+            wording = ma.WHATSAPP_WORDING[attachment.media_kind]
+            media = {"media_type": attachment.media_kind, "media_url": ref}
+        outcome = wa.send(phone, org_identity.swap(wording),
                           {"name": record.name or "CSP", "message": one_line},
                           source_name=message_log.source_name("chat", record.csp_id),
-                          force=True)
+                          force=True, **media)
+        shown = one_line if attachment is None else (
+            f"[{attachment.media_kind}: {attachment.filename}] {one_line}")
         with send_reason.because(send_reason.MANUAL):
             message_log.record(session, kind=KIND_OTHER, mobile=phone,
                                outcome=outcome, csp_id=record.csp_id,
                                csp_name=record.name or "",
-                               body_text=one_line, sent_by=by)
-        result["text"] = one_line
+                               body_text=shown, sent_by=by)
+        result["text"] = shown
         result["sent"] = outcome.get("status") == wa.SENT
         if outcome.get("status") == wa.PENDING:
             result["reason"] = "WhatsApp is checking the wording — sent once approved"
@@ -206,10 +229,14 @@ def send(session, record, *, kind: str, channel: str, text: str = "",
         if not to:
             return refuse("no email address")
         with send_reason.because(send_reason.MANUAL):
+            files = None if attachment is None else [
+                (attachment.filename, attachment.data, attachment.content_type)]
             ok, why = message_sender._send_email(
                 to, _org.swap(EMAIL_SUBJECT), body, kind="other",
-                csp_id=record.csp_id, csp_name=record.name or "")
-        result.update(sent=ok, reason=why or "", text=body)
+                csp_id=record.csp_id, csp_name=record.name or "",
+                attachments=files)
+        result.update(sent=ok, reason=why or "", text=body if attachment is None
+                      else f"[{attachment.media_kind}: {attachment.filename}] {body}")
     _audit(session, record, by, channel, result["text"], result)
     logger.info("manual_messages: %s → %s by %s: %s", channel, record.csp_id,
                 by, "sent" if result["sent"] else result["reason"])
