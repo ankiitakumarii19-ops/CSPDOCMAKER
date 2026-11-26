@@ -29,6 +29,7 @@ CORRECTED = "contact_corrected"
 RETRY = "sent_again_after_error"
 MANUAL = "sent_by_a_person"
 GUIDE_VIDEO = "guide_video"
+GUIDE_VIDEO_LINK = "guide_video_link"
 
 LABELS = {
     REPLY: "Reply to the CSP's message",
@@ -41,6 +42,7 @@ LABELS = {
     RETRY: "Sent again after an error (No. 164)",
     MANUAL: "Sent by a person (Messaging / Action Required, No. 174)",
     GUIDE_VIDEO: "How-to-fill-the-form video (No. 209)",
+    GUIDE_VIDEO_LINK: "Verification link sent with the form video (No. 256)",
 }
 USUAL = "Usual flow"
 

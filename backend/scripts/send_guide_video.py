@@ -2,7 +2,13 @@
 
 To: every CSP that has not yet RECEIVED its documents by email (No. 254-255)
 - KO or Sub-KO, sent a form link or not, form filled or not. One send per CSP
-code: the code is the unique key, so a code seen twice is sent to once. Never a CSP that was in CSPDATA
+code: the code is the unique key, so a code seen twice is sent to once.
+
+With the video goes the CSP's verification link (No. 256): right after the
+video, the usual details-form WhatsApp with a NEW link (the same as the
+"Details form" button on Messaging - the earlier link closes once the new
+one arrives). The link goes only after the video went. A CSP whose video
+went but whose link did not is sent only the link on the next run. Never a CSP that was in CSPDATA
 before the Calling / Lead import, never one on hold, never one without a
 usable mobile, never twice (a CSP who already got this video is skipped on
 every later run).
@@ -20,6 +26,7 @@ APPROVED. Every send is logged in the CSP's WhatsApp history ("sent because:
 How-to-fill-the-form video", with who sent it) and in the audit log.
 """
 import argparse
+import logging
 import os
 import sys
 import time
@@ -60,7 +67,11 @@ def recipients(db):
     No. 254-255: every CSP that has not yet received its documents - KO or
     Sub-KO, form link or not, form filled or not. Still never: a CSP that was in
     CSPDATA before the Calling / Lead import (owner's rule D14), one on
-    hold, one without a usable number, or one that already got the video."""
+    hold, one without a usable number, or one that already got the video
+    and its link.
+
+    Each chosen row is (record, phone, last link sent or None, needs_video):
+    needs_video False = the video went earlier but no link after it."""
     from app.models.email_job import EmailJob
     from app.models.enums import EmailStatus
     from app.models.processing_job import ProcessingJob
@@ -73,9 +84,12 @@ def recipients(db):
         select(DataRequest.csp_id, func.max(DataRequest.created_at))
         .where(DataRequest.sent_via.is_not(None))
         .group_by(DataRequest.csp_id)).all())
-    already = set(db.execute(select(WhatsAppMessage.csp_id).where(
-        WhatsAppMessage.sent_because == send_reason.GUIDE_VIDEO,
-        WhatsAppMessage.send_status == "sent")).scalars())
+    # When each CSP got the video; a link sent at or after that went with it.
+    video_at = dict(db.execute(
+        select(WhatsAppMessage.csp_id, func.max(WhatsAppMessage.sent_at)).where(
+            WhatsAppMessage.sent_because == send_reason.GUIDE_VIDEO,
+            WhatsAppMessage.send_status == "sent")
+        .group_by(WhatsAppMessage.csp_id)).all())
     imported = set(db.execute(select(SourceSheetState.csp_code).where(
         SourceSheetState.imported_as.is_not(None))).scalars())
     # Received: documents emailed to the CSP - an email job that went out,
@@ -114,13 +128,15 @@ def recipients(db):
             skip("already received documents")
         elif (r.send_hold or "").strip():
             skip("on hold")
-        elif r.csp_id in already:
-            skip("already got this video")
+        elif (r.csp_id in video_at and asked.get(r.csp_id) is not None
+              and asked[r.csp_id] >= video_at[r.csp_id]):
+            skip("already got the video and its link")
         elif not wa.phone_for_whatsapp(r.mobile or ""):
             skip("no usable mobile number")
         else:
             seen.add(key)
-            chosen.append((r, wa.phone_for_whatsapp(r.mobile), asked.get(r.csp_id)))
+            chosen.append((r, wa.phone_for_whatsapp(r.mobile), asked.get(r.csp_id),
+                           r.csp_id not in video_at))
     return chosen, left_out
 
 
@@ -128,7 +144,7 @@ def breakdown(db, chosen):
     """Who the chosen are, as (label, count) lines for the dry run."""
     filled = set(db.execute(select(DataRequest.csp_id).where(
         DataRequest.status == "answered")).scalars())
-    rows = [(r, at) for r, _, at in chosen]
+    rows = [(r, at) for r, _, at, _ in chosen]
     count = lambda test: sum(1 for r, at in rows if test(r, at))  # noqa: E731
     return [
         ("new CSPs (came after the first sync)", count(lambda r, at: r.origin == "new")),
@@ -139,6 +155,8 @@ def breakdown(db, chosen):
         ("sent a form link", count(lambda r, at: at is not None)),
         ("never sent a form link", count(lambda r, at: at is None)),
         ("already filled the form", count(lambda r, at: r.csp_id in filled)),
+        ("got the video earlier - only the link is left",
+         sum(1 for *_, needs_video in chosen if not needs_video)),
     ]
 
 
@@ -175,6 +193,56 @@ def template_status() -> str:
     return "NOT LISTED"
 
 
+def _send_video(db, wa, r, phone, ref, body, by, message_log, send_reason,
+                _audit, s):
+    """The video to one CSP, logged; (sent?, reason)."""
+    name = r.name or "CSP"
+    try:
+        job = wa.call_tool("upload_contacts", {
+            "contacts": [{"phone": phone, "name": wa.one_line(name)}],
+            "source_name": message_log.source_name("guide_video", r.csp_id)})
+        answer = wa.call_tool("send_template_message", {
+            "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME,
+            "phone_column": "phone", "language": s.whatsapp_language,
+            "mapping": {"1": {"type": "column", "value": "name"}},
+            "header_type": "video", "header_media_url": ref})
+        ok = int(answer.get("sent", 0) or 0) >= 1
+        outcome = {"status": wa.SENT if ok else wa.FAILED,
+                   "reason": "" if ok else f"not sent: {str(answer)[:300]}",
+                   "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME}
+    except wa.WhatsAppPlatformError as e:
+        ok, outcome = False, {"status": wa.FAILED, "reason": str(e)[:300],
+                              "job_id": None, "template_name": TEMPLATE_NAME}
+    with send_reason.because(send_reason.GUIDE_VIDEO):
+        message_log.record(db, kind=KIND_OTHER, mobile=phone, outcome=outcome,
+                           csp_id=r.csp_id, csp_name=r.name or "",
+                           body_text="[video] " + body, sent_by=by)
+    _audit(db, r, by, "whatsapp", "[video] " + body,
+           {"sent": ok, "kind": "guide_video", "reason": outcome["reason"]})
+    db.commit()
+    return ok, outcome["reason"]
+
+
+def _send_link(db, r, channel, by, message_sender, send_reason, _audit):
+    """The usual verification-link WhatsApp with a NEW link to one CSP, the
+    same as the Details form button (No. 192); (sent?, reason)."""
+    try:
+        with send_reason.because(send_reason.GUIDE_VIDEO_LINK), \
+                send_reason.sent_by(by):
+            outcome = message_sender.ask_for_details(
+                db, r, channel=channel, manual=True, verify=True, fresh=True)
+        ok, why = bool(outcome.get("sent")), outcome.get("reason") or ""
+    except Exception as e:  # one CSP's failure must not stop the others
+        db.rollback()
+        logging.getLogger(__name__).exception(
+            "send_guide_video: the verification link to %s failed", r.csp_id)
+        ok, why = False, f"{type(e).__name__}: {e}"[:300]
+    _audit(db, r, by, "whatsapp", "Verification link (with the form video)",
+           {"sent": ok, "kind": "guide_video_link", "reason": why})
+    db.commit()
+    return ok, why
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -192,6 +260,7 @@ def main() -> int:
     from app.services import message_log, send_reason
     from app.services import whatsapp_platform as wa
     from app.services.manual_messages import _audit
+    from app.services import message_sender
     from app.services.message_sender import link_is_reachable
 
     s = get_settings()
@@ -233,8 +302,9 @@ def main() -> int:
             chosen = chosen[:a.limit]
 
         print(f"Will get the video: {len(chosen)} CSP(s) that have not received "
-              f"their documents ({len({r.csp_id for r, _, _ in chosen})} different CSP codes)")
-        for r, phone, at in chosen:
+              f"their documents ({len({r.csp_id for r, *_ in chosen})} different CSP codes)")
+        print("Each gets the video, then their verification link (a new one).")
+        for r, phone, at, _ in chosen:
             link = f"link sent {at:%d %b}" if at else "no form link yet"
             print(f"  {r.csp_id}  {(r.name or '')[:30]:30}  {masked(phone)}  {link}")
         for label, n in breakdown(db, chosen):
@@ -268,43 +338,41 @@ def main() -> int:
         if not chosen:
             return 0
 
+        try:
+            link_channel = message_sender.choose_channel(db, kind="whatsapp")
+        except message_sender.NoChannel as e:
+            print(f"Not sent: no WhatsApp channel for the verification link ({e}).")
+            return 1
         ref = wa.upload_media(VIDEO)
-        sent = failed = 0
-        for i, (r, phone, _) in enumerate(chosen, 1):
-            name = r.name or "CSP"
-            body = TEMPLATE_BODY.replace("{{1}}", name)
-            try:
-                job = wa.call_tool("upload_contacts", {
-                    "contacts": [{"phone": phone, "name": wa.one_line(name)}],
-                    "source_name": message_log.source_name("guide_video", r.csp_id)})
-                answer = wa.call_tool("send_template_message", {
-                    "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME,
-                    "phone_column": "phone", "language": s.whatsapp_language,
-                    "mapping": {"1": {"type": "column", "value": "name"}},
-                    "header_type": "video", "header_media_url": ref})
-                ok = int(answer.get("sent", 0) or 0) >= 1
-                outcome = {"status": wa.SENT if ok else wa.FAILED,
-                           "reason": "" if ok else f"not sent: {str(answer)[:300]}",
-                           "job_id": job.get("job_id"), "template_name": TEMPLATE_NAME}
-            except wa.WhatsAppPlatformError as e:
-                ok, outcome = False, {"status": wa.FAILED, "reason": str(e)[:300],
-                                      "job_id": None, "template_name": TEMPLATE_NAME}
-            with send_reason.because(send_reason.GUIDE_VIDEO):
-                message_log.record(db, kind=KIND_OTHER, mobile=phone, outcome=outcome,
-                                   csp_id=r.csp_id, csp_name=r.name or "",
-                                   body_text="[video] " + body, sent_by=a.by.strip())
-            _audit(db, r, a.by.strip(), "whatsapp", "[video] " + body,
-                   {"sent": ok, "kind": "guide_video", "reason": outcome["reason"]})
-            db.commit()
-            sent += ok
-            failed += not ok
-            print(f"  [{i}/{len(chosen)}] {r.csp_id} {'sent' if ok else 'FAILED: ' + outcome['reason']}")
-            if i == 1 and not ok:
-                print("Stopped: the first send failed, so the rest would too. "
-                      "Fix the reason above and run again (nobody gets it twice).")
-                break
+        sent = failed = links = link_failed = 0
+        for i, (r, phone, _, needs_video) in enumerate(chosen, 1):
+            body = TEMPLATE_BODY.replace("{{1}}", r.name or "CSP")
+            if needs_video:
+                ok, why = _send_video(db, wa, r, phone, ref, body, a.by.strip(),
+                                      message_log, send_reason, _audit, s)
+                sent += ok
+                failed += not ok
+                if not ok:
+                    print(f"  [{i}/{len(chosen)}] {r.csp_id} video FAILED: {why}")
+                    if i == 1:
+                        print("Stopped: the first send failed, so the rest would too. "
+                              "Fix the reason above and run again (nobody gets it twice).")
+                        break
+                    time.sleep(a.pause)
+                    continue          # no link without the video; next run tries both
+            link_ok, link_why = _send_link(db, r, link_channel, a.by.strip(),
+                                           message_sender, send_reason, _audit)
+            links += link_ok
+            link_failed += not link_ok
+            print(f"  [{i}/{len(chosen)}] {r.csp_id} "
+                  f"{'video sent, ' if needs_video else 'video sent earlier, '}"
+                  f"{'link sent' if link_ok else 'link FAILED: ' + link_why}")
             time.sleep(a.pause)
-        print(f"Done: {sent} sent, {failed} failed.")
+        print(f"Done: videos {sent} sent, {failed} failed; "
+              f"links {links} sent, {link_failed} failed.")
+        if failed or link_failed:
+            print("Run again later: anyone who missed the video or the link "
+                  "gets what they missed (nobody gets the video twice).")
     return 0
 
 

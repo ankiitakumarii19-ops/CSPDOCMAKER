@@ -45,7 +45,7 @@ def _csp(db, code, *, mobile="9800000001", hold=None, link=True,
 
 def _codes(db):
     chosen, left_out = g.recipients(db)
-    return [r.csp_id for r, _, _ in chosen], left_out
+    return [r.csp_id for r, *_ in chosen], left_out
 
 
 def _stored(db, code):
@@ -122,26 +122,88 @@ def test_dry_run_breakdown(vdb):
 def test_no_form_link_is_shown_as_none(vdb):
     _csp(vdb, "1A900015", link=False)
     chosen, _ = g.recipients(vdb)
-    assert [(r.csp_id, at) for r, _, at in chosen] == [("1A900015", None)]
+    assert [(r.csp_id, at, v) for r, _, at, v in chosen] == [("1A900015", None, True)]
 
 
-def test_nobody_gets_it_twice(vdb):
-    _csp(vdb, "1A900011")
-    vdb.add(WhatsAppMessage(csp_id="1A900011", phone="919800000001",
-                            kind="other", send_status="sent",
-                            sent_because="guide_video"))
-    vdb.commit()
+def _video(db, code, at, status="sent"):
+    db.add(WhatsAppMessage(csp_id=code, phone="919800000001", kind="other",
+                           send_status=status, sent_because="guide_video",
+                           sent_at=at))
+    db.commit()
+
+
+def _link(db, code, at):
+    db.add(DataRequest(csp_id=code, token_hash=f"t2-{code}-{at.timestamp()}", fields=["name"],
+                       status="open", sent_via="whatsapp", created_at=at,
+                       expires_at=NOW + timedelta(days=3)))
+    db.commit()
+
+
+def test_nobody_gets_the_video_and_link_twice(vdb):
+    _csp(vdb, "1A900011", link=False)
+    _video(vdb, "1A900011", NOW - timedelta(minutes=5))
+    _link(vdb, "1A900011", NOW - timedelta(minutes=5))      # same moment counts
     codes, left_out = _codes(vdb)
-    assert codes == [] and left_out == {"already got this video": 1}
+    assert codes == [] and left_out == {"already got the video and its link": 1}
+
+
+def test_video_went_but_link_did_not_only_the_link_is_left(vdb):
+    _csp(vdb, "1A900016", link=False)
+    _link(vdb, "1A900016", NOW - timedelta(days=2))          # an older link
+    _video(vdb, "1A900016", NOW - timedelta(days=1))
+    chosen, _ = g.recipients(vdb)
+    assert [(r.csp_id, v) for r, _, _, v in chosen] == [("1A900016", False)]
+    assert dict(g.breakdown(vdb, chosen))[
+        "got the video earlier - only the link is left"] == 1
 
 
 def test_a_failed_earlier_try_is_tried_again(vdb):
     _csp(vdb, "1A900012")
-    vdb.add(WhatsAppMessage(csp_id="1A900012", phone="919800000001",
-                            kind="other", send_status="failed",
-                            sent_because="guide_video"))
-    vdb.commit()
-    assert _codes(vdb)[0] == ["1A900012"]
+    _video(vdb, "1A900012", NOW, status="failed")
+    chosen, _ = g.recipients(vdb)
+    assert [(r.csp_id, v) for r, _, _, v in chosen] == [("1A900012", True)]
+
+
+class _Sender:
+    """message_sender stand-in: records what was asked."""
+    def __init__(self, result=None, error=None):
+        self.result, self.error, self.calls = result, error, []
+
+    def ask_for_details(self, db, r, **kw):
+        from app.services import send_reason
+        self.calls.append((r.csp_id, kw, send_reason.current()))
+        if self.error:
+            raise self.error
+        return self.result
+
+
+def test_link_is_a_fresh_verification_link(vdb):
+    from app.services import send_reason
+    from app.services.manual_messages import _audit
+    _csp(vdb, "1A900017")
+    r = vdb.get(CSPRecord, vdb.query(CSPRecord.id).filter_by(csp_id="1A900017").scalar())
+    sender = _Sender(result={"sent": True})
+    ok, why = g._send_link(vdb, r, "channel", "me@example.com", sender,
+                           send_reason, _audit)
+    assert ok and why == ""
+    code, kw, reason = sender.calls[0]
+    assert code == "1A900017" and reason == send_reason.GUIDE_VIDEO_LINK
+    assert kw == {"channel": "channel", "manual": True, "verify": True, "fresh": True}
+
+
+def test_a_link_failure_is_reported_not_raised(vdb):
+    from app.services import send_reason
+    from app.services.manual_messages import _audit
+    _csp(vdb, "1A900018")
+    r = vdb.get(CSPRecord, vdb.query(CSPRecord.id).filter_by(csp_id="1A900018").scalar())
+    ok, why = g._send_link(vdb, r, "channel", "me@example.com",
+                           _Sender(error=RuntimeError("platform down")),
+                           send_reason, _audit)
+    assert not ok and "platform down" in why
+    ok, why = g._send_link(vdb, r, "channel", "me@example.com",
+                           _Sender(result={"sent": False, "reason": "on hold"}),
+                           send_reason, _audit)
+    assert not ok and why == "on hold"
 
 
 def test_template_list_is_read_from_the_platforms_text():
@@ -153,3 +215,46 @@ def test_template_list_is_read_from_the_platforms_text():
 
 def test_the_video_fits_whatsapp():
     assert os.path.getsize(g.VIDEO) < 16 * 1024 * 1024
+
+
+def test_send_run_video_then_link_and_a_rerun_sends_nothing(vdb, monkeypatch, capsys):
+    """--send end to end with WhatsApp faked: each CSP gets the video, then
+    the link; a second run finds nobody left."""
+    from app.config import get_settings
+    from app.services import message_sender
+    from app.services import whatsapp_platform as wa
+
+    _csp(vdb, "1A900040", link=False)
+    _csp(vdb, "1A900041", link=False)
+    order = []
+
+    def call_tool(name, args):
+        if name == "upload_contacts":
+            order.append(("video", args["contacts"][0]["phone"]))
+            return {"job_id": f"j{len(order)}"}
+        return {"sent": 1}
+
+    def ask_for_details(db, r, **kw):
+        order.append(("link", r.csp_id))
+        _link(db, r.csp_id, datetime.now(timezone.utc) + timedelta(seconds=1))
+        return {"sent": True}
+
+    monkeypatch.setattr(get_settings(), "test_copy", False)
+    monkeypatch.setattr(message_sender, "link_is_reachable", lambda url: True)
+    monkeypatch.setattr(message_sender, "choose_channel", lambda db, kind=None: "wa")
+    monkeypatch.setattr(message_sender, "ask_for_details", ask_for_details)
+    monkeypatch.setattr(wa, "upload_media", lambda path: "media-ref")
+    monkeypatch.setattr(wa, "call_tool", call_tool)
+    monkeypatch.setattr(g, "template_status", lambda: "APPROVED")
+    monkeypatch.setattr(sys, "argv", ["x", "--send", "--by", "me@example.com",
+                                      "--pause", "0"])
+
+    assert g.main() == 0
+    out = capsys.readouterr().out
+    assert "videos 2 sent, 0 failed; links 2 sent, 0 failed" in out
+    assert [k for k, _ in order] == ["video", "link", "video", "link"]
+    assert order[1] == ("link", "1A900040") and order[3] == ("link", "1A900041")
+
+    order.clear()
+    assert g.main() == 0
+    assert order == [] and "Will get the video: 0" in capsys.readouterr().out
