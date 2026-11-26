@@ -182,9 +182,9 @@ def _send_email(to: str, subject: str, body: str, *,
         + "</div>" + track.pixel_html
     )
     try:
+        extra = {"attachments": attachments} if attachments else {}
         ok = email_service._send_via_smtp(to, subject, html, body,
-                                          message_id=track.message_id,
-                                          attachments=attachments or None)
+                                          message_id=track.message_id, **extra)
         why = "" if ok else "SMTP reported failure"
     except Exception as e:
         # Returned to the caller (recorded on the request as its delivery
