@@ -65,6 +65,9 @@ def process_new_csps(self):
     processed = alerted = failed = 0
 
     with Session(engine) as session:
+        # No. 259: anyone who filled the form but was never put in line.
+        _enrol_answered(session)
+
         # Two kinds of work, both finished the same way:
         #
         #   a new CSP, which is automatic by definition; and
@@ -169,6 +172,106 @@ def process_new_csps(self):
         "%d failed", len(pending), processed, alerted, failed,
     )
     return summary
+
+
+CAUGHT_UP = "the CSP's verification answer (caught up later, No. 259)"
+
+
+def _enrol_answered(session) -> int:
+    """Put in line every old CSP that filled the form but never was.
+
+    The form puts an old CSP (copied in from the Calling sheet) in line for
+    its documents straight away - but only when its answer reached the
+    sheet (csp_form_router._documents_after_verification). When that write
+    failed, nothing ever tried again: the CSP had done everything and
+    waited for ever (No. 259, CSP 1A852542). So, every run:
+
+      * the answer is written to the sheet again (the latest value of each
+        field the CSP gave), and put back on the record, since a sync may
+        have put the old sheet value back meanwhile;
+      * once it is in the sheet - or was already - the CSP is put in line,
+        and this same run makes and mails the documents (or alerts the RM
+        for what is still missing).
+
+    Same limits as the form: never a CSP that was in CSPDATA before the
+    import, never one on hold, never one already made or in line. A sheet
+    that still refuses is logged and tried again next run. Returns how many
+    were put in line.
+    """
+    from sqlalchemy import func, or_, select
+
+    from app.models.csp_record import CSPRecord
+    from app.models.data_request import ANSWERED, DataRequest
+    from app.models.source_sheet import SourceSheetState
+    from app.services import sheet_writeback_service as wb
+
+    copied_in = select(func.upper(SourceSheetState.csp_code)).where(
+        SourceSheetState.imported_as == "baseline")
+    answered = select(func.upper(DataRequest.csp_id)).where(
+        DataRequest.status == ANSWERED)
+    try:
+        records = session.execute(select(CSPRecord).where(
+            CSPRecord.origin == "baseline",
+            CSPRecord.send_hold.is_(None),
+            CSPRecord.new_csp_processed_at.is_(None),
+            CSPRecord.auto_enrolled_at.is_(None),
+            or_(func.upper(CSPRecord.csp_id).in_(copied_in),
+                func.upper(CSPRecord.csp_code).in_(copied_in)),
+            func.upper(CSPRecord.csp_id).in_(answered),
+        )).scalars().all()
+    except Exception as e:
+        session.rollback()
+        logger.error("new_csp_worker: could not look for CSPs who filled the "
+                     "form and were not put in line: %s: %s",
+                     type(e).__name__, e, exc_info=True)
+        return 0
+
+    enrolled = 0
+    for record in records:
+        try:
+            requests = session.execute(select(DataRequest).where(
+                func.upper(DataRequest.csp_id) == record.csp_id.upper(),
+                DataRequest.status == ANSWERED,
+            ).order_by(DataRequest.answered_at)).scalars().all()
+            failed = [r for r in requests if r.sheet_error]
+            if failed:
+                latest = {}
+                for r in requests:
+                    latest.update(r.answered_values or {})
+                fields = set()
+                for r in failed:
+                    fields |= set(r.answered_values or {})
+                values = {f: latest[f] for f in fields if latest.get(f)}
+                try:
+                    written, _ = wb.write_values(record.csp_id, values)
+                except Exception as e:
+                    logger.warning(
+                        "new_csp_worker: %s filled the form; their answer "
+                        "still cannot be written to the sheet (%s: %s) - "
+                        "tried again next run", record.csp_id,
+                        type(e).__name__, e)
+                    continue
+                for field, value in values.items():
+                    setattr(record, field, value)
+                for r in failed:
+                    r.sheet_error = None
+                    r.sheet_saved = sorted(set(r.sheet_saved or [])
+                                           | set(written))
+            record.auto_enrolled_at = datetime.now(timezone.utc)
+            record.auto_enrolled_by = CAUGHT_UP
+            session.commit()
+            enrolled += 1
+            logger.info("new_csp_worker: %s filled the form but was never put "
+                        "in line for documents%s - put in line now",
+                        record.csp_id,
+                        " (their answer had not reached the sheet; written "
+                        "now)" if failed else "")
+        except Exception as e:
+            session.rollback()
+            logger.error("new_csp_worker: %s filled the form but could not be "
+                         "put in line for documents: %s: %s", record.csp_id,
+                         type(e).__name__, e, exc_info=True)
+    return enrolled
 
 
 def _ask_csp(session, csp) -> dict:

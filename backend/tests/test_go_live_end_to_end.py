@@ -317,3 +317,101 @@ async def test_a_csp_already_in_cspdata_gets_nothing_after_answering(
     assert rec.auto_enrolled_at is None
     assert csp_form_router.VERIFIED_BY  # the marker used when enrolled
 
+
+
+# ---- No. 259: filled the form, the sheet write failed - documents anyway ----
+
+def _old_csp_asked(w, code, mobile):
+    """An old CSP copied in from the Calling sheet and sent the verification
+    WhatsApp. Returns the form token."""
+    from datetime import datetime, timezone
+
+    from app.workers import verify_old_csps_worker as verify
+    w.calling = [{"CSP ID": code, "CSP Name": "Sunita Kumari",
+                  "CSP Mobile number": mobile,
+                  "CSP Mail ID": "sunita@example.com", "Gender": "Female",
+                  "Branch Name": "Pakur Bazar", "Branch Code": "12345",
+                  "Full Address": "Ward 4, Pakur, Jharkhand 816107",
+                  "District": "Pakur", "State": "Jharkhand", "AO": "AO Dumka",
+                  "Circle (LHO)": "Patna", "Relationship Manager": "Ravi",
+                  "RBO": "RBO Dumka", "Terminal Status": "Active"}]
+    source_sheets.run(w.session)
+    _sync()
+    noon = datetime(2026, 10, 22, 6, 30, tzinfo=timezone.utc)
+    assert verify.run_batch(w.session, now=noon)["sent"] == [code]
+    [ask] = [m for m in w.whatsapp if m["to"].endswith(mobile)]
+    return re.search(r"([A-Za-z0-9_\-]{20,})\s*$", ask["link"]).group(1)
+
+
+async def test_answer_not_reaching_the_sheet_still_gets_documents(
+        world, client, monkeypatch):
+    from app.services import sheet_writeback_service as wb
+    w = world
+    monkeypatch.setattr(get_settings(), "verify_wait_for_address", False)
+    code = "1A955701"
+    token = _old_csp_asked(w, code, "9000000701")
+
+    # They fill the form, but Google refuses the write.
+    real_write = wb.write_values
+    def refuse(*a, **k):
+        raise wb.SheetWriteError("Google said: quota exceeded")
+    monkeypatch.setattr(wb, "write_values", refuse)
+    form = (await client.get(f"/api/csp-form/{token}")).json()
+    answers = {f["name"]: f["value"] for f in form["fields"]
+               if f["type"] != "photo" and f["value"]}
+    answers["address"] = "Ward 9, Pakur, Jharkhand 816107"
+    r = await client.post(f"/api/csp-form/{token}", json={"values": answers})
+    assert r.status_code == 200, r.text
+    rec = _record_of(w, code)
+    assert rec.auto_enrolled_at is None, "not in line yet: sheet not written"
+
+    # While the sheet still refuses: nothing is mailed, nothing is lost.
+    assert _new_csps().get("documents_sent", 0) == 0
+    assert w.emails == [] and _record_of(w, code).auto_enrolled_at is None
+
+    # A sync meanwhile puts the old sheet address back on the record.
+    _sync()
+
+    # The sheet works again: the next run writes the answer, puts the CSP in
+    # line and mails the documents - nobody has to do anything.
+    monkeypatch.setattr(wb, "write_values", real_write)
+    out = _new_csps()
+    assert out["documents_sent"] == 1, out
+    [mail] = w.emails
+    assert mail["csp_id"] == code and mail["to_email"] == "sunita@example.com"
+    assert w.koda[code]["Address"] == "Ward 9, Pakur, Jharkhand 816107"
+    rec = _record_of(w, code)
+    assert rec.address == "Ward 9, Pakur, Jharkhand 816107"
+    assert rec.new_csp_processed_at is not None
+    from app.workers import new_csp_worker
+    assert rec.auto_enrolled_by == new_csp_worker.CAUGHT_UP
+
+    # Never twice.
+    assert _new_csps().get("documents_sent", 0) == 0
+    assert len(w.emails) == 1
+
+
+async def test_catch_up_leaves_csps_already_in_cspdata_alone(world, client):
+    """The catch-up keeps the owner's rule: a CSP that was in CSPDATA before
+    the import is never put in line, even with an answered form."""
+    from app.services import data_request_service as drs
+    w = world
+    w.session.add(CSPRecord(csp_id="1A955702", csp_code="1A955702",
+                            name="Already There", origin="baseline",
+                            mobile="9000000702", email="x@example.com"))
+    w.session.commit()
+    w.koda["1A955702"] = {"CSP Code": "1A955702"}
+    _, token = drs.create(w.session, "1A955702", ["address"])
+    w.session.commit()
+    r = await client.post(f"/api/csp-form/{token}",
+                          json={"values": {"address": "Ward 1, Gaya"}})
+    assert r.status_code == 200, r.text
+    _new_csps()
+    assert _record_of(w, "1A955702").auto_enrolled_at is None
+    assert w.emails == []
+
+
+def _record_of(w, code):
+    w.session.expire_all()
+    return w.session.execute(select(CSPRecord).where(
+        CSPRecord.csp_id == code)).scalars().one()
