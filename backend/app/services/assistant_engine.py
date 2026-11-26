@@ -81,6 +81,10 @@ class Answer:
     # What kind of answer it was, for the log: help, draft, csp, list,
     # knowledge, search, unknown.
     kind: str = "unknown"
+    # The Knowledge Base entry that answered, and how well it matched — for
+    # Agent health (No. 252), which learns new wordings from them.
+    entry_id: Optional[str] = None
+    score: Optional[float] = None
 
 
 # ---- reading the question ----------------------------------------------------------
@@ -1117,9 +1121,11 @@ async def _answer(question, t, history, session, user, asked_by) -> Answer:
             return await _setup_overview(session, user)
         related = [m.entry.question for m in matches[1:3]
                    if m.score >= knowledge_service.SUGGEST_AT]
+        guide = str(known.entry.id).startswith("guide:")
         return Answer(known.entry.answer, suggestions=related,
-                      kind="setup" if str(known.entry.id).startswith("guide:")
-                      else "knowledge")
+                      kind="setup" if guide else "knowledge",
+                      entry_id=None if guide else str(known.entry.id),
+                      score=round(float(known.score), 3))
 
     # 6. A bare name.
     if name and len(name) >= 2 and len(name.split()) <= 3:

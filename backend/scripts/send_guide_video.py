@@ -1,9 +1,11 @@
-"""Send the "how to fill the details form" video on WhatsApp (No. 209).
+"""Send the "how to fill the details form" video on WhatsApp (No. 209, 254).
 
-To: KOs (8-character code) who were sent a details-form link, have not
-submitted the form, and have not had their documents emailed. Never a CSP on
-hold, never one without a usable mobile, never twice (a CSP who already got
-this video is skipped on every later run).
+To: every CSP that has not yet RECEIVED its documents by email (No. 254-255)
+- KO or Sub-KO, sent a form link or not, form filled or not. One send per CSP
+code: the code is the unique key, so a code seen twice is sent to once. Never a CSP that was in CSPDATA
+before the Calling / Lead import, never one on hold, never one without a
+usable mobile, never twice (a CSP who already got this video is skipped on
+every later run).
 
 The video goes inside its own WhatsApp wording (template TEMPLATE_NAME, with a
 video header), which Meta must approve once. Run on the SERVER:
@@ -30,7 +32,7 @@ from sqlalchemy.orm import Session  # noqa: E402
 from app import telemetry  # noqa: E402
 from app.config import get_settings  # noqa: E402
 from app.models.csp_record import CSPRecord  # noqa: E402
-from app.models.data_request import ANSWERED, DataRequest  # noqa: E402
+from app.models.data_request import DataRequest  # noqa: E402
 from app.models.whatsapp_message import KIND_OTHER, WhatsAppMessage  # noqa: E402
 from app.models.workspace import Workspace  # noqa: E402
 from app.workspace_context import workspace  # noqa: E402
@@ -45,7 +47,6 @@ TEMPLATE_BODY = (
     "form kaise bharna hai. WhatsApp par bheja gaya form link kholiye, details "
     "check kijiye, galat ho to sahi kijiye, apni photo daaliye aur Submit "
     "kijiye. Dhanyavaad, Eko Bharat Ventures")
-KO_LENGTH = 8
 
 
 def masked(phone: str) -> str:
@@ -53,45 +54,92 @@ def masked(phone: str) -> str:
 
 
 def recipients(db):
-    """(record, phone, link_sent_at) for everyone who should get the video,
-    plus {reason: count} for everyone left out."""
-    from app.services import csp_replies, send_reason
+    """(record, phone, link_sent_at or None) for everyone who should get the
+    video, plus {reason: count} for everyone left out.
+
+    No. 254-255: every CSP that has not yet received its documents - KO or
+    Sub-KO, form link or not, form filled or not. Still never: a CSP that was in
+    CSPDATA before the Calling / Lead import (owner's rule D14), one on
+    hold, one without a usable number, or one that already got the video."""
+    from app.models.email_job import EmailJob
+    from app.models.enums import EmailStatus
+    from app.models.processing_job import ProcessingJob
+    from app.models.source_sheet import SourceSheetState
+    from app.services import send_reason
     from app.services import whatsapp_platform as wa
+    from app.models.email_message import KIND_DOCUMENTS, EmailMessage
 
     asked = dict(db.execute(
         select(DataRequest.csp_id, func.max(DataRequest.created_at))
         .where(DataRequest.sent_via.is_not(None))
         .group_by(DataRequest.csp_id)).all())
-    answered = set(db.execute(select(DataRequest.csp_id).where(
-        DataRequest.status == ANSWERED)).scalars())
     already = set(db.execute(select(WhatsAppMessage.csp_id).where(
         WhatsAppMessage.sent_because == send_reason.GUIDE_VIDEO,
         WhatsAppMessage.send_status == "sent")).scalars())
+    imported = set(db.execute(select(SourceSheetState.csp_code).where(
+        SourceSheetState.imported_as.is_not(None))).scalars())
+    # Received: documents emailed to the CSP - an email job that went out,
+    # or a documents email that was sent and did not bounce. Documents made
+    # but not emailed yet are NOT received (No. 255).
+    received = set(db.execute(
+        select(ProcessingJob.csp_id)
+        .join(EmailJob, EmailJob.processing_job_id == ProcessingJob.id)
+        .where(EmailJob.status == EmailStatus.SENT)).scalars())
+    received |= set(db.execute(select(EmailMessage.csp_id).where(
+        EmailMessage.kind == KIND_DOCUMENTS,
+        EmailMessage.send_status == "sent",
+        EmailMessage.bounced_at.is_(None))).scalars())
 
-    chosen, left_out = [], {}
+    chosen, left_out, seen = [], {}, set()
 
     def skip(why):
         left_out[why] = left_out.get(why, 0) + 1
 
-    for r in db.execute(select(CSPRecord).order_by(CSPRecord.csp_id)).scalars():
-        code = (r.csp_id or "").strip()
-        if code not in asked:
-            continue                      # never sent a form link: not counted
-        if len(code) != KO_LENGTH:
-            skip("Sub-KO (not a KO)")
-        elif code in answered:
-            skip("already submitted the form")
+    def key_of(r):
+        return (r.csp_code or r.csp_id or "").strip().upper()
+
+    records = db.execute(select(CSPRecord).order_by(CSPRecord.csp_id)).scalars().all()
+    # The CSP code is the unique key: documents received under any row of a
+    # code count for the code.
+    received_codes = {key_of(r) for r in records if r.csp_id in received}
+
+    for r in records:
+        code = (r.csp_code or r.csp_id or "").strip()
+        key = code.upper()
+        if key in seen:
+            skip("same CSP code twice (sent once)")
+        elif (r.origin or "") == "baseline" and code not in imported:
+            skip("in CSPDATA before the import (never messaged)")
+        elif r.csp_id in received or key in received_codes:
+            skip("already received documents")
         elif (r.send_hold or "").strip():
             skip("on hold")
-        elif csp_replies._documents_emailed(db, code) is not None:
-            skip("documents already emailed")
-        elif code in already:
+        elif r.csp_id in already:
             skip("already got this video")
         elif not wa.phone_for_whatsapp(r.mobile or ""):
             skip("no usable mobile number")
         else:
-            chosen.append((r, wa.phone_for_whatsapp(r.mobile), asked[code]))
+            seen.add(key)
+            chosen.append((r, wa.phone_for_whatsapp(r.mobile), asked.get(r.csp_id)))
     return chosen, left_out
+
+
+def breakdown(db, chosen):
+    """Who the chosen are, as (label, count) lines for the dry run."""
+    filled = set(db.execute(select(DataRequest.csp_id).where(
+        DataRequest.status == "answered")).scalars())
+    rows = [(r, at) for r, _, at in chosen]
+    count = lambda test: sum(1 for r, at in rows if test(r, at))  # noqa: E731
+    return [
+        ("new CSPs (came after the first sync)", count(lambda r, at: r.origin == "new")),
+        ("Calling-sheet copies (old CSPs copied in by the import)",
+         count(lambda r, at: r.origin != "new")),
+        ("KOs (8-character code)", count(lambda r, at: len((r.csp_code or r.csp_id).strip()) == 8)),
+        ("Sub-KOs", count(lambda r, at: len((r.csp_code or r.csp_id).strip()) != 8)),
+        ("sent a form link", count(lambda r, at: at is not None)),
+        ("never sent a form link", count(lambda r, at: at is None)),
+        ("already filled the form", count(lambda r, at: r.csp_id in filled)),
+    ]
 
 
 def _templates(text: str):
@@ -184,11 +232,15 @@ def main() -> int:
         if a.limit:
             chosen = chosen[:a.limit]
 
-        print(f"Will get the video: {len(chosen)} KO(s)")
+        print(f"Will get the video: {len(chosen)} CSP(s) that have not received "
+              f"their documents ({len({r.csp_id for r, _, _ in chosen})} different CSP codes)")
         for r, phone, at in chosen:
-            print(f"  {r.csp_id}  {(r.name or '')[:30]:30}  {masked(phone)}  link sent {at:%d %b}")
+            link = f"link sent {at:%d %b}" if at else "no form link yet"
+            print(f"  {r.csp_id}  {(r.name or '')[:30]:30}  {masked(phone)}  {link}")
+        for label, n in breakdown(db, chosen):
+            print(f"  {n:5}  {label}")
         if left_out:
-            print("Left out (got a form link but):")
+            print("Left out:")
             for why, n in sorted(left_out.items()):
                 print(f"  {n:5}  {why}")
         status = template_status()

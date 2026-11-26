@@ -12,6 +12,9 @@ Problems looked for (fixed rules):
   agent:<key>     an agent failed ALERT_AGENT_FAILURES runs in a row
   whatsapp        in the last hour at least ALERT_WHATSAPP_FAILURES
                   WhatsApps failed and more failed than went
+  agent_eval:<agent>:<check>
+                  an open Agent health issue (No. 252): overdue, low success,
+                  slow, poor result, poor acceptance, proposals waiting
   backup          the daily database backup failed, is late (older than
                   BACKUP_ALERT_HOURS) or has never run (No. 199). The
                   backup is the server's, so only workspace 1 (Eko, which
@@ -86,6 +89,17 @@ def problems(session, settings, now: Optional[datetime] = None) -> List[Problem]
             title="WhatsApp messages are failing",
             detail=(f"In the last hour {failed} WhatsApp(s) failed and {sent} "
                     f"went. Admin → WhatsApp messages (filter: not sent).")))
+
+    # No. 252: open Agent health issues. "Keeps failing" is left out — the
+    # agent:<key> alert above already says it.
+    from app.models.agent_eval import OPEN, AgentEvalIssue
+    for issue in session.execute(select(AgentEvalIssue).where(
+            AgentEvalIssue.status == OPEN,
+            AgentEvalIssue.check_key != "failing")).scalars():
+        found.append(Problem(
+            key=f"agent_eval:{issue.agent_key}:{issue.check_key}",
+            title=issue.title,
+            detail=f"{issue.detail} Admin → Setup → Agent health."))
 
     from app.workspace_context import current_workspace_id
     if str(current_workspace_id()) == SERVER_WORKSPACE:

@@ -71,13 +71,42 @@ async def chat(body: ChatIn, session: AsyncSession = Depends(get_session),
     if not question:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "The question is empty.")
+    import time
+    began = time.monotonic()
     result = await assistant_engine.answer(question, history[:-1], session,
                                            user)
+    took = int((time.monotonic() - began) * 1000)
     logger.info("assistant_router.chat: %s, %d turn(s), answer %s, %d "
                 "card(s)", _who(user), len(history), result.kind,
                 len(result.cards))
+    await _note_turn(session, user, question, result, took)
     return {"reply": result.reply, "cards": result.cards,
             "suggestions": result.suggestions}
+
+
+async def _note_turn(session: AsyncSession, user: dict, question: str,
+                     result, took_ms: int) -> None:
+    """One row per question for Agent health (No. 252): what kind of answer,
+    answered or not, which Knowledge Base entry, how fast. Never stops the
+    answer: a failure is logged with its traceback."""
+    import uuid as _uuid
+
+    from app.models.agent_eval import AssistantTurn
+    from app.services import knowledge_service
+    try:
+        session.add(AssistantTurn(
+            asked_by=_who(user), kind=result.kind[:30],
+            answered=result.kind != "unknown",
+            entry_id=_uuid.UUID(result.entry_id) if result.entry_id else None,
+            score=result.score,
+            normalized=knowledge_service.normalized(question),
+            question=question[:500], duration_ms=took_ms))
+        await session.commit()
+    except Exception as e:
+        await session.rollback()
+        logger.error("assistant_router: could not note a chat question for "
+                     "Agent health: %s: %s", type(e).__name__, e,
+                     exc_info=True)
 
 
 # ---- drafts ----------------------------------------------------------------

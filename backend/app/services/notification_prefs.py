@@ -62,6 +62,10 @@ KINDS: tuple[Kind, ...] = (
          "How many messages went today and who could not be reached.",
          ("email",), False,
          who="The Super Admins (or Settings -> Daily contact email: to)"),
+    Kind("agent_daily", "Daily agent health email",
+         "Each agent's score, open issues, and what the agents learned.",
+         ("email",), False,
+         who="The Super Admins (or Settings -> Alerts: to)"),
 )
 BY_KEY = {k.key: k for k in KINDS}
 

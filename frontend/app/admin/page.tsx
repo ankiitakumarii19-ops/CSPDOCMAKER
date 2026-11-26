@@ -15,6 +15,8 @@ import Database from "./Database";
 import { CspSummaryPanel } from "./CspSearch";
 import GlobalSearch from "../components/GlobalSearch";
 import Agents from "./Agents";
+import AgentHealth from "./AgentHealth";
+import AgentHealthBell from "./AgentHealthBell";
 import Messaging from "./Messaging";
 import WhatsAppMessages from "./WhatsAppMessages";
 import KnowledgeBase from "./KnowledgeBase";
@@ -93,6 +95,7 @@ const SECTION_FEATURE: Record<string, string> = {
   replies: "replies",
   emails: "emails",
   agents: "agents",
+  "agent-health": "agents",
   quality: "data_quality",
   knowledge: "knowledge",
   messaging: "messaging",
@@ -462,6 +465,20 @@ export default function AdminDashboard() {
                 <i className="fas fa-robot w-5 text-center"></i> Agents
               </button>
               )}
+              {/* No. 252: how well each agent does its job, issues, history,
+                  what they learned. Same access as Agents. */}
+              {can("agents") && (
+              <button
+                onClick={() => setAdminRoute("agent-health")}
+                className={`w-full text-left px-3 py-2.5 rounded text-sm font-medium transition-all flex items-center gap-3 ${
+                  adminRoute === "agent-health"
+                    ? "bg-navy-800 text-white border-l-4 border-eko"
+                    : "hover:bg-navy-800 hover:text-white border-l-4 border-transparent"
+                }`}
+              >
+                <i className="fas fa-heartbeat w-5 text-center"></i> Agent health
+              </button>
+              )}
               {/* Context and harness: what the app reads, what it filled in
                   by itself, check or correct it (No. 146). In Setup since
                   26 Oct (asked for). */}
@@ -653,6 +670,8 @@ export default function AdminDashboard() {
           </div>
           <div className="flex items-center gap-3 sm:gap-4 shrink-0">
             <FreshnessBadges />
+            {/* No. 252: open Agent health issues. */}
+            {can("agents") && <AgentHealthBell onOpen={() => setAdminRoute("agent-health")} />}
             <button
               onClick={toggleTheme}
               className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
@@ -728,6 +747,11 @@ export default function AdminDashboard() {
 
             {can("agents") && adminRoute === "agents" && (
               <Agents canSeeHistory={can("agents")} canAct={can("agents")} />
+            )}
+            {can("agents") && adminRoute === "agent-health" && (
+              <AgentHealth
+                onOpenKnowledge={can("knowledge") ? () => setAdminRoute("knowledge") : undefined}
+              />
             )}
             {can("whatsapp") && adminRoute === "whatsapp" && <WhatsAppMessages />}
             {can("replies") && adminRoute === "replies" && (

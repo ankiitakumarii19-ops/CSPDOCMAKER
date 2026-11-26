@@ -274,6 +274,7 @@ from app.routers.template_router import router as template_router
 from app.routers.access_router import router as access_router
 from app.routers.csp_form_router import router as csp_form_router
 from app.routers.dashboard_router import router as dashboard_router
+from app.routers.agent_eval_router import router as agent_eval_router
 from app.routers.agent_router import router as agent_router
 from app.routers.messaging_router import router as messaging_router
 from app.routers.sheet_router import router as sheet_router
@@ -294,6 +295,7 @@ app.include_router(alert_router)     # already has /api/alerts prefix
 app.include_router(template_router)  # already has /api/admin/templates prefix
 app.include_router(access_router)    # already has /api/admin/access prefix
 app.include_router(dashboard_router) # already has /api/admin/dashboards prefix
+app.include_router(agent_eval_router)  # /api/admin/agents/evaluation — Agent health (No. 252); before agent_router's /{key} routes
 app.include_router(agent_router)     # already has /api/admin/agents prefix
 app.include_router(messaging_router) # already has /api/admin/messaging prefix
 app.include_router(sheet_router)     # already has /api/admin/sheets prefix

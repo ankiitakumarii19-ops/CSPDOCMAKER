@@ -11,6 +11,9 @@ from app.models.messaging import (
     MessageCampaign, MessageChannel, MessageTemplate,
 )
 from app.models.agent import AgentFinding, AgentRun, AgentState
+from app.models.agent_eval import (
+    AgentEvalIssue, AgentEvalSnapshot, AgentImprovement, AssistantTurn,
+)
 from app.models.user import User
 from app.models.authorization_record import AuthorizationRecord
 from app.models.workspace_member import WorkspaceMember
@@ -81,6 +84,10 @@ __all__ = [
     "MessageCampaign",
     "AgentState",
     "AgentRun",
+    "AgentEvalIssue",
+    "AgentEvalSnapshot",
+    "AgentImprovement",
+    "AssistantTurn",
     "AgentFinding",
     "User",
     "AuthorizationRecord",

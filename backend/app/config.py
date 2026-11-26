@@ -229,6 +229,22 @@ class Settings(BaseSettings):
     alert_repeat_hours: int = Field(default=4, alias="ALERT_REPEAT_HOURS")
     alert_agent_failures: int = Field(default=3, alias="ALERT_AGENT_FAILURES")
     alert_whatsapp_failures: int = Field(default=5, alias="ALERT_WHATSAPP_FAILURES")
+    # No. 252: Agent health — the bars each agent is held to, whether the
+    # agents may make safe improvements by themselves, and the daily
+    # summary email (Settings -> Agent health).
+    agent_eval_auto_improve: bool = Field(default=True,
+                                          alias="AGENT_EVAL_AUTO_IMPROVE")
+    agent_eval_min_success: int = Field(default=90,
+                                        alias="AGENT_EVAL_MIN_SUCCESS")
+    agent_eval_min_result: int = Field(default=80,
+                                       alias="AGENT_EVAL_MIN_RESULT")
+    agent_eval_min_chat: int = Field(default=70, alias="AGENT_EVAL_MIN_CHAT")
+    agent_eval_min_acceptance: int = Field(default=50,
+                                           alias="AGENT_EVAL_MIN_ACCEPTANCE")
+    agent_eval_summary_on: bool = Field(default=True,
+                                        alias="AGENT_EVAL_SUMMARY_ON")
+    agent_eval_summary_hour: int = Field(default=9,
+                                         alias="AGENT_EVAL_SUMMARY_HOUR")
     # No. 199 (Stage 0): the backup service's note "ok|failed <unix time>
     # <file or why>" (deploy/backup-loop.sh). Blank = no backups here (a
     # laptop), nothing checked. An alert when the last backup failed or the

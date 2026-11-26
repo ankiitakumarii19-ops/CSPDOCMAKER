@@ -210,6 +210,9 @@ async def test_every_table_holding_customer_data_is_scoped():
         "WorkspaceFile", "DocumentTemplateVersion", "WorkspaceSubscription",
         # No. 247: signature pictures and the rules that choose them.
         "Signature", "SignatureRule",
+        # No. 252: Agent health — daily scores, issues, lessons, chat questions.
+        "AgentEvalSnapshot", "AgentEvalIssue", "AgentImprovement",
+        "AssistantTurn",
     }
     # DashboardWidget is deliberately absent: it is reached only through the
     # dashboard that owns it, which is scoped. Denormalising the workspace

@@ -121,6 +121,20 @@ def _load_implementations() -> None:
     from app.services import agents  # noqa: F401  (registers the performers)
 
 
+def _muted(session: Session, key: str) -> set:
+    """Kinds of proposal this agent no longer asks about (No. 252). A
+    failure to read them never stops the run: logged, nothing muted."""
+    try:
+        from app.services.agent_eval import muted_kinds
+        with session.begin_nested():
+            return muted_kinds(session, key)
+    except Exception as e:
+        logger.error("agent_runner: could not read what %s should stop "
+                     "asking about — asking as usual: %s: %s",
+                     key, type(e).__name__, e, exc_info=True)
+        return set()
+
+
 def run(session: Session, key: str, triggered_by: Optional[str] = None,
         force: bool = False) -> AgentRun:
     """Run one agent and write down what happened.
@@ -173,17 +187,31 @@ def run(session: Session, key: str, triggered_by: Optional[str] = None,
         record.status = OK
         record.summary = outcome.summary
         record.detail = outcome.detail
+        # No. 252: a kind of proposal people always turned down is no longer
+        # ASKED (Agent health learned it; it can be undone there). It is
+        # still reported, without the proposal.
+        muted = _muted(session, key)
+        quieted = 0
         for finding in outcome.findings:
+            proposal = finding.proposal
+            status = finding.status
+            if proposal and muted:
+                from app.services.agent_eval import finding_kind
+                if finding_kind(finding.title) in muted:
+                    proposal, status = None, INFORMATIONAL
+                    quieted += 1
             record.findings.append(AgentFinding(
                 agent_key=key,
                 severity=finding.severity,
-                status=finding.status,
+                status=status,
                 title=finding.title,
                 detail=finding.detail,
-                proposal=finding.proposal,
+                proposal=proposal,
                 subject_type=finding.subject_type,
                 subject_id=finding.subject_id,
             ))
+        if quieted:
+            record.detail = {**(outcome.detail or {}), "quieted": quieted}
         state.consecutive_failures = 0
     except Exception as e:
         # The agent may have failed mid-statement, which leaves the

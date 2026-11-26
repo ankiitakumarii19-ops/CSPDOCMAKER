@@ -65,6 +65,12 @@ OWNER_ONLY = [
     # Admins no longer even see them.
     ("GET", "/api/admin/agents"),
     ("GET", "/api/admin/agents/findings"),
+    # Agent health (No. 252): the same, Super Admin only.
+    ("GET", "/api/admin/agents/evaluation"),
+    ("GET", "/api/admin/agents/evaluation/history"),
+    ("GET", "/api/admin/agents/evaluation/issues"),
+    ("POST", "/api/admin/agents/evaluation/check"),
+    ("POST", "/api/admin/agents/evaluation/improvements/not-a-uuid/undo"),
 ]
 
 # Looking at what already happened.

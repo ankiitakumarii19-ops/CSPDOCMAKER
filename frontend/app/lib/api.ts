@@ -40,6 +40,107 @@ export interface AgentInfo {
   consecutive_failures: number;
 }
 
+/** Agent health (No. 252): one agent's numbers, score and colour. */
+export interface AgentHealthAgent {
+  key: string;
+  name: string;
+  owns: string;
+  every_minutes: number | null;
+  risk: string;
+  enabled: boolean;
+  score: number | null;
+  status: "green" | "amber" | "red" | "grey" | "off";
+  open_issues: number;
+  run: {
+    runs: number;
+    ok: number;
+    failed: number;
+    skipped: number;
+    success_rate: number | null;
+    expected_runs: number | null;
+    on_schedule: number | null;
+    p50_ms: number | null;
+    p95_ms: number | null;
+    findings: number;
+    critical: number;
+    warnings: number;
+    findings_per_run: number | null;
+    quieted: number;
+    last_question_at?: string | null;
+  };
+  result: { label: string; good: number; total: number; rate: number | null; note: string; basis: string };
+  decisions: {
+    accepted: number;
+    rejected: number;
+    acceptance_rate: number | null;
+    waiting: number;
+    oldest_waiting_hours: number | null;
+  };
+  last_run_at: string | null;
+  minutes_since_last_run: number | null;
+  consecutive_failures: number;
+  baseline_p95_ms: number | null;
+  trend: { day: string; score: number | null }[];
+}
+
+export interface AgentIssue {
+  id: string;
+  agent: string;
+  agent_name: string;
+  check: string;
+  severity: "warning" | "critical";
+  status: "open" | "resolved";
+  title: string;
+  detail: string;
+  value: number | null;
+  limit: number | null;
+  first_seen_at: string | null;
+  last_seen_at: string | null;
+  resolved_at: string | null;
+}
+
+export interface AgentImprovement {
+  id: string;
+  agent: string;
+  agent_name: string;
+  kind: string;
+  title: string;
+  evidence: string;
+  change: Record<string, unknown>;
+  status: "applied" | "proposed" | "dismissed" | "undone" | "closed";
+  automatic: boolean;
+  created_at: string | null;
+  decided_by: string | null;
+  decided_at: string | null;
+  note: string | null;
+  can_undo: boolean;
+}
+
+export interface AgentHealth {
+  now: string;
+  checked_at: string | null;
+  overall: number | null;
+  agents: AgentHealthAgent[];
+  issues: AgentIssue[];
+  improvements: { waiting: AgentImprovement[]; history: AgentImprovement[]; in_force: number };
+  unanswered: { question: string; times_asked: number }[];
+  bars: { success: number; result: number; chat: number; acceptance: number; agent_failures: number };
+  auto_improve: boolean;
+}
+
+export interface AgentHealthDay {
+  agent: string;
+  day: string;
+  score: number | null;
+  success_rate?: number | null;
+  on_schedule?: number | null;
+  p95_ms?: number | null;
+  runs?: number | null;
+  failed?: number | null;
+  result_rate?: number | null;
+  acceptance_rate?: number | null;
+}
+
 export interface AgentFinding {
   id: string;
   agent: string;
@@ -3006,6 +3107,39 @@ class ApiClient {
     return this.request<{ agent: string; enabled: boolean }>(
       `/admin/agents/${encodeURIComponent(key)}`,
       { method: "PATCH", body: JSON.stringify({ enabled }) }
+    );
+  }
+
+  // ---- Agent health (No. 252) ----
+
+  async agentHealth() {
+    return this.request<AgentHealth>("/admin/agents/evaluation");
+  }
+
+  async agentHealthHistory(days = 30, agent?: string) {
+    const q = `days=${days}${agent ? `&agent=${encodeURIComponent(agent)}` : ""}`;
+    return this.request<{ days: number; rows: AgentHealthDay[] }>(
+      `/admin/agents/evaluation/history?${q}`
+    );
+  }
+
+  async agentHealthIssues(status: "open" | "resolved" | "all" = "open") {
+    return this.request<{ issues: AgentIssue[] }>(
+      `/admin/agents/evaluation/issues?status=${status}`
+    );
+  }
+
+  async agentHealthCheck() {
+    return this.request<{ agents: number; issues: { opened: number; resolved: number; open: number }; improvements: { applied: number; proposed: number; closed: number } }>(
+      "/admin/agents/evaluation/check",
+      { method: "POST" }
+    );
+  }
+
+  async agentImprovement(id: string, action: "apply" | "dismiss" | "undo") {
+    return this.request<AgentImprovement>(
+      `/admin/agents/evaluation/improvements/${encodeURIComponent(id)}/${action}`,
+      { method: "POST" }
     );
   }
 

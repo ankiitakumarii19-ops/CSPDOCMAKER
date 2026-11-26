@@ -94,6 +94,9 @@ GROUPS: List[Group] = [
     Group("email", "Email", "Emails the app sends."),
     Group("alerts", "Alerts",
           "Emails to the Super Admins when something keeps failing."),
+    Group("agent_health", "Agent health",
+          "The bars each agent is held to on Setup → Agent health, whether "
+          "the agents improve themselves, and the daily summary email."),
     Group("selffix", "Fixing data by itself",
           "When the app corrects its lookup table on its own."),
     Group("jobs", "Background jobs",
@@ -306,6 +309,51 @@ SETTINGS: List[Setting] = [
             "Lower = told sooner, more false alarms.",
             unit="failures", min=1, max=100,
             words=("whatsapp failures",)),
+    # ---- agent health (No. 252) ------------------------------------------
+    Setting("agent_eval_auto_improve", "agent_health",
+            "Agents improve themselves",
+            "Safe changes only, each with an Undo: stop asking about a "
+            "proposal people always turn down, and teach the chat a new "
+            "wording of a question it already answers.",
+            "Off: every improvement waits for you on Agent health.",
+            kind=BOOL, words=("improve themselves", "self improve",
+                              "auto improve")),
+    Setting("agent_eval_min_success", "agent_health",
+            "Runs that must work",
+            "Share of an agent's runs in the last 24 hours that must finish "
+            "without an error.",
+            "Below it, the agent gets an issue (and an alert email).",
+            unit="%", min=50, max=100, words=("agent success",)),
+    Setting("agent_eval_min_result", "agent_health",
+            "Results that must be good",
+            "Each agent's own result over 7 days: documents made without "
+            "error, messages that went, sheet reads that worked, CSPs "
+            "who answered, records complete.",
+            "Below it, the agent gets an issue (and an alert email).",
+            unit="%", min=30, max=100, words=("agent result",)),
+    Setting("agent_eval_min_chat", "agent_health",
+            "Chat questions that must be answered",
+            "Share of chat questions over 7 days that got an answer.",
+            "Below it, the chat gets an issue (and an alert email).",
+            unit="%", min=30, max=100, words=("chat answered",)),
+    Setting("agent_eval_min_acceptance", "agent_health",
+            "Proposals that must be accepted",
+            "Share of an agent's proposals (over 30 days, at least 5 "
+            "decided) that people accepted.",
+            "Below it, the agent gets an issue: it is proposing the wrong "
+            "things.",
+            unit="%", min=0, max=100, words=("agent acceptance",)),
+    Setting("agent_eval_summary_on", "agent_health",
+            "Daily agent health email",
+            "Once a day: each agent's score, open issues, and what the "
+            "agents learned.",
+            "Off: no daily agent health email.", kind=BOOL,
+            words=("agent summary", "agent health email")),
+    Setting("agent_eval_summary_hour", "agent_health",
+            "Daily agent health email: hour",
+            "On the workspace's clock (24-hour).",
+            "The email goes at this hour each day.", unit="o'clock",
+            min=0, max=23, words=("agent summary hour",)),
     # ---- self-fixing ---------------------------------------------------
     Setting("info_auto_fix_enabled", "selffix", "Fix the lookup table by itself",
             "When enough CSPs give the same AO / RBO correction, the app "

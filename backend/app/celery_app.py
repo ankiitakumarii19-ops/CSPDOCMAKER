@@ -118,6 +118,13 @@ celery_app.conf.update(
             "options": {"expires": 1800 - 5},
         },
         # Alerts to the Super Admins (No. 173).
+        # Agent health (No. 252): measure every agent, issues, history,
+        # lessons, and the daily summary when due.
+        "agent-evaluation": {
+            "task": "workers.agent_evaluation",
+            "schedule": 15 * 60,
+            "options": {"expires": 15 * 60 - 5},
+        },
         "send-alerts": {
             "task": "workers.send_alerts",
             "schedule": settings.alert_minutes * 60,
@@ -210,6 +217,7 @@ celery_app.conf.include = [
     "app.workers.whatsapp_status_worker",
     "app.workers.weekly_health_worker",
     "app.workers.contact_report_worker",
+    "app.workers.agent_eval_worker",
 ]
 
 
