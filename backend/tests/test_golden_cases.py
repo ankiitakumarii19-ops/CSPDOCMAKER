@@ -64,7 +64,8 @@ def _cases(*kinds):
 
 RUNNERS = {"documents", "info", "rm", "hold", "mobile", "address", "ask",
            "form", "channel", "go_live", "verify", "message", "access", "edit",
-           "link", "force", "sender", "setting", "feature", "connection", "data"}
+           "link", "force", "sender", "setting", "feature", "connection", "data",
+           "catch_up"}
 
 
 def test_the_golden_file_is_well_formed():
@@ -426,3 +427,13 @@ def test_data(case):
     assert {f: v["header"] for f, v in got.items()} == expect["guess"]
     if "score" in expect:
         assert all(v["score"] == expect["score"] for v in got.values())
+
+
+@pytest.mark.parametrize("case", _cases("catch_up"))
+def test_catch_up(case):
+    """No. 259: a CSP's answer that did not reach the sheet is written again
+    - the latest value of each field, never an older one."""
+    from app.workers.new_csp_worker import answer_to_rewrite
+
+    answers = [(a["values"], a.get("sheet_error")) for a in case["input"]["answers"]]
+    assert answer_to_rewrite(answers) == case["expect"]["rewrite"]

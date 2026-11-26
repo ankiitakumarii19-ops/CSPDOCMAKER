@@ -1,7 +1,7 @@
 {
   "about": "Golden cases (PROJECT-REGISTER No. 146): fixed CSP situations with the answer the business rules say is right. Every name, code, number and email is made up; the situations are the real ones met in Eko's data (the register number says where each rule comes from). Run before every deploy: pytest tests/test_golden_cases.py. A failure means a change altered a business outcome: either the change is wrong, or the rule really changed and this file is updated with the user's OK, in the same commit.",
   "version": 1,
-  "updated": "2026-11-23",
+  "updated": "2026-11-26",
 
   "info_tab": [
     ["Relationship Manager Name", "Email ID", "Mobile Number", "LHO", "State"],
@@ -430,6 +430,17 @@
      "expect": {"guess": {"branch_code": "Branch Code"}}},
     {"id": "DAT-05", "kind": "data", "rule": "No. 211", "title": "Only headings that differ from Eko's are kept",
      "input": {"store": {"csp_code": "CSP Code", "mobile": "Phone"}},
-     "expect": {"kept": {"mobile": "Phone"}}}
+     "expect": {"kept": {"mobile": "Phone"}}},
+
+    {"id": "CATCH-01", "kind": "catch_up", "rule": "No. 259", "title": "Answer did not reach the sheet: all of it is written again",
+     "input": {"answers": [{"values": {"address": "Ward 9, Pakur", "email": "csp@example.com"}, "sheet_error": "quota exceeded"}]},
+     "expect": {"rewrite": {"address": "Ward 9, Pakur", "email": "csp@example.com"}}},
+    {"id": "CATCH-02", "kind": "catch_up", "rule": "No. 259", "title": "A later answer that did reach the sheet wins over the failed older one",
+     "input": {"answers": [{"values": {"address": "Ward 9, Pakur", "email": "old@example.com"}, "sheet_error": "quota exceeded"},
+                           {"values": {"address": "Ward 10, Pakur"}, "sheet_error": null}]},
+     "expect": {"rewrite": {"address": "Ward 10, Pakur", "email": "old@example.com"}}},
+    {"id": "CATCH-03", "kind": "catch_up", "rule": "No. 259", "title": "Every answer reached the sheet: nothing to write again, only put in line",
+     "input": {"answers": [{"values": {"address": "Ward 9, Pakur"}, "sheet_error": null}]},
+     "expect": {"rewrite": {}}}
   ]
 }

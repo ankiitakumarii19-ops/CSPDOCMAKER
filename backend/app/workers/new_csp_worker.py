@@ -65,6 +65,11 @@ def process_new_csps(self):
     processed = alerted = failed = 0
 
     with Session(engine) as session:
+        # No. 259: anyone who filled the form but was never put in line,
+        # and documents made whose email never went.
+        _enrol_answered(session)
+        retry_failed_document_emails(session)
+
         # Two kinds of work, both finished the same way:
         #
         #   a new CSP, which is automatic by definition; and
@@ -169,6 +174,240 @@ def process_new_csps(self):
         "%d failed", len(pending), processed, alerted, failed,
     )
     return summary
+
+
+CAUGHT_UP = "the CSP's verification answer (caught up later, No. 259)"
+
+
+def answer_to_rewrite(answers) -> dict:
+    """What to write to the sheet again for a CSP whose answer did not get
+    there. `answers` = [(answered values, sheet error or None)], oldest
+    first. Every field of an answer that failed, at the LATEST value the
+    CSP gave for it - so a later answer that did reach the sheet is never
+    overwritten by an older one. Blank values never go."""
+    latest, fields = {}, set()
+    for values, sheet_error in answers:
+        latest.update(values or {})
+        if sheet_error:
+            fields |= set(values or {})
+    return {f: latest[f] for f in sorted(fields) if (latest.get(f) or "").strip()}
+
+
+def _enrol_answered(session) -> int:
+    """Put in line every old CSP that filled the form but never was.
+
+    The form puts an old CSP (copied in from the Calling sheet) in line for
+    its documents straight away - but only when its answer reached the
+    sheet (csp_form_router._documents_after_verification). When that write
+    failed, nothing ever tried again: the CSP had done everything and
+    waited for ever (No. 259, CSP 1A852542). So, every run:
+
+      * the answer is written to the sheet again (the latest value of each
+        field the CSP gave), and put back on the record, since a sync may
+        have put the old sheet value back meanwhile;
+      * once it is in the sheet - or was already - the CSP is put in line,
+        and this same run makes and mails the documents (or alerts the RM
+        for what is still missing).
+
+    Same limits as the form: never a CSP that was in CSPDATA before the
+    import, never one on hold, never one already made or in line. A sheet
+    that still refuses is logged and tried again next run. Returns how many
+    were put in line.
+    """
+    from sqlalchemy import func, or_, select
+
+    from app.models.csp_record import CSPRecord
+    from app.models.data_request import ANSWERED, DataRequest
+    from app.models.source_sheet import SourceSheetState
+    from app.services import sheet_writeback_service as wb
+
+    copied_in = select(func.upper(SourceSheetState.csp_code)).where(
+        SourceSheetState.imported_as == "baseline")
+    answered = select(func.upper(DataRequest.csp_id)).where(
+        DataRequest.status == ANSWERED)
+    try:
+        records = session.execute(select(CSPRecord).where(
+            CSPRecord.origin == "baseline",
+            CSPRecord.send_hold.is_(None),
+            CSPRecord.new_csp_processed_at.is_(None),
+            CSPRecord.auto_enrolled_at.is_(None),
+            or_(func.upper(CSPRecord.csp_id).in_(copied_in),
+                func.upper(CSPRecord.csp_code).in_(copied_in)),
+            func.upper(CSPRecord.csp_id).in_(answered),
+        )).scalars().all()
+    except Exception as e:
+        session.rollback()
+        logger.error("new_csp_worker: could not look for CSPs who filled the "
+                     "form and were not put in line: %s: %s",
+                     type(e).__name__, e, exc_info=True)
+        return 0
+
+    enrolled = 0
+    for record in records:
+        try:
+            requests = session.execute(select(DataRequest).where(
+                func.upper(DataRequest.csp_id) == record.csp_id.upper(),
+                DataRequest.status == ANSWERED,
+            ).order_by(DataRequest.answered_at)).scalars().all()
+            failed = [r for r in requests if r.sheet_error]
+            if failed:
+                values = answer_to_rewrite(
+                    [(r.answered_values, r.sheet_error) for r in requests])
+                try:
+                    written, _ = wb.write_values(record.csp_id, values)
+                except Exception as e:
+                    logger.warning(
+                        "new_csp_worker: %s filled the form; their answer "
+                        "still cannot be written to the sheet (%s: %s) - "
+                        "tried again next run", record.csp_id,
+                        type(e).__name__, e)
+                    continue
+                for field, value in values.items():
+                    setattr(record, field, value)
+                for r in failed:
+                    r.sheet_error = None
+                    r.sheet_saved = sorted(set(r.sheet_saved or [])
+                                           | set(written))
+            record.auto_enrolled_at = datetime.now(timezone.utc)
+            record.auto_enrolled_by = CAUGHT_UP
+            session.commit()
+            enrolled += 1
+            logger.info("new_csp_worker: %s filled the form but was never put "
+                        "in line for documents%s - put in line now",
+                        record.csp_id,
+                        " (their answer had not reached the sheet; written "
+                        "now)" if failed else "")
+        except Exception as e:
+            session.rollback()
+            logger.error("new_csp_worker: %s filled the form but could not be "
+                         "put in line for documents: %s: %s", record.csp_id,
+                         type(e).__name__, e, exc_info=True)
+    return enrolled
+
+
+RETRY_EMAIL_EVERY_MINUTES = 60
+RETRY_EMAILS_PER_RUN = 20
+
+
+def received_documents(session) -> set:
+    """CSP ids that have received their documents by email: an email job
+    that went out, or a documents email that was sent and did not bounce
+    (the No. 255 rule, the same one the guide video uses)."""
+    from sqlalchemy import select
+
+    from app.models.email_job import EmailJob
+    from app.models.email_message import KIND_DOCUMENTS, EmailMessage
+    from app.models.enums import EmailStatus
+    from app.models.processing_job import ProcessingJob
+
+    got = set(session.execute(
+        select(ProcessingJob.csp_id)
+        .join(EmailJob, EmailJob.processing_job_id == ProcessingJob.id)
+        .where(EmailJob.status == EmailStatus.SENT)).scalars())
+    got |= set(session.execute(select(EmailMessage.csp_id).where(
+        EmailMessage.kind == KIND_DOCUMENTS,
+        EmailMessage.send_status == "sent",
+        EmailMessage.bounced_at.is_(None))).scalars())
+    return got
+
+
+def retry_failed_document_emails(session, now=None) -> dict:
+    """Documents made, but the email carrying them failed - and nothing ever
+    sent it again (No. 259). Every run, for each such CSP (not on hold,
+    with an email on record, last try at least an hour ago): the stored
+    documents are emailed again; when it goes, the failed email is marked
+    sent and the CSP gets the usual "documents sent" WhatsApp. Never gives
+    up (No. 237); at most 20 a run, so a long backlog goes out steadily.
+    A bounced address is the contact loop's job (it asks for a new one),
+    not this one's. Returns {"sent": [...], "failed": [...]}."""
+    from datetime import timedelta
+
+    from sqlalchemy import func, select
+
+    from app.models.csp_record import CSPRecord
+    from app.models.email_job import EmailJob
+    from app.models.email_message import KIND_DOCUMENTS, EmailMessage
+    from app.models.enums import EmailStatus, JobState
+    from app.models.processing_job import ProcessingJob
+    from app.services import email_service, feedback_loops, send_reason
+
+    out = {"sent": [], "failed": []}
+    if email_service.paused():
+        return out
+    now = now or datetime.now(timezone.utc)
+    try:
+        failed = session.execute(
+            select(EmailJob, ProcessingJob)
+            .join(ProcessingJob, EmailJob.processing_job_id == ProcessingJob.id)
+            .where(EmailJob.status == EmailStatus.FAILED)
+            .order_by(EmailJob.created_at)).all()
+        if not failed:
+            return out
+        got = received_documents(session)
+        last_try = dict(session.execute(
+            select(EmailMessage.csp_id, func.max(EmailMessage.created_at))
+            .where(EmailMessage.kind == KIND_DOCUMENTS)
+            .group_by(EmailMessage.csp_id)).all())
+    except Exception as e:
+        session.rollback()
+        logger.error("new_csp_worker: could not look for documents emails "
+                     "to send again: %s: %s", type(e).__name__, e,
+                     exc_info=True)
+        return out
+
+    by_csp = {}
+    for email_job, job in failed:
+        if job.csp_id not in got:
+            by_csp.setdefault(job.csp_id, []).append((email_job, job))
+    wait = timedelta(minutes=RETRY_EMAIL_EVERY_MINUTES)
+    for csp_id, jobs in by_csp.items():
+        if len(out["sent"]) + len(out["failed"]) >= RETRY_EMAILS_PER_RUN:
+            break
+        try:
+            record = session.execute(select(CSPRecord).where(
+                CSPRecord.csp_id == csp_id)).scalars().first()
+            if (record is None or record.send_hold
+                    or not (record.email or "").strip()):
+                continue
+            last = last_try.get(csp_id) or max(e.created_at for e, _ in jobs)
+            if last and now - last < wait:
+                continue
+            with send_reason.because(send_reason.RETRY):
+                ok, note, resent = feedback_loops.resend_documents_email(
+                    session, record)
+            if ok and resent:
+                for email_job, job in jobs:
+                    email_job.status = EmailStatus.SENT
+                    email_job.sent_at = now
+                    email_job.recipient = record.email
+                    email_job.failure_reason = None
+                    job.current_state = JobState.EMAIL_SENT
+                session.commit()
+                out["sent"].append(csp_id)
+                logger.info("new_csp_worker: %s - documents emailed again "
+                            "after the first email failed: %s", csp_id, note)
+                from app.services import documents_whatsapp
+                from app.services.missing_data_service import document_label
+                names = [document_label(d.document_type)
+                         for d in jobs[-1][0].documents]
+                documents_whatsapp.notify(session, record, jobs[-1][1], names)
+            elif ok is False:
+                for email_job, _ in jobs:
+                    email_job.failure_reason = (
+                        f"{note} (tried again {now:%d %b %H:%M} UTC)")
+                session.commit()
+                out["failed"].append(csp_id)
+                logger.warning("new_csp_worker: %s - documents email failed "
+                               "again: %s", csp_id, note)
+            elif ok is None:
+                break                       # emails paused meanwhile
+        except Exception as e:
+            session.rollback()
+            out["failed"].append(csp_id)
+            logger.error("new_csp_worker: %s - sending the documents email "
+                         "again failed: %s: %s", csp_id, type(e).__name__, e,
+                         exc_info=True)
+    return out
 
 
 def _ask_csp(session, csp) -> dict:

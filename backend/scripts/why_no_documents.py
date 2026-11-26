@@ -1,9 +1,9 @@
-r"""Why did a CSP who filled the form not get their documents? (PROJECT-REGISTER No. 259)
+r"""CSPs who filled the form vs CSPs who got their documents (PROJECT-REGISTER No. 259-261)
 
     python scripts/why_no_documents.py 1A852542      # one CSP, step by step
-    python scripts/why_no_documents.py               # everyone: who filled the
-                                                     # form and got no documents
-                                                     # email, grouped by reason
+    python scripts/why_no_documents.py               # everyone: filled the form
+                                                     # vs got the documents email;
+                                                     # each mismatch by reason
     python scripts/why_no_documents.py --codes       # ... with the CSP codes
 
 Read-only: it changes nothing, sends nothing.
@@ -43,15 +43,17 @@ EKO = "sbi-kiosk-csp"
 NO_RECORD = "A. no CSP record with this code"
 HOLD = "B. on hold (inactive / not live) - nothing goes out"
 OLD = "C. was in CSPDATA before the import - owner's rule: never mailed"
-SHEET_FAILED = ("D. form saved, but writing it to the sheet failed - so the "
-                "CSP was never put in line for documents (BUG)")
-NOT_ENROLLED = "E. form saved, but never put in line for documents (BUG)"
+SHEET_FAILED = ("D. form saved, but writing it to the sheet failed - never put "
+                "in line (fixed No. 260: the app now does it by itself)")
+NOT_ENROLLED = ("E. form saved, but never put in line for documents (fixed "
+                "No. 260: the app now does it by itself)")
 AUTO_OFF = "F. new CSP, but 'make documents by itself' is switched off"
 MISSING = "G. in line, but something a document needs is still missing (RM alerted)"
 PAUSED = "H. in line, nothing missing - waiting because emails are paused"
 MAKING_FAILS = "I. in line, nothing missing - making the documents fails"
 WAITING = "J. in line, nothing missing - the next run should send them"
-EMAIL_FAILED = "K. documents made, but the email did not go"
+EMAIL_FAILED = ("K. documents made, but the email did not go (fixed No. 260: "
+                "sent again every hour by itself)")
 NO_EMAIL = "L. documents made, no email was ever tried"
 
 
@@ -59,7 +61,7 @@ def _when(d):
     return d.strftime("%d %b %Y %H:%M UTC") if d else "-"
 
 
-def facts(db, record, imported, s):
+def facts(db, record, imported, s, received=None):
     """(reason, [lines]) for one CSP that filled the form."""
     from app.models.email_job import EmailJob
     from app.models.enums import DocumentType, EmailStatus
@@ -111,6 +113,8 @@ def facts(db, record, imported, s):
     if (record.origin or "") == "baseline" and code not in imported:
         return OLD, lines
 
+    if received is not None and record.csp_id in received:
+        return None, lines                # it did go
     if record.new_csp_processed_at is not None:
         if any(e.status == EmailStatus.SENT for e in emails):
             return None, lines            # it did go
@@ -173,7 +177,9 @@ def main() -> int:
             if record is None:
                 print(f"{code}: {NO_RECORD}")
                 return 0
-            reason, lines = facts(db, record, imported, s)
+            from app.workers.new_csp_worker import received_documents
+            reason, lines = facts(db, record, imported, s,
+                                  received_documents(db))
             print(f"{record.csp_id}  {record.name or ''}")
             for line in lines:
                 print("  " + line)
@@ -181,20 +187,43 @@ def main() -> int:
             print("RESULT: " + (reason or "the documents email WENT - nothing stuck"))
             return 0
 
-        answered = db.execute(select(func.upper(DataRequest.csp_id)).where(
-            DataRequest.status == ANSWERED).distinct()).scalars().all()
+        from app.workers.new_csp_worker import received_documents
+        received = received_documents(db)
+        records = db.execute(select(CSPRecord)).scalars().all()
+        code_of = {r.csp_id: (r.csp_code or r.csp_id or "").strip().upper()
+                   for r in records}
+        got_codes = {code_of[c] for c in received if c in code_of}
+        answered = set(db.execute(select(func.upper(DataRequest.csp_id)).where(
+            DataRequest.status == ANSWERED)).scalars())
+        by_code = {}
+        for r in records:
+            by_code.setdefault(code_of[r.csp_id], r)
+        filled = {code_of.get(r.csp_id) for r in records
+                  if r.csp_id.upper() in answered}
+        filled.discard(None)
+
         groups = defaultdict(list)
-        for code in sorted(set(answered)):
-            record = db.execute(select(CSPRecord).where(or_code(code))).scalars().first()
-            if record is None:
-                groups[NO_RECORD].append(code)
+        for code in sorted(filled):
+            if code in got_codes:
                 continue
-            reason, _ = facts(db, record, imported, s)
-            if reason:
-                groups[reason].append(record.csp_id)
-        total = sum(len(v) for v in groups.values())
-        print(f"Filled the form: {len(set(answered))} CSP(s); "
-              f"no documents email: {total}")
+            reason, _ = facts(db, by_code[code], imported, s, received)
+            groups[reason or WAITING].append(code)
+        missing_rows = sorted(c for c in answered
+                              if c not in {k.upper() for k in code_of})
+        matched = len(filled & got_codes)
+        print("CSPs who FILLED the form vs CSPs who GOT their documents by email")
+        print(f"  filled the form ............................ {len(filled)}")
+        print(f"  ... and got their documents (match) ........ {matched}")
+        print(f"  ... and did NOT get them (mismatch) ........ "
+              f"{len(filled) - matched}")
+        print(f"  got documents without a form (details were "
+              f"complete already) {len(got_codes - filled)}")
+        if missing_rows:
+            print(f"  answered forms with no CSP record .......... "
+                  f"{len(missing_rows)}")
+        if groups:
+            print()
+            print("Why each mismatch (one CSP code counted once):")
         for reason in sorted(groups):
             print(f"  {len(groups[reason]):5d}  {reason}")
             if a.codes:
