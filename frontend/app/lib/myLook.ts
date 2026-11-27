@@ -154,13 +154,28 @@ export function paintFor(look: Appearance): Paint {
     rules.push(`button.bg-eko,a.bg-eko{background-color:${button}}`,
       `button.bg-eko:hover,a.bg-eko:hover{background-color:${shade(button, -0.16)}}`);
   }
-  const menu = colour(look.menu);
-  if (menu) {
-    const lift = shade(menu, 0.1);
-    rules.push(`[data-shell-menu]{background-color:${menu}}`,
-      `[data-shell-menu] .bg-navy-800,[data-shell-menu] .hover\\:bg-navy-800:hover{background-color:${lift}}`);
-  }
   const background = colour(look.background);
+  // `when` narrows it (":not(.dark)" = light mode only). The logo strip on
+  // top of the menu goes with it, unless the workspace gave it a second
+  // colour (Setup -> Display).
+  const menuRules = (menu: string, when = "") => {
+    const lift = shade(menu, 0.1);
+    const at = `html${when} `;
+    rules.push(`${at}[data-shell-menu]{background-color:${menu}}`,
+      `${at}[data-shell-menu] .bg-navy-800,${at}[data-shell-menu] .hover\\:bg-navy-800:hover,` +
+      `html${when}:not([data-brand-2]) [data-shell-brand]{background-color:${lift}}`);
+  };
+  // 27 Nov: a person who picked an accent or page background but left
+  // "Side menu" empty saw the menu stay in the workspace look's colour (e.g.
+  // Sunset brown beside a purple page). Now the menu follows their colour,
+  // as a dark shade of it (the same depth the Display looks use, readable
+  // with the menu's light text). Its own box, when set, still wins. Taken
+  // from the page background only in light mode, where that colour shows.
+  const menu = colour(look.menu);
+  if (menu) menuRules(menu);
+  else if (accent) menuRules(shade(accent, -0.8));
+  else if (background) menuRules(shade(background, -0.8), ":not(.dark)");
+
   if (background) {
     rules.push(`html:not(.dark) body,html:not(.dark) .bg-gray-50{background-color:${background}}`);
   }

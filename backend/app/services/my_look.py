@@ -77,7 +77,9 @@ CHOICES: tuple[Choice, ...] = (
     Choice("background", "Page background", "appearance", "colour",
            help="Used in light mode. Must stay easy to read with the normal text."),
     Choice("menu", "Side menu", "appearance", "colour",
-           help="The menu on the left of the Admin pages."),
+           help="The menu on the left of the Admin pages. Left empty, it follows "
+                "your Accent (or, in light mode, your Page background) as a "
+                "dark shade of it."),
     Choice("accent", "Accent", "appearance", "colour",
            help="Highlights, links, the chosen tab, progress bars."),
     Choice("button", "Buttons", "appearance", "colour",
