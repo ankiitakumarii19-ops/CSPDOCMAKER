@@ -332,7 +332,8 @@ async def test_new_is_the_apps_new_csps_and_existing_is_the_calling_sheet(
 
     totals = (await client.get("/api/admin/csp-metrics",
                                headers=admin_headers)).json()["totals"]
-    assert (totals["csps"], totals["new"], totals["existing"]) == (7, 2, 5)
+    # No. 275: Existing = Terminal Status Active only.
+    assert (totals["csps"], totals["new"], totals["existing"]) == (5, 2, 3)
 
     async def listed(view):
         body = (await client.get(f"/api/admin/csp-list?view={view}",
@@ -341,9 +342,21 @@ async def test_new_is_the_apps_new_csps_and_existing_is_the_calling_sheet(
 
     assert await listed("new") == {"1A974001": "new", "1A974002": "new"}
     assert await listed("existing") == {
-        c: "baseline" for c in ("1A974003", "1A974004", "1A974005",
-                                "1A974006", "1A974007")}, \
+        c: "baseline" for c in ("1A974003", "1A974004", "1A974007")}, \
         "the TYPE shown is the card's, not the record's"
+
+
+async def test_existing_can_count_every_terminal_status(
+        client, admin_headers, db, monkeypatch):
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "existing_active_only", False)
+    await _sheet_csp(db, "1A975001", in_calling=True, status="Active")
+    await _sheet_csp(db, "1A975002", in_calling=True, status="Inactive")
+    await _sheet_csp(db, "1A975003", in_calling=True, status=None)
+    await db.commit()
+    totals = (await client.get("/api/admin/csp-metrics",
+                               headers=admin_headers)).json()["totals"]
+    assert (totals["csps"], totals["existing"]) == (3, 3)
 
 
 async def test_new_csps_stay_new_for_the_months_set(client, admin_headers, db,
@@ -400,7 +413,8 @@ async def test_every_card_follows_the_day(client, admin_headers, db):
 
         all_days = (await client.get("/api/admin/csp-metrics",
                                      headers=admin_headers)).json()["totals"]
-        assert (all_days["csps"], all_days["awaiting_rm"]) == (4, 2)
+        assert (all_days["csps"], all_days["awaiting_rm"]) == (3, 2), \
+            "the Inactive one is not counted"
     finally:
         from sqlalchemy import text
         await db.execute(text("DELETE FROM data_requests WHERE token_hash "

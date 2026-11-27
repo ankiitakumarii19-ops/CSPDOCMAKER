@@ -480,6 +480,10 @@ class Settings(BaseSettings):
     # No. 272-274: a new CSP counts as New on the dashboard for this many
     # months after the app added it.
     new_csp_months: int = Field(default=3, alias="NEW_CSP_MONTHS")
+    # No. 275: Existing on the dashboard = Calling-sheet codes whose
+    # Terminal Status is Active (off: any status).
+    existing_active_only: bool = Field(default=True,
+                                       alias="EXISTING_ACTIVE_ONLY")
     # No. 270: a later change in the Calling sheet goes into CSPDATA (not a
     # field the CSP gave on their own form).
     calling_sheet_updates: bool = Field(default=True,

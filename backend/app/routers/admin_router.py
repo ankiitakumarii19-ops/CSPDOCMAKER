@@ -467,9 +467,9 @@ async def _counted_kind(session, now: datetime | None = None):
                  "15 are correct"), for NEW_CSP_MONTHS (3) after the app
                  added it; then it is old. Only codes in the Calling or Lead
                  raw data sheet.
-      Existing = every other code in the Calling sheet, whatever its
-                 Terminal Status (Active, Inactive or blank) - so the total
-                 matches the Calling sheet.
+      Existing = every other code in the Calling sheet whose "Terminal
+                 Status" is Active (No. 275, the owner; Inactive and blank
+                 are not counted). EXISTING_ACTIVE_ONLY off = any status.
     A code only in the Lead raw data sheet (not live yet) is not counted.
     Each code once. Returns a SQL expression giving 'new' / 'baseline' /
     NULL per CSPRecord, or None for a workspace without those sheets - it
@@ -488,7 +488,13 @@ async def _counted_kind(session, now: datetime | None = None):
     def codes(*where):
         return code.in_(select(func.upper(St.csp_code)).where(*where))
 
-    in_calling = codes(St.in_calling.is_(True))
+    if getattr(get_settings(), "existing_active_only", True):
+        in_calling = codes(
+            St.in_calling.is_(True),
+            func.lower(func.trim(func.coalesce(St.calling_status, "")))
+            == "active")
+    else:
+        in_calling = codes(St.in_calling.is_(True))
     in_sheets = codes(or_(St.in_calling.is_(True), St.in_lead.is_(True)))
     is_new = and_(CSPRecord.origin == "new", CSPRecord.created_at >= since,
                   in_sheets)
