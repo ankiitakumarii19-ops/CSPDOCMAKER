@@ -137,6 +137,82 @@ def test_the_platform_being_down_is_a_failure_not_a_crash(monkeypatch):
     assert out["status"] == wa.FAILED and "unreachable" in out["reason"]
 
 
+# ---- the platform busy with someone's bulk batch (No. 268) -------------------
+
+@pytest.fixture
+def slow_send(monkeypatch):
+    """upload_contacts answers; the send step times out; script what the
+    delivery status then shows."""
+    import httpx
+    calls, script = [], {"status": {"counts": {}, "rows": []}}
+
+    def post(url, json, headers, timeout):
+        calls.append((json["params"]["name"], timeout))
+        name = json["params"]["name"]
+        if name == "upload_contacts":
+            return _Reply(_tool({"job_id": "job-9"}))
+        if name == "get_delivery_status":
+            if script["status"] is None:
+                raise httpx.ConnectError("no route")
+            return _Reply(_tool(script["status"]))
+        raise httpx.ReadTimeout("The read operation timed out")
+    monkeypatch.setattr(httpx, "post", post)
+    return calls, script
+
+
+def test_the_wait_is_long_for_an_answer_but_short_to_connect(slow_send):
+    """60 s was too short: a single send waits behind a 100-message batch
+    (about 2.5 minutes). A platform that is really down still fails fast."""
+    calls, _ = slow_send
+    wa.send("9876543210", "Hi {name}, ok.", {"name": "R"}, source_name="t")
+    timeout = calls[0][1]
+    assert timeout.read == 300 and timeout.connect == 15
+
+
+def test_a_late_answer_that_did_send_counts_as_sent(slow_send):
+    """Otherwise it would be sent again later and the CSP gets it twice."""
+    calls, script = slow_send
+    script["status"] = {"counts": {"delivered": 1}, "rows": [
+        {"phone": "919876543210", "sent_status": "sent",
+         "delivery_status": "delivered"}]}
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.SENT and out["job_id"] == "job-9"
+    assert [c[0] for c in calls] == ["upload_contacts", "smart_send_template",
+                                     "get_delivery_status"]
+
+
+def test_a_late_answer_that_sent_nothing_is_a_plain_failure(slow_send):
+    _, _ = slow_send
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.FAILED
+    assert "did not answer in 300 s" in out["reason"]
+    assert "sent again automatically" in out["reason"]
+
+
+def test_a_timeout_still_counts_as_the_platforms_fault(slow_send):
+    """resend_failed must keep trying the same number, not hand it over."""
+    from app.services import resend_failed
+    _, script = slow_send
+    script["status"] = None      # the check cannot reach it either
+    out = wa.send("9876543210", "Hi {name}, ok.", {"name": "R"},
+                  source_name="t")
+    assert out["status"] == wa.FAILED
+    assert resend_failed.PLATFORM_SIDE.search(out["reason"])
+
+
+def test_a_platform_that_cannot_be_reached_is_not_a_timeout(monkeypatch):
+    import httpx
+
+    def down(*a, **k):
+        raise httpx.ConnectTimeout("connect timed out")
+    monkeypatch.setattr(httpx, "post", down)
+    with pytest.raises(wa.WhatsAppPlatformError) as e:
+        wa.call_tool("upload_contacts", {})
+    assert e.value.timed_out is False
+
+
 # ---- the platform cannot find a template it made (No. 189) -------------------
 
 _ALREADY = ("Error executing tool smart_send_template: There is already "

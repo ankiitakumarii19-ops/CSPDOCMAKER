@@ -343,3 +343,22 @@ def test_without_the_ao_block_nothing_is_filled(info):
                                 "branch_name": "Jamui", "district": "Jamui",
                                 "state": "Bihar"})
     assert not {"ao", "rbo_name"} & set(filled)
+
+
+# ---- No. 270: ASM and DC are the same person ------------------------------
+
+def test_asm_is_dc_copies_the_whole_dc_person():
+    from app.services.info_directory import asm_is_dc
+    row = {"dc": "Dc", "dc_email": "dc@x.in", "dc_contact": "",
+           "asm_name": "Other", "asm_email": "other@x.in",
+           "asm_contact": "9800000002"}
+    assert asm_is_dc(row) == {"asm_name": "Dc", "asm_email": "dc@x.in",
+                              "asm_contact": ""}
+    assert row["asm_contact"] == "", "never one person's name, another's phone"
+    assert asm_is_dc(row) == {}, "nothing left to change"
+
+
+def test_asm_is_dc_needs_a_dc():
+    from app.services.info_directory import asm_is_dc
+    row = {"dc": " ", "asm_name": "Asm"}
+    assert asm_is_dc(row) == {} and row["asm_name"] == "Asm"

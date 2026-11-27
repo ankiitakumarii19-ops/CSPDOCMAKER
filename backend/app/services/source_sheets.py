@@ -22,6 +22,15 @@ Decided with the user the same day:
   * a KOData cell someone already filled is never overwritten (only new
     rows are added).
 
+Changed 27 Nov 2026 (No. 270, the owner): a CSP's details changed in the
+Calling sheet AFTER it was copied in now go into CSPDATA too - the Calling
+sheet wins, except for a field the CSP gave on their own form. Only a value
+that changed in the Calling sheet since the app last read it is written
+(calling_seen), so a correction made in CSPDATA itself is not undone every
+run; the first time, only empty CSPDATA cells are filled. Only CSPs this job
+copied in - never one that was in CSPDATA before (21 Oct 2026). The sheet
+sync then reads the new values and the documents job sends what was waiting.
+
 Runs every SOURCE_SHEETS_INTERVAL_MINUTES. Reads both sheets (Viewer access
 is enough), writes only to CSPDATA. Off when the sheet ids are not set.
 """
@@ -268,6 +277,8 @@ class Summary:
     became_new: List[str] = field(default_factory=list)
     held: int = 0
     addresses_filled: int = 0
+    calling_updated: Dict[str, List[str]] = field(default_factory=dict)
+    gone: List[str] = field(default_factory=list)
     skipped: List[str] = field(default_factory=list)
 
     def text(self) -> str:
@@ -277,7 +288,10 @@ class Summary:
                 f"{len(self.imported_new)} new, {self.imported_old} old; "
                 f"{len(self.became_new)} old -> new on going live; "
                 f"{self.held} on hold; {self.addresses_filled} address(es) "
-                f"from the Address tab; skipped {len(self.skipped)}")
+                f"from the Address tab; {len(self.calling_updated)} CSP(s) "
+                f"updated from Calling-sheet changes; {len(self.gone)} "
+                f"code(s) gone from both sheets; skipped "
+                f"{len(self.skipped)}")
 
 
 def run(session) -> Summary:
@@ -296,12 +310,14 @@ def run(session) -> Summary:
 
     # What CSPDATA already holds (never overwritten).
     in_data = set()
+    data_rows: Dict[str, dict] = {}
     for tab in (s.google_sheets_csp_sheet_name,
                 s.google_sheets_subko_sheet_name):
         try:
             for r in read_rows(s.google_sheets_csp_sheet_id, tab, 1):
                 if code_of(r.get("CSP Code")):
                     in_data.add(code_of(r.get("CSP Code")))
+                    data_rows.setdefault(code_of(r.get("CSP Code")), r)
         except sheets.SheetAdminError as e:
             if tab == s.google_sheets_csp_sheet_name:
                 raise
@@ -367,6 +383,24 @@ def run(session) -> Summary:
                                      st.lead_remarks or "")
         if st.hold_reason:
             summary.held += 1
+
+    # No. 271: a code taken out of both sheets is no longer Active or Go
+    # Live Done, so the dashboard stops counting it. Its hold is left as it
+    # was (what may be sent is not decided by a row that vanished). Not done
+    # when a sheet came back empty - that is a read problem, not 500 CSPs
+    # leaving at once.
+    gone = [c for c in states if c not in by_calling and c not in by_lead]
+    if gone and (not by_calling or not by_lead):
+        logger.error("source_sheets: the %s sheet came back with no CSP codes"
+                     " - %d code(s) not marked as gone this run",
+                     "Calling" if not by_calling else "Lead raw data",
+                     len(gone))
+    elif gone:
+        for c in gone:
+            st = states[c]
+            if st.in_calling or st.in_lead or st.lead_live:
+                st.in_calling = st.in_lead = st.lead_live = False
+                summary.gone.append(c)
 
     # Not live in the Lead sheet when this started, "Go Live Done" since:
     # NEW, even though the Calling sheet has it (23 Oct 2026, No. 145) —
@@ -438,11 +472,18 @@ def run(session) -> Summary:
     for c, origin in added:
         states[c].imported_as = origin
         states[c].imported_at = now
+        if c in by_calling:
+            states[c].calling_seen = calling_cells(c, by_calling, by_lead)
         if origin == "new":
             summary.imported_new.append(c)
         else:
             summary.imported_old += 1
     _record_import_fills(session, added, planned, from_address_tab, states)
+
+    # No. 270: later changes in the Calling sheet, into CSPDATA.
+    if getattr(s, "calling_sheet_updates", True):
+        take_calling_changes(session, states, by_calling, by_lead, data_rows,
+                             {c for c, _ in added}, summary)
 
     # Old CSPs copied in earlier: their EMPTY Address cells from the tab.
     # CSPs that were in CSPDATA before this job never are (21 Oct 2026).
@@ -481,6 +522,113 @@ def run(session) -> Summary:
         logger.warning("source_sheets: skipped — %s", line)
     logger.info("source_sheets: %s", summary.text())
     return summary
+
+
+def calling_cells(c: str, by_calling: dict, by_lead: dict) -> Dict[str, str]:
+    """This CSP's Calling-sheet values as record fields ({field: value}),
+    as they would be copied in (the RBO number made a name the same way).
+    By field, not by heading, so a CSPDATA heading spelt differently
+    ("DC Email ID") still lines up."""
+    from app.services import csp_mapping
+    cells = mapped(by_calling[c], FROM_CALLING)
+    rbo_name(cells, by_lead.get(c))
+    fields = csp_mapping.map_sheet_row(cells)
+    fields.pop(csp_mapping.IDENTITY_FIELD, None)
+    return {f: v for f, v in fields.items() if v}
+
+
+def calling_changes(now: Dict[str, str], seen: Optional[Dict[str, str]],
+                    in_data: Dict[str, str], own: set) -> Dict[str, str]:
+    """{field: value} to write into CSPDATA for one CSP (No. 270).
+
+    now     - its Calling-sheet values this run (calling_cells);
+    seen    - the same, as the app read them last time (None: never noted);
+    in_data - its CSPDATA row now, as record fields;
+    own     - fields the CSP gave on their own form.
+
+    A blank in the Calling sheet never clears anything. A value is written
+    when it changed in the Calling sheet since last time and differs from
+    CSPDATA; the first time (nothing noted yet) only into an empty cell, as
+    there is no telling whether the Calling sheet or CSPDATA is the newer.
+    """
+    out = {}
+    for field, value in now.items():
+        value = (value or "").strip()
+        if not value or field in own:
+            continue                      # the CSP's own answer stays
+        current = str((in_data or {}).get(field, "") or "").strip()
+        if value == current:
+            continue
+        if seen is None:
+            if current:
+                continue
+        elif value == str(seen.get(field, "") or "").strip():
+            continue                      # not changed in the Calling sheet
+        out[field] = value
+    return out
+
+
+def own_answers(session, codes) -> Dict[str, set]:
+    """{CSP code: fields the CSP gave on their own form} (answered data
+    requests: the verification and the details-missing form)."""
+    from sqlalchemy import func
+
+    from app.models.data_request import ANSWERED, DataRequest
+    out: Dict[str, set] = {}
+    codes = {code_of(c) for c in codes}
+    if not codes:
+        return out
+    for csp_id, values in session.execute(
+            select(DataRequest.csp_id, DataRequest.answered_values).where(
+                DataRequest.status == ANSWERED,
+                func.upper(DataRequest.csp_id).in_(codes))).all():
+        out.setdefault(code_of(csp_id), set()).update(
+            k for k, v in (values or {}).items() if str(v or "").strip())
+    return out
+
+
+def take_calling_changes(session, states, by_calling, by_lead, data_rows,
+                         just_added: set, summary: Summary) -> None:
+    """Write what changed in the Calling sheet into CSPDATA (No. 270), for
+    the CSPs this job copied in. One CSP's failure is logged and tried again
+    next run (its calling_seen is not moved on); it never stops the others.
+    """
+    from app.services import csp_mapping
+    from app.services import sheet_writeback_service as wb
+
+    codes = [c for c, st in states.items()
+             if st.imported_as and c in by_calling and c in data_rows
+             and c not in just_added]
+    if not codes:
+        return
+    try:
+        own = own_answers(session, codes)
+    except Exception as e:
+        logger.error("source_sheets: could not read the CSPs' own form "
+                     "answers, so no Calling-sheet change is taken this run: "
+                     "%s: %s", type(e).__name__, e, exc_info=True)
+        return
+    for c in codes:
+        st = states[c]
+        now_cells = calling_cells(c, by_calling, by_lead)
+        changes = calling_changes(now_cells, st.calling_seen,
+                                  csp_mapping.map_sheet_row(data_rows[c]),
+                                  own.get(c, set()))
+        if changes:
+            try:
+                written, no_column = wb.write_values(c, changes)
+            except Exception as e:
+                logger.error("source_sheets: %s - Calling-sheet change(s) %s "
+                             "could not be written to CSPDATA (%s: %s); tried "
+                             "again next run", c, sorted(changes),
+                             type(e).__name__, e)
+                continue
+            summary.calling_updated[c] = sorted(changes)
+            logger.info("source_sheets: %s - Calling-sheet change(s) written "
+                        "to CSPDATA: %s%s", c, sorted(written),
+                        f" (no CSPDATA column for {no_column})"
+                        if no_column else "")
+        st.calling_seen = now_cells
 
 
 def _record_import_fills(session, added, planned, from_address_tab,

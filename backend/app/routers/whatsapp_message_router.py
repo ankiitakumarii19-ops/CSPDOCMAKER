@@ -41,18 +41,30 @@ async def report(
     include_tests: bool = Query(True),
     q: Optional[str] = Query(None, max_length=100),
     because: Optional[str] = Query(None, max_length=40),
+    date_from: Optional[str] = Query(
+        None, description="India day, YYYY-MM-DD, inclusive (No. 272)"),
+    date_to: Optional[str] = Query(
+        None, description="India day, YYYY-MM-DD, inclusive (No. 272)"),
     session: AsyncSession = Depends(get_session),
     user=Depends(require_role("admin", "super_admin")),
 ):
-    """The counts for each message, and the messages themselves."""
+    """The counts for each message, and the messages themselves.
+
+    date_from / date_to (No. 272): only messages sent on those India days -
+    the counts too. When either is given it takes the place of `days`."""
+    from app.services import india_days
+
     if kind and kind not in KINDS:
         raise HTTPException(400, f"Unknown message kind {kind!r}.")
     if stage and stage not in message_log.STAGES:
         raise HTTPException(400, f"Unknown status {stage!r}.")
+    sent_on = india_days.http_bounds(date_from, date_to)
 
     now = datetime.now(timezone.utc)
     query = select(WhatsAppMessage)
-    if days:
+    if india_days.asked(sent_on):
+        query = india_days.where(query, WhatsAppMessage.sent_at, sent_on)
+    elif days:
         query = query.where(WhatsAppMessage.sent_at >= now - timedelta(days=days))
     if not include_tests:
         query = query.where(WhatsAppMessage.is_test.is_(False))

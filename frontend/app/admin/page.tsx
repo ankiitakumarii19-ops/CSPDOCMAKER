@@ -247,6 +247,23 @@ export default function AdminDashboard() {
   const queryKey = JSON.stringify(query);
 
   const seesDashboard = can("dashboard");
+  // No. 271: the counts follow the Calling and Lead raw data sheets, which
+  // the server re-reads every few minutes - so an open dashboard asks again
+  // every 2 minutes, and as soon as its tab is looked at again.
+  const [refreshTick, setRefreshTick] = useState(0);
+  useEffect(() => {
+    if (!seesDashboard) return;
+    const again = () => setRefreshTick((n) => n + 1);
+    const timer = window.setInterval(again, 2 * 60 * 1000);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") again();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [seesDashboard]);
   useEffect(() => {
     if (!seesDashboard) return;
     let cancelled = false;
@@ -263,7 +280,7 @@ export default function AdminDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [queryKey, seesDashboard]);
+  }, [queryKey, seesDashboard, refreshTick]);
 
   useEffect(() => {
     if (!seesDashboard) return;
@@ -809,7 +826,7 @@ export default function AdminDashboard() {
                 <div className="col-span-2">
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-medium text-gray-500">
-                      Documents made
+                      Day
                     </label>
                     {dateMode && (
                       <button
@@ -895,8 +912,11 @@ export default function AdminDashboard() {
               {anythingApplied && (
                 <div className="mt-3 flex flex-wrap gap-2">
                   {dateLabel && (
-                    <span className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                      Documents made: {dateLabel}
+                    <span
+                      className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
+                      title="New = went live that day · Existing = confirmed their details that day · Data Missing = raised that day · Documents = made that day"
+                    >
+                      Day: {dateLabel} — New went live, Existing confirmed details, Data Missing raised, documents made
                     </span>
                   )}
                   {activeFilters.map(([key, value]) => (

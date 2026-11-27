@@ -16,6 +16,7 @@ looked at again next time.
 import logging
 
 from app.celery_app import celery_app
+from app.workers.new_csp_worker import one_documents_run
 from app.workers.workspace_runner import for_each_workspace
 from app import telemetry
 
@@ -29,6 +30,7 @@ logger = logging.getLogger(__name__)
     default_retry_delay=120,
 )
 @for_each_workspace
+@one_documents_run          # No. 269: never alongside another documents run
 def complete_pending_requests(self):
     """Finish every pending RM request whose CSP now has every detail."""
     from sqlalchemy import create_engine

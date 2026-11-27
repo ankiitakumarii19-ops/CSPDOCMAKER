@@ -84,6 +84,29 @@ AO_COLUMNS: Dict[str, str] = {
 }
 
 
+ASM_FROM_DC = {"asm_name": "dc", "asm_email": "dc_email",
+               "asm_contact": "dc_contact"}
+
+
+def asm_is_dc(mapped: Dict[str, str]) -> Dict[str, str]:
+    """No. 270 (27 Nov 2026, the owner: "ASM and DC are the same"): the ASM
+    name, email and number are the CSP's DC's, whatever the ASM columns or
+    INFO's ASM block say. Changes `mapped` in place and returns what it set.
+
+    Only when the row names a DC: with no DC there is nobody to copy, so the
+    ASM is left as it is (a blank DC email still blanks the ASM email — the
+    ASM is the DC person, never a mix of two people)."""
+    if not (mapped.get("dc") or "").strip():
+        return {}
+    changed = {}
+    for asm, dc in ASM_FROM_DC.items():
+        value = (mapped.get(dc) or "").strip()
+        if (mapped.get(asm) or "").strip() != value:
+            mapped[asm] = value
+            changed[asm] = value
+    return changed
+
+
 def normalize(value: str) -> str:
     """Case- and space-insensitive form used for every comparison."""
     return " ".join((value or "").split()).strip().lower()

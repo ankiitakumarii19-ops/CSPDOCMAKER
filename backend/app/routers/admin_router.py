@@ -446,6 +446,90 @@ FILTER_FIELDS = {
 }
 
 
+def _month_before(moment: datetime) -> datetime:
+    """The same time one calendar month earlier (31 Mar -> 28/29 Feb)."""
+    from calendar import monthrange
+    year, month = (moment.year, moment.month - 1) if moment.month > 1 \
+        else (moment.year - 1, 12)
+    return moment.replace(year=year, month=month,
+                          day=min(moment.day, monthrange(year, month)[1]))
+
+
+async def _counted_kind(session, now: datetime | None = None):
+    """What makes a CSP New or Existing on the dashboard (No. 271, 272).
+
+    The owner, 27 Nov 2026: count from the two sheets, each code once —
+      New      = "Go Live Done" in the Lead raw data sheet; one that is in
+                 the Calling sheet too stays New for one month after it went
+                 live, then it is old (No. 272). Live before the app started
+                 reading the sheets (21 Oct 2026): the day is not known, so
+                 old already;
+      Existing = "Active" in the Calling sheet and not New.
+    Every other CSP (Inactive, no status, a Lead not live yet, or only in
+    CSPDATA) is not counted. Returns a SQL expression giving 'new' /
+    'baseline' / NULL per CSPRecord, or None for a workspace without those
+    sheets — it keeps counting by the record's origin, as before."""
+    from sqlalchemy import case, or_
+
+    from app.models.source_sheet import SourceSheetState as St
+    if not (await session.execute(
+            select(func.count()).select_from(St))).scalar():
+        return None
+    month_ago = _month_before(now or datetime.now(timezone.utc))
+    code = func.upper(func.trim(CSPRecord.csp_id))
+    new = select(func.upper(St.csp_code)).where(
+        St.lead_live.is_(True),
+        or_(St.in_calling.is_(False), St.went_live_at >= month_ago))
+    active = select(func.upper(St.csp_code)).where(
+        St.in_calling.is_(True),
+        func.lower(func.trim(func.coalesce(St.calling_status, ""))) == "active")
+    return case((code.in_(new), "new"), (code.in_(active), "baseline"),
+                else_=None)
+
+
+def _in_days(column, days):
+    """column falls on the days asked (India time; end exclusive)."""
+    start, end = days
+    conditions = []
+    if start:
+        conditions.append(column >= start)
+    if end:
+        conditions.append(column < end)
+    return and_(*conditions) if conditions else None
+
+
+def _card_on_days(kind, sheets: bool, days):
+    """No. 272: with a day chosen, every card counts what happened that day —
+    New: went live that day (Lead raw data; without those sheets, added to
+    the app that day); Existing: answered their verification / details form
+    that day. Returns a condition on CSPRecord, or None for all days."""
+    from sqlalchemy import or_
+
+    from app.models.data_request import ANSWERED, DataRequest
+    from app.models.source_sheet import SourceSheetState as St
+    if days == (None, None):
+        return None
+    code = func.upper(func.trim(CSPRecord.csp_id))
+    if sheets:
+        went_live = code.in_(select(func.upper(St.csp_code)).where(
+            _in_days(St.went_live_at, days)))
+    else:
+        went_live = _in_days(CSPRecord.created_at, days)
+    verified = code.in_(select(func.upper(DataRequest.csp_id)).where(
+        DataRequest.status == ANSWERED,
+        _in_days(DataRequest.answered_at, days)))
+    return or_(and_(kind == "new", went_live),
+               and_(kind == "baseline", verified))
+
+
+def _alert_on_days(days):
+    """Data Missing with a day chosen: an alert raised that day, still open."""
+    from app.models.rm_alert import OPEN, RMAlert
+    query = select(RMAlert.csp_id).where(RMAlert.status == OPEN)
+    when = _in_days(RMAlert.created_at, days)
+    return query.where(when) if when is not None else query
+
+
 def _apply_filters(query, filters: dict):
     for name, value in filters.items():
         column = FILTER_FIELDS.get(name)
@@ -482,15 +566,28 @@ async def csp_metrics(
                "lho": lho, "district": district, "state": state}
     active = {k: v for k, v in filters.items() if v}
 
-    # Which CSPs are in scope, as a reusable subquery.
-    scoped_query = _apply_filters(
-        select(CSPRecord.csp_id, CSPRecord.origin), active)
+    # Which CSPs are in scope, as a reusable subquery. "origin" here is the
+    # dashboard's New / Existing (No. 271: from the sheets where they exist).
+    kind = await _counted_kind(session)
+    sheets = kind is not None
+    if kind is None:
+        kind = CSPRecord.origin
+        base_query = select(CSPRecord.csp_id, CSPRecord.origin)
+    else:
+        base_query = select(CSPRecord.csp_id, kind.label("origin")).where(
+            kind.isnot(None))
+    base_query = _apply_filters(base_query, active)
     days = _document_days(date_from, date_to)
-    scoped_query = _with_documents_made(scoped_query, days)
-    scoped = scoped_query.subquery()
+    base = base_query.subquery()
+    # The documents table: CSPs with a document made on the days asked.
+    scoped = _with_documents_made(base_query, days).subquery()
+    # The cards (No. 272): with a day chosen, what happened on that day.
+    on_days = _card_on_days(kind, sheets, days)
+    cards = (base_query.where(on_days) if on_days is not None
+             else base_query).subquery()
 
     totals = (await session.execute(
-        select(scoped.c.origin, func.count()).group_by(scoped.c.origin)
+        select(cards.c.origin, func.count()).group_by(cards.c.origin)
     )).all()
     by_origin = {origin or "unknown": count for origin, count in totals}
     total = sum(by_origin.values())
@@ -544,17 +641,15 @@ async def csp_metrics(
         })
 
     waiting = (await session.execute(
-        select(func.count(func.distinct(RMAlert.csp_id)))
-        .select_from(scoped)
-        .join(RMAlert, RMAlert.csp_id == scoped.c.csp_id)
-        .where(RMAlert.status == OPEN)
+        select(func.count(func.distinct(base.c.csp_id)))
+        .where(base.c.csp_id.in_(_alert_on_days(days)))
     )).scalar() or 0
 
     # "Details fetched" = every required field of every document present,
     # photo included. Evaluated on the records themselves so the dashboard
     # and the drill-down behind it can never disagree.
     in_scope = (await session.execute(
-        select(CSPRecord).where(CSPRecord.csp_id.in_(select(scoped.c.csp_id)))
+        select(CSPRecord).where(CSPRecord.csp_id.in_(select(cards.c.csp_id)))
     )).scalars().all()
     required = _required_fields()
     complete = sum(1 for c in in_scope if _details_complete(c, required))
@@ -652,17 +747,31 @@ async def _drill_rows(session, params: dict):
 
     active = {k: v for k, v in params["filters"].items() if v}
     query = _apply_filters(select(CSPRecord), active)
-    # The days the documents were made (No. 171), as the counts use.
     days = _document_days(params.get("date_from"), params.get("date_to"))
-    query = _with_documents_made(query, days)
 
-    if view == "new":
-        query = query.where(CSPRecord.origin == "new")
-    elif view == "existing":
-        query = query.where(CSPRecord.origin == "baseline")
+    # The same CSPs the dashboard counted (No. 271), so a card and the list
+    # behind it never disagree.
+    kind = await _counted_kind(session)
+    sheets = kind is not None
+    if kind is None:
+        kind = CSPRecord.origin
+    else:
+        query = query.where(kind.isnot(None))
+    if params.get("document_type"):
+        # A document's numbers: the days the documents were made (No. 171).
+        query = _with_documents_made(query, days)
     elif view == "awaiting_rm":
-        query = query.where(CSPRecord.csp_id.in_(
-            select(RMAlert.csp_id).where(RMAlert.status == OPEN)))
+        # Data Missing: an alert raised on the days asked (No. 272).
+        query = query.where(CSPRecord.csp_id.in_(_alert_on_days(days)))
+    else:
+        # The cards (No. 272): what happened on the days asked.
+        on_days = _card_on_days(kind, sheets, days)
+        if on_days is not None:
+            query = query.where(on_days)
+    if view == "new":
+        query = query.where(kind == "new")
+    elif view == "existing":
+        query = query.where(kind == "baseline")
 
     document_type = params.get("document_type")
     delivery = params.get("delivery")

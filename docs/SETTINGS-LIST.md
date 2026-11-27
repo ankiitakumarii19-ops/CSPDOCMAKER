@@ -24,6 +24,8 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `ALERT_WHATSAPP_FAILURES` | 5 | **Workspace setting now** | Setup → Settings → Alerts: “Alert after WhatsApps fail” |
 | `ASKED_ONCE_FIELDS` | 'ao,rbo_name' | **Workspace setting now** | Setup → Settings → Records and words: “Office fields asked once” |
 | `AUTO_DOCUMENTS_NEW` | True | **Workspace setting now** | Setup → Settings → Records and words: “Make documents for new records by itself” |
+| `ASM_FROM_DC` | True (No. 270) | **Workspace setting now** | Setup → Settings → Records and words: “ASM is the DC” |
+| `CALLING_SHEET_UPDATES` | True (No. 270) | **Workspace setting now** | Setup → Settings → Records and words: “Take later changes from the Calling sheet” |
 | `BRAND_COLOR` | '#00B259' | **Workspace setting now** | Setup → Settings → Look and weekly email: “Main colour” |
 | `BRAND_COLOR_2` | '' | **Workspace setting now** | Setup → Display → Branding: “Second colour” (No. 240) |
 | `ALLOW_PERSONAL_LOOK` | True | **Workspace setting now** | Setup → Display → Branding: “People pick their own colours” (No. 240) |
@@ -198,7 +200,8 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `TEST_COPY` | False | Server only | How this server runs (addresses, keys, folders); never one workspace's choice. |
 | `WHATSAPP_API_KEY` | (secret — not shown) | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
 | `WHATSAPP_API_URL` | 'https://indev.eko.in/whatsapp/mcp' | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
-| `WHATSAPP_PLATFORM_TIMEOUT_SECONDS` | 60 | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
+| `WHATSAPP_PLATFORM_TIMEOUT_SECONDS` | 300 (was 60; No. 268) | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
+| `WHATSAPP_PLATFORM_CONNECT_TIMEOUT_SECONDS` | 15 (No. 268) | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
 | `ZOHO_DATA_CENTRE` | 'in' | Server only | How this server connects: one Google robot account (each workspace shares its sheets with it), one mail method, India's Zoho data centre. |
 
 Never a setting (fixed for safety, plan tab “Fixed for safety”): one workspace never sees

@@ -44,7 +44,26 @@ _TOKEN = re.compile(r"\{(name|fields|link|documents|email|message)\}")
 
 
 class WhatsAppPlatformError(RuntimeError):
-    """The platform could not be reached or answered with an error."""
+    """The platform could not be reached or answered with an error.
+    timed_out: it was reached but did not answer in time (No. 268) — it may
+    still have done what it was asked."""
+
+    def __init__(self, message: str, timed_out: bool = False):
+        super().__init__(message)
+        self.timed_out = timed_out
+
+
+def _timeout(s):
+    """No. 268 (27 Nov 2026): the platform works through one request at a
+    time, so a single message waits behind another team's bulk batch (100
+    messages take about 2.5 minutes). 60 seconds was too short — 11:31 IST
+    sends failed with ReadTimeout while batches were going. Now: up to
+    WHATSAPP_PLATFORM_TIMEOUT_SECONDS (300) for the answer, but only
+    WHATSAPP_PLATFORM_CONNECT_TIMEOUT_SECONDS (15) to reach it, so a platform
+    that is really down still fails fast."""
+    import httpx
+    return httpx.Timeout(float(s.whatsapp_platform_timeout_seconds),
+                         connect=float(s.whatsapp_platform_connect_timeout_seconds))
 
 
 def _settings():
@@ -68,13 +87,15 @@ def _rpc(method: str, params: dict, request_id: int = 1) -> dict:
                       "params": params},
                 headers={"Content-Type": "application/json",
                          "Accept": "application/json, text/event-stream"},
-                timeout=s.whatsapp_platform_timeout_seconds,
+                timeout=_timeout(s),
             )
             telemetry.note_http(span, "whatsapp_platform", op,
                                 response.status_code, ok_statuses=(200,))
     except Exception as e:
         raise WhatsAppPlatformError(
-            f"WhatsApp platform unreachable: {type(e).__name__}: {e}") from e
+            f"WhatsApp platform unreachable: {type(e).__name__}: {e}",
+            timed_out=isinstance(e, (httpx.ReadTimeout, httpx.WriteTimeout,
+                                     httpx.PoolTimeout))) from e
     if response.status_code != 200:
         raise WhatsAppPlatformError(
             f"WhatsApp platform answered HTTP {response.status_code}: "
@@ -267,12 +288,14 @@ def send(to_mobile: str, body: str, values: Dict[str, str], *,
         try:
             answer = call_tool("smart_send_template", arguments)
         except WhatsAppPlatformError as e:
+            if e.timed_out:
+                return _after_timeout(job_id, e)
             if not _template_lookup_missed(e):
                 raise
             return _send_by_name(job_id, arguments, template, e)
     except WhatsAppPlatformError as e:
         logger.warning("whatsapp_platform.send: %s", e)
-        return _result(FAILED, str(e))
+        return _result(FAILED, _plain_timeout(e))
 
     action = str(answer.get("action", "")).lower()
     name = answer.get("template_name")
@@ -372,6 +395,8 @@ def _send_by_name(job_id: str, arguments: dict, template_body: str,
     try:
         answer = call_tool("send_template_message", by_name)
     except WhatsAppPlatformError as e:
+        if e.timed_out:
+            return _after_timeout(job_id, e, name)
         logger.warning("whatsapp_platform.send: sending %s by name failed "
                        "too: %s", name, e)
         return _result(FAILED, f"{first_error} — then sending the existing "
@@ -380,6 +405,41 @@ def _send_by_name(job_id: str, arguments: dict, template_body: str,
         return _result(SENT, "", job_id, name)
     return _result(FAILED, f"sending the existing template {name} by name "
                    f"sent 0: {str(answer)[:300]}", job_id, name)
+
+
+def _plain_timeout(error: Exception) -> str:
+    """The reason shown on the WhatsApp messages screen; a timeout says
+    plainly that the platform was busy (No. 268). The original text stays
+    in it, so resend_failed still sees it as the platform's fault."""
+    if getattr(error, "timed_out", False):
+        return (f"{error} — the platform did not answer in "
+                f"{_settings().whatsapp_platform_timeout_seconds} s (busy, "
+                "e.g. another team's bulk sending); it is sent again "
+                "automatically")
+    return str(error)
+
+
+def _after_timeout(job_id: str, error: "WhatsAppPlatformError",
+                   template_name: Optional[str] = None) -> dict:
+    """The send step was asked but its answer did not come in time (No. 268).
+    The platform may still have sent it, so ask it before calling it failed
+    — otherwise it would be sent again later and the CSP would get it twice.
+    Never raises."""
+    try:
+        status = delivery_status(job_id)
+    except Exception as e:
+        logger.warning("whatsapp_platform.send: %s; could not check whether "
+                       "job %s went (%s: %s) — counted as not sent",
+                       error, job_id, type(e).__name__, e)
+        return _result(FAILED, _plain_timeout(error), job_id, template_name)
+    rows = status.get("rows") or []
+    if any(str(r.get("sent_status", "")).lower() == "sent" for r in rows):
+        logger.info("whatsapp_platform.send: the platform answered late "
+                    "(%s) but job %s was sent", error, job_id)
+        return _result(SENT, "", job_id, template_name)
+    logger.warning("whatsapp_platform.send: %s; job %s shows nothing sent",
+                   error, job_id)
+    return _result(FAILED, _plain_timeout(error), job_id, template_name)
 
 
 def _result(status, reason="", job_id=None, template_name=None) -> dict:

@@ -217,6 +217,43 @@ def test_a_processed_csp_is_never_sent_twice(db, monkeypatch, sent, tmp_path):
     assert len(sent) == 1, "the CSP was emailed more than once"
 
 
+def test_only_one_documents_run_at_a_time(db, monkeypatch, sent, tmp_path):
+    """No. 269: two overlapping runs both picked the same CSPs and each got
+    the documents email twice in the same minute. While one run holds the
+    lock, another does nothing; the next run sends it once."""
+    from app.services import csp_photo_service, document_service
+    from app.workers import pending_request_worker
+    monkeypatch.setattr(document_service.settings, "document_output_dir",
+                        str(tmp_path))
+    photo = str(tmp_path / "face.png")
+    _write_face(photo)
+    monkeypatch.setattr(
+        csp_photo_service, "fetch_photo",
+        lambda csp: csp_photo_service.PhotoResult(True, path=photo, source="k.pdf"))
+    monkeypatch.setattr("app.services.pdf_service.convert_all", _fake_convert)
+    make_csp(db, complete=True)
+
+    key = {"k": new_csp_worker.DOCUMENTS_LOCK_KEY}
+    holder = db.get_bind().connect()
+    try:
+        assert holder.execute(text("SELECT pg_try_advisory_lock(:k)"),
+                              key).scalar()
+        assert run() == {"skipped": new_csp_worker.ANOTHER_RUN}
+        assert _only_workspace(pending_request_worker.complete_pending_requests
+                               .apply().get()) == {
+            "skipped": new_csp_worker.ANOTHER_RUN}
+        assert sent == []
+    finally:
+        holder.execute(text("SELECT pg_advisory_unlock(:k)"), key)
+        holder.close()
+
+    assert run()["documents_sent"] == 1
+    assert len(sent) == 1
+    # The lock is given back after a run, so the next one is not blocked.
+    assert run()["status"] == "nothing_to_do"
+    assert len(sent) == 1
+
+
 def test_an_already_processed_csp_is_skipped(db, no_crm, sent):
     make_csp(db, complete=True, processed=datetime.now(timezone.utc))
     assert run()["status"] == "nothing_to_do"

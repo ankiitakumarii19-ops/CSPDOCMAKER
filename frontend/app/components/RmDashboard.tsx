@@ -15,10 +15,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "../lib/api";
 import type { ApiError, DocumentsLeft, DocumentsLeftParams, DocumentsLeftRow } from "../lib/api";
+import DayFilter, { NO_DAY, cleanDayChoice, dayLabel, dayRange } from "./DayFilter";
+import type { DayChoice } from "./DayFilter";
 
-type Filters = Required<Pick<DocumentsLeftParams, "rm" | "dc" | "state" | "district" | "contacted" | "hold" | "q" | "sort">>;
+type TextFilters = Required<Pick<DocumentsLeftParams, "rm" | "dc" | "state" | "district" | "contacted" | "hold" | "q" | "sort">>;
+// No. 272: `day` is the day last contacted (India time). The choice itself
+// is remembered ("Today" stays today tomorrow), and turned into date_from /
+// date_to only when the list is asked for.
+type Filters = TextFilters & { day: DayChoice };
 
-const EMPTY: Filters = { rm: "", dc: "", state: "", district: "", contacted: "", hold: "", q: "", sort: "contacts" };
+const EMPTY: Filters = {
+  rm: "", dc: "", state: "", district: "", contacted: "", hold: "", q: "", sort: "contacts", day: NO_DAY,
+};
 const GROUPS = [
   ["rm", "RM"],
   ["dc", "DC"],
@@ -49,10 +57,17 @@ function contactTone(n: number): string {
   return "bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300 dark:border-green-800";
 }
 
+/** What the API is sent: the text filters and the day as date_from / date_to. */
+function asParams({ day, ...rest }: Filters): DocumentsLeftParams {
+  return { ...rest, ...dayRange(day) };
+}
+
 function loadFilters(): Filters {
   try {
     const raw = window.localStorage.getItem(STORE);
-    return raw ? { ...EMPTY, ...JSON.parse(raw) } : EMPTY;
+    if (!raw) return EMPTY;
+    const saved = JSON.parse(raw);
+    return { ...EMPTY, ...saved, day: cleanDayChoice(saved?.day) };
   } catch {
     return EMPTY;
   }
@@ -98,7 +113,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
   useEffect(() => {
     let current = true;
     api
-      .documentsLeft({ ...filters, group_by: groupBy, page, page_size: PAGE_SIZE })
+      .documentsLeft({ ...asParams(filters), group_by: groupBy, page, page_size: PAGE_SIZE })
       .then((d) => {
         if (!current) return;
         setData(d);
@@ -113,7 +128,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, groupBy, page, reload]);
 
-  const set = useCallback((key: keyof Filters, value: string) => {
+  const set = useCallback((key: keyof TextFilters, value: string) => {
     setFilters((f) => {
       const next = { ...f, [key]: value };
       // A new state: its districts only.
@@ -123,8 +138,16 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
     setPage(1);
   }, []);
 
+  const setDay = useCallback((day: DayChoice) => {
+    setFilters((f) => ({ ...f, day }));
+    setPage(1);
+  }, []);
+  const dayOn = !!(dayRange(filters.day).date_from || dayRange(filters.day).date_to);
+
   const active = useMemo(
-    () => (["rm", "dc", "state", "district", "contacted", "hold", "q"] as const).filter((k) => filters[k]).length,
+    () =>
+      (["rm", "dc", "state", "district", "contacted", "hold", "q"] as const).filter((k) => filters[k]).length +
+      (filters.day.mode ? 1 : 0),
     [filters]
   );
 
@@ -157,7 +180,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
   async function download() {
     setDownloading(true);
     try {
-      const blob = await api.documentsLeftCsv(filters);
+      const blob = await api.documentsLeftCsv(asParams(filters));
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -265,7 +288,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
             </div>
           ))}
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
           <div className="col-span-2 min-w-0">
             <label className={label} htmlFor="f-q">Search</label>
             <div className="relative">
@@ -296,6 +319,15 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
               <option value="only">Only CSPs on hold</option>
             </select>
           </div>
+          <DayFilter
+            id="f-day"
+            label="Last contacted"
+            value={filters.day}
+            onChange={setDay}
+            boxClass={field}
+            labelClass={label}
+            className="col-span-2 md:col-span-1"
+          />
         </div>
         <div className="flex flex-wrap items-center justify-between gap-2 mt-3 text-xs text-gray-500 dark:text-gray-400">
           <span>
@@ -303,6 +335,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
               <>
                 Showing <b className="text-gray-800 dark:text-gray-200">{data.total.toLocaleString("en-IN")}</b> of{" "}
                 {data.all_left.toLocaleString("en-IN")} CSPs left
+                {dayOn && <> · last contacted {dayLabel(filters.day)}</>}
                 {s && s.on_hold > 0 && <> · {s.on_hold} on hold (nothing can be sent until they are live)</>}
               </>
             ) : (
@@ -371,7 +404,7 @@ export default function RmDashboard({ onOpenCsp }: { onOpenCsp: (cspId: string) 
                 {(data?.groups ?? []).map((g) => (
                   <tr
                     key={g.name}
-                    onClick={() => g.name !== "(not set)" && set(groupBy as keyof Filters, g.name)}
+                    onClick={() => g.name !== "(not set)" && set(groupBy as keyof TextFilters, g.name)}
                     className={`hover:bg-gray-50 dark:hover:bg-gray-700/40 ${g.name !== "(not set)" ? "cursor-pointer" : ""}`}
                     title={g.name !== "(not set)" ? `Show only ${g.name}` : ""}
                   >

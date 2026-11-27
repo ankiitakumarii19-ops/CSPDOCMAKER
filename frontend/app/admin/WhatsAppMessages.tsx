@@ -18,6 +18,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 import ContactStatusLine from "../components/ContactStatusLine";
+import DayFilter, { NO_DAY, dayLabel, dayRange } from "../components/DayFilter";
+import type { DayChoice } from "../components/DayFilter";
 import { api } from "../lib/api";
 import { useUrlParam } from "../lib/useUrlParam";
 import WhatsAppMessageDetails from "./WhatsAppMessageDetails";
@@ -120,6 +122,11 @@ export default function WhatsAppMessages() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [days, setDays] = useState<number>(30);
+  // No. 272: the day the message was sent (India time). A day chosen takes
+  // the place of the period above it.
+  const [day, setDay] = useState<DayChoice>(NO_DAY);
+  const { date_from: dateFrom, date_to: dateTo } = dayRange(day);
+  const dayOn = !!(dateFrom || dateTo);
   const [includeTests, setIncludeTests] = useState(true);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
@@ -141,7 +148,10 @@ export default function WhatsAppMessages() {
 
   useEffect(() => {
     let current = true;
-    api.whatsappMessages({ days, include_tests: includeTests, q: query })
+    api.whatsappMessages({
+      days: dayOn ? 0 : days, include_tests: includeTests, q: query,
+      date_from: dateFrom, date_to: dateTo,
+    })
       .then((d) => {
         if (!current) return;
         setData(d);
@@ -158,7 +168,7 @@ export default function WhatsAppMessages() {
     return () => {
       current = false;
     };
-  }, [days, includeTests, query, reloads]);
+  }, [days, includeTests, query, reloads, dayOn, dateFrom, dateTo]);
 
   async function refreshNow() {
     setRefreshing(true);
@@ -245,7 +255,10 @@ export default function WhatsAppMessages() {
         <select
           value={days}
           onChange={(e) => setDays(Number(e.target.value))}
-          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200"
+          disabled={dayOn}
+          title={dayOn ? "Not used while a day is chosen" : undefined}
+          aria-label="Period"
+          className="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 disabled:opacity-50"
         >
           {PERIODS.map(([d, label]) => (
             <option key={d} value={d}>{label}</option>
@@ -273,7 +286,20 @@ export default function WhatsAppMessages() {
           />
           Include test messages
         </label>
+        <DayFilter
+          label="Sent"
+          layout="row"
+          value={day}
+          onChange={setDay}
+          boxClass="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm text-gray-800 dark:text-gray-200 cursor-pointer"
+        />
       </div>
+      {dayOn && (
+        <p className="-mt-3 text-xs text-gray-500 dark:text-gray-400">
+          Showing messages sent: <b>{dayLabel(day)}</b> (India time). The counts below are for
+          these days too.
+        </p>
+      )}
 
       {loading && !data && <p className="text-sm text-gray-500 py-8">Loading…</p>}
 

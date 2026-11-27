@@ -419,6 +419,22 @@ SETTINGS += [
             "without anyone pressing a button.",
             "Off: documents are made only when someone starts them.",
             kind=BOOL, words=("auto documents", "documents by itself")),
+    Setting("asm_from_dc", "data", "ASM is the DC",
+            "The ASM and the DC are the same person: the ASM name, email and "
+            "number printed on the BCP are always the CSP's DC's.",
+            "Off: the ASM is read from its own columns, blanks filled from "
+            "the lookup table's ASM list.",
+            kind=BOOL, words=("asm is dc", "asm dc same", "asm same as dc")),
+    Setting("calling_sheet_updates", "data",
+            "Take later changes from the Calling sheet",
+            "When a CSP's details change in the Calling sheet, the change is "
+            "written into CSPDATA, and pending documents then go by "
+            "themselves. A detail the CSP gave on their own form is never "
+            "replaced.",
+            "Off: a CSP is copied from the Calling sheet once, when it first "
+            "appears; later changes there are not taken.",
+            kind=BOOL, words=("calling sheet changes", "calling updates",
+                              "take calling sheet")),
     # ---- No. 212 (Stage 5): documents and photo -------------------------
     Setting("documents_not_for_second_type", "documents",
             "Documents the second type never gets",

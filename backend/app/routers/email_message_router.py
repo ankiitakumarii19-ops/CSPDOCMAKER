@@ -101,9 +101,19 @@ async def report(kind: Optional[str] = Query(None),
                  status: Optional[str] = Query(None),
                  q: Optional[str] = Query(None, max_length=100),
                  because: Optional[str] = Query(None, max_length=40),
+                 date_from: Optional[str] = Query(
+                     None, description="India day, YYYY-MM-DD, inclusive"),
+                 date_to: Optional[str] = Query(
+                     None, description="India day, YYYY-MM-DD, inclusive"),
                  session: AsyncSession = Depends(get_session),
                  user=Depends(require_role("admin", "super_admin"))):
-    rows = (await session.execute(select(EmailMessage).order_by(
+    """The counts by kind and the emails. date_from / date_to (No. 272):
+    only emails sent on those India days - the counts too."""
+    from app.services import india_days
+
+    sent_on = india_days.http_bounds(date_from, date_to)
+    rows = (await session.execute(india_days.where(
+        select(EmailMessage), EmailMessage.sent_at, sent_on).order_by(
         EmailMessage.sent_at.desc()))).scalars().all()
     counts = {}
     for k in TITLES:

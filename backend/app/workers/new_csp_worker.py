@@ -35,6 +35,45 @@ from app import telemetry
 
 logger = logging.getLogger(__name__)
 
+# No. 269 (27 Nov 2026): the Postgres lock that lets only one documents run
+# happen at a time. The worker runs 2 tasks at once and this job starts every
+# 3 minutes; a run that took longer (a big catch-up after No. 260/261 went
+# live) overlapped the next one, both picked the same CSPs, and each CSP got
+# the documents email twice in the same minute. The RM-request job
+# (pending_request_worker) makes and emails documents too, so it takes the
+# same lock. A run that finds it taken does nothing; the next one picks the
+# work up.
+DOCUMENTS_LOCK_KEY = 7261269
+ANOTHER_RUN = "another documents run is still going"
+
+
+def one_documents_run(fn):
+    """Run fn only if no other documents run is going; otherwise skip."""
+    from functools import wraps
+
+    @wraps(fn)
+    def run(*args, **kwargs):
+        from sqlalchemy import create_engine, text
+
+        from app.config import get_settings
+        engine = create_engine(get_settings().database_url.replace(
+            "postgresql+asyncpg://", "postgresql+psycopg2://"))
+        try:
+            with engine.connect() as lock:
+                if not lock.execute(text("SELECT pg_try_advisory_lock(:k)"),
+                                    {"k": DOCUMENTS_LOCK_KEY}).scalar():
+                    logger.info("%s: skipped - %s", fn.__name__, ANOTHER_RUN)
+                    return {"skipped": ANOTHER_RUN}
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    lock.execute(text("SELECT pg_advisory_unlock(:k)"),
+                                 {"k": DOCUMENTS_LOCK_KEY})
+                    lock.commit()
+        finally:
+            engine.dispose()
+    return run
+
 
 @celery_app.task(
     name="workers.process_new_csps",
@@ -43,6 +82,7 @@ logger = logging.getLogger(__name__)
     default_retry_delay=120,
 )
 @for_each_workspace
+@one_documents_run
 def process_new_csps(self):
     """Process every new CSP that has not been processed yet."""
     from sqlalchemy import create_engine, select

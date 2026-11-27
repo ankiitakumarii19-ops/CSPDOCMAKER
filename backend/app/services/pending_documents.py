@@ -132,6 +132,17 @@ def apply(rows: List[dict], filters: dict, contacted: str = "",
     return out
 
 
+def last_contacted_in(rows: List[dict], days) -> List[dict]:
+    """The rows last contacted on the India days asked (No. 272; days from
+    india_days.bounds). Nothing asked = every row; once a day is asked, a
+    CSP never contacted has no date and is not kept."""
+    from app.services import india_days
+
+    if not india_days.asked(days):
+        return rows
+    return [r for r in rows if india_days.within(r["last_contacted"], days)]
+
+
 def options(rows: List[dict], filters: dict) -> Dict[str, List[str]]:
     """The values each filter can take — from the CSPs the OTHER filters
     leave, so a choice never comes back empty (pick a state: only its

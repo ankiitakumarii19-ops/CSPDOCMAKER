@@ -434,3 +434,183 @@ async def test_only_empty_address_cells_of_listed_codes_are_written(monkeypatch)
         {"1A900040", "1A900041"})
     assert written == ["1A900040"]
     assert sent["data"] == [{"range": "KOData!C2", "values": [["New A"]]}]
+
+
+# ---- No. 270: later changes in the Calling sheet go into CSPDATA -------------
+
+def test_only_a_change_in_the_calling_sheet_is_taken():
+    seen = {"address": "Old Road", "dc": "Dc One"}
+    now = {"address": "New Road", "dc": "Dc One", "gender": "Female"}
+    data = {"address": "Old Road", "dc": "Dc Fixed In Cspdata", "gender": ""}
+    assert source_sheets.calling_changes(now, seen, data, set()) == {
+        "address": "New Road", "gender": "Female"}, \
+        "the DC corrected in CSPDATA is not undone: Calling did not change it"
+
+
+def test_the_first_look_fills_only_empty_cells():
+    now = {"address": "New Road", "dc": "Dc One"}
+    data = {"address": "Typed In Cspdata", "dc": ""}
+    assert source_sheets.calling_changes(now, None, data, set()) == {
+        "dc": "Dc One"}
+
+
+def test_the_csps_own_answer_is_never_replaced():
+    seen = {"address": "Old Road", "email": "old@x.in"}
+    now = {"address": "New Road", "email": "new@x.in"}
+    data = {"address": "Csp Wrote This", "email": "old@x.in"}
+    assert source_sheets.calling_changes(now, seen, data, {"address"}) == {
+        "email": "new@x.in"}
+
+
+def test_a_blank_in_the_calling_sheet_clears_nothing():
+    assert source_sheets.calling_changes(
+        {"address": ""}, {"address": "Old"}, {"address": "Old"}, set()) == {}
+
+
+@pytest.fixture
+def writes(monkeypatch):
+    from app.services import sheet_writeback_service
+    done, fail = [], {"on": False}
+
+    def write(code, values, *a, **k):
+        if fail["on"]:
+            raise sheet_writeback_service.SheetWriteError("Google is down")
+        done.append((code, dict(values)))
+        return dict(values), []
+    monkeypatch.setattr(sheet_writeback_service, "write_values", write)
+    return done, fail
+
+
+def _in_cspdata(world, code, **cells):
+    """CSPDATA's row for this CSP, as the job reads it."""
+    world.data[KO] = [r for r in world.data[KO] if r["CSP Code"] != code]
+    world.data[KO].append({"CSP Code": code, **cells})
+
+
+async def test_a_calling_sheet_change_is_written_to_cspdata(world, writes):
+    done, _ = writes
+    world.calling = [{**calling_row("1A900270", "Changed"),
+                      "District Coordinator": "Dc One",
+                      "Full Address": "Old Road"}]
+    _run(world)
+    assert done == [], "copying it in is not a change"
+    _in_cspdata(world, "1A900270", **{"CSP Name": "Changed",
+                                      "DC": "Dc One", "Address": "Old Road"})
+    _run(world)
+    assert done == [], "nothing changed in the Calling sheet"
+
+    world.calling = [{**calling_row("1A900270", "Changed"),
+                      "District Coordinator": "Dc Two",
+                      "Mobile Number DC": "9811111111",
+                      "Full Address": "Old Road"}]
+    s = _run(world)
+    assert done == [("1A900270", {"dc": "Dc Two",
+                                  "dc_contact": "9811111111"})]
+    assert s.calling_updated == {"1A900270": ["dc", "dc_contact"]}
+    _in_cspdata(world, "1A900270", **{"CSP Name": "Changed", "DC": "Dc Two",
+                                      "DC Contact Number": "9811111111",
+                                      "Address": "Old Road"})
+    _run(world)
+    assert len(done) == 1, "written once, not every run"
+
+
+async def test_the_csps_own_form_answer_stays(world, writes):
+    from datetime import datetime, timedelta, timezone
+
+    from app.models.data_request import DataRequest
+    done, _ = writes
+    world.calling = [{**calling_row("1A900271", "Own Answer"),
+                      "Full Address": "Old Road"}]
+    _run(world)
+    _in_cspdata(world, "1A900271", **{"CSP Name": "Own Answer",
+                                      "Address": "Csp Wrote This"})
+    now = datetime.now(timezone.utc)
+    world.session.add(CSPRecord(csp_id="1A900271", csp_code="1A900271",
+                                name="Own Answer", origin="baseline"))
+    world.session.flush()
+    world.session.add(DataRequest(
+        csp_id="1A900271", token_hash="t-270-own", fields=["address"],
+        status="answered", expires_at=now + timedelta(days=3),
+        answered_at=now, answered_values={"address": "Csp Wrote This"}))
+    world.session.commit()
+    try:
+        world.calling = [{**calling_row("1A900271", "Own Answer",
+                                        mobile="9000000077"),
+                          "Full Address": "New Road"}]
+        _run(world)
+        assert done == [("1A900271", {"mobile": "9000000077"})]
+    finally:
+        world.session.execute(text(
+            "DELETE FROM data_requests WHERE token_hash = 't-270-own'"))
+        world.session.commit()
+
+
+async def test_a_csp_in_cspdata_before_the_import_is_not_updated(world, writes):
+    done, _ = writes
+    world.data[KO] = [{"CSP Code": "1A900272", "Address": ""}]
+    world.calling = [{**calling_row("1A900272", "Was There"),
+                      "Full Address": "Old Road"}]
+    _run(world)
+    world.calling = [{**calling_row("1A900272", "Was There"),
+                      "Full Address": "New Road"}]
+    _run(world)
+    assert done == []
+
+
+async def test_a_change_that_cannot_be_written_is_tried_again(world, writes):
+    done, fail = writes
+    world.calling = [{**calling_row("1A900273", "Retry"),
+                      "Full Address": "Old Road"}]
+    _run(world)
+    _in_cspdata(world, "1A900273", **{"CSP Name": "Retry",
+                                      "Address": "Old Road"})
+    world.calling = [{**calling_row("1A900273", "Retry"),
+                      "Full Address": "New Road"}]
+    fail["on"] = True
+    _run(world)
+    assert done == []
+    fail["on"] = False
+    _run(world)
+    assert done == [("1A900273", {"address": "New Road"})]
+
+
+async def test_calling_sheet_changes_can_be_switched_off(world, writes,
+                                                         monkeypatch):
+    done, _ = writes
+    monkeypatch.setattr(get_settings(), "calling_sheet_updates", False)
+    world.calling = [{**calling_row("1A900274", "Off"),
+                      "Full Address": "Old Road"}]
+    _run(world)
+    _in_cspdata(world, "1A900274", **{"CSP Name": "Off",
+                                      "Address": "Old Road"})
+    world.calling = [{**calling_row("1A900274", "Off"),
+                      "Full Address": "New Road"}]
+    _run(world)
+    assert done == []
+
+
+# ---- No. 271: the dashboard follows the sheets --------------------------------
+
+async def test_a_code_taken_out_of_both_sheets_stops_counting(world):
+    world.calling = [calling_row("1A900280", "Stays"),
+                     calling_row("1A900281", "Leaves")]
+    world.lead = [lead_row("1A900282", "Lead Stays", "Go Live Done")]
+    _run(world)
+    hold = _state(world, "1A900281").hold_reason
+    world.calling = [calling_row("1A900280", "Stays")]
+    s = _run(world)
+    gone = _state(world, "1A900281")
+    assert s.gone == ["1A900281"]
+    assert (gone.in_calling, gone.in_lead, gone.lead_live) == (False,) * 3
+    assert gone.hold_reason == hold, "what may be sent is not changed"
+    assert _state(world, "1A900280").in_calling is True
+
+
+async def test_an_empty_sheet_does_not_empty_the_counts(world):
+    world.calling = [calling_row("1A900283", "Here")]
+    world.lead = [lead_row("1A900284", "Lead", "Go Live Done")]
+    _run(world)
+    world.lead = []                      # a read that came back with nothing
+    s = _run(world)
+    assert s.gone == []
+    assert _state(world, "1A900284").lead_live is True

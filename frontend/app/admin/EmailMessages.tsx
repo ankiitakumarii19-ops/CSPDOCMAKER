@@ -13,6 +13,8 @@
 import { useCallback, useEffect, useState } from "react";
 
 import ContactStatusLine from "../components/ContactStatusLine";
+import DayFilter, { NO_DAY, dayLabel, dayRange } from "../components/DayFilter";
+import type { DayChoice } from "../components/DayFilter";
 import { api } from "../lib/api";
 import type { ApiError, EmailReport } from "../lib/api";
 
@@ -46,17 +48,22 @@ export default function EmailMessages() {
   const [error, setError] = useState("");
   const [focus, setFocus] = useState<{ kind?: string; status?: string; because?: string }>({});
   const [q, setQ] = useState("");
+  // No. 272: the day the email was sent (India time); the counts follow it.
+  const [day, setDay] = useState<DayChoice>(NO_DAY);
+  const { date_from: dateFrom, date_to: dateTo } = dayRange(day);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
 
   const load = useCallback(async () => {
     setError("");
     try {
-      setData(await api.emailMessages({ ...focus, q: q.trim() || undefined }));
+      setData(await api.emailMessages({
+        ...focus, q: q.trim() || undefined, date_from: dateFrom, date_to: dateTo,
+      }));
     } catch (e) {
       setError((e as ApiError).detail || "Could not load the emails.");
     }
-  }, [focus, q]);
+  }, [focus, q, dateFrom, dateTo]);
 
   useEffect(() => {
     load();
@@ -100,6 +107,21 @@ export default function EmailMessages() {
           <i className={`fas fa-rotate mr-2 ${busy ? "fa-spin" : ""}`}></i>
           {busy ? "Checking…" : "Check bounces now"}
         </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <DayFilter
+          label="Sent"
+          layout="row"
+          value={day}
+          onChange={setDay}
+          boxClass="px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-white cursor-pointer"
+        />
+        {(dateFrom || dateTo) && (
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            Showing emails sent: <b>{dayLabel(day)}</b> (India time). The counts are for these days too.
+          </span>
+        )}
       </div>
 
       {note && <div className="text-sm text-gray-600 dark:text-gray-300">{note}</div>}

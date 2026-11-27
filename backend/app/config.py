@@ -104,8 +104,12 @@ class Settings(BaseSettings):
     whatsapp_platform_url: str = Field(
         default="https://indev.eko.in/whatsapp/mcp",
         alias="WHATSAPP_PLATFORM_URL")
+    # No. 268: how long to wait for the platform's answer (it may be busy
+    # with another team's bulk batch) and how long to wait to reach it.
     whatsapp_platform_timeout_seconds: int = Field(
-        default=60, alias="WHATSAPP_PLATFORM_TIMEOUT_SECONDS")
+        default=300, alias="WHATSAPP_PLATFORM_TIMEOUT_SECONDS")
+    whatsapp_platform_connect_timeout_seconds: int = Field(
+        default=15, alias="WHATSAPP_PLATFORM_CONNECT_TIMEOUT_SECONDS")
     whatsapp_language: str = Field(default="en_US", alias="WHATSAPP_LANGUAGE")
     # The WhatsApp messages screen (tracker No. 110): how often delivered /
     # read / replied is fetched, and for how many days after a send.
@@ -470,6 +474,13 @@ class Settings(BaseSettings):
                                  alias="CRM_FILL_FIELDS")
     lookup_fill_enabled: bool = Field(default=True, alias="LOOKUP_FILL_ENABLED")
     auto_documents_new: bool = Field(default=True, alias="AUTO_DOCUMENTS_NEW")
+    # No. 270: ASM and DC are the same person (Eko) - the ASM columns carry
+    # the DC's name, email and number.
+    asm_from_dc: bool = Field(default=True, alias="ASM_FROM_DC")
+    # No. 270: a later change in the Calling sheet goes into CSPDATA (not a
+    # field the CSP gave on their own form).
+    calling_sheet_updates: bool = Field(default=True,
+                                        alias="CALLING_SHEET_UPDATES")
     # ---- No. 212 (Stage 5): documents ----
     # Documents the second record type never gets (Eko: a Sub-KO never gets
     # the BCP).

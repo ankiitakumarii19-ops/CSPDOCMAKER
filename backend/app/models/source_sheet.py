@@ -61,6 +61,10 @@ class SourceSheetState(Base):
         DateTime(timezone=True), nullable=True)
     # Which KOData columns were filled from Zoho, and from which Lead.
     zoho_filled: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    # No. 270: the CSPDATA columns of its Calling-sheet row as last read —
+    # a value that differs from this next time was changed in the Calling
+    # sheet and goes into CSPDATA.
+    calling_seen: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
 
     hold_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     first_seen_at: Mapped[datetime] = mapped_column(

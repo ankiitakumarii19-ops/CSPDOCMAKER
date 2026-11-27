@@ -21,6 +21,8 @@
 import { useMemo, useRef, useState } from "react";
 
 import { fillPlaceholders } from "../components/ActionRequiredDetail";
+import DayFilter, { NO_DAY, dayRange, inDays } from "../components/DayFilter";
+import type { DayChoice } from "../components/DayFilter";
 import { matches } from "../lib/searchMatch";
 import { api } from "../lib/api";
 import { useMyAccess } from "../lib/useMyAccess";
@@ -86,6 +88,10 @@ export default function AskCsps({
   const [by, setBy] = useState<{ rm: string; dc: string; lho: string; ao: string }>(
     { rm: "", dc: "", lho: "", ao: "" });
   const [docs, setDocs] = useState<"all" | "sent" | "not_sent">("all");
+  // No. 272: the day they were last asked (details form or a message by
+  // hand), India time. Once a day is chosen, never asked = not shown.
+  const [askedDay, setAskedDay] = useState<DayChoice>(NO_DAY);
+  const { date_from: askedFrom, date_to: askedTo } = dayRange(askedDay);
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [shown, setShown] = useState(PAGE);
   // What
@@ -135,11 +141,12 @@ export default function AskCsps({
       if (by.ao && (c.ao || "") !== by.ao) return false;
       if (docs === "sent" && !c.documents_sent) return false;
       if (docs === "not_sent" && c.documents_sent) return false;
+      if (!inDays(c.asked_at, { date_from: askedFrom, date_to: askedTo })) return false;
       // The one way every search box matches (No. 175).
       return matches(q, [c.name, c.csp_id, c.email], [c.mobile]);
     });
-  }, [candidates, q, status, needs, by, docs]);
-  const filtering = !!(by.rm || by.dc || by.lho || by.ao || docs !== "all");
+  }, [candidates, q, status, needs, by, docs, askedFrom, askedTo]);
+  const filtering = !!(by.rm || by.dc || by.lho || by.ao || docs !== "all" || askedDay.mode);
 
   const sendable = (c: SendCandidate) => !c.on_hold;
   const byId = useMemo(() => new Map(candidates.map((c) => [c.csp_id, c])), [candidates]);
@@ -321,9 +328,18 @@ export default function AskCsps({
             <option value="sent">Documents sent</option>
             <option value="not_sent">Documents not sent</option>
           </select>
+          <DayFilter
+            label="Last asked"
+            layout="row"
+            value={askedDay}
+            onChange={(d) => { setAskedDay(d); setShown(PAGE); }}
+            boxClass={`${input} cursor-pointer`}
+          />
           {filtering && (
             <button
-              onClick={() => { setBy({ rm: "", dc: "", lho: "", ao: "" }); setDocs("all"); setShown(PAGE); }}
+              onClick={() => {
+                setBy({ rm: "", dc: "", lho: "", ao: "" }); setDocs("all"); setAskedDay(NO_DAY); setShown(PAGE);
+              }}
               className="text-xs text-gray-500 hover:underline"
             >
               Clear filters

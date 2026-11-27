@@ -122,6 +122,18 @@ def sync_csp_data(self):
                     if code:
                         info_why[code] = why
 
+        # No. 270: ASM and DC are the same person — the ASM columns always
+        # carry the CSP's DC (after INFO has filled a blank DC by district).
+        if getattr(settings, "asm_from_dc", True):
+            from app.services.info_directory import asm_is_dc
+            for mapped in mapped_rows:
+                copied = asm_is_dc(mapped)
+                code = csp_mapping.csp_id_from_row(mapped)
+                if copied and code:
+                    why = info_why.setdefault(code, {})
+                    for field in copied:
+                        why[field] = "Same as the DC (ASM and DC are the same person)"
+
         # Rows saved this run, measured after the loop (No. 146).
         saved_rows = []
 

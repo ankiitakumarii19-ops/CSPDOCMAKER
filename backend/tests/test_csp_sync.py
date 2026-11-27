@@ -311,3 +311,47 @@ def test_application_owned_fields_survive_a_sync(sync_db, authorized_rms, mock_s
     record = sync_db.execute(select(CSPRecord)).scalar_one()
     assert record.certificate_date == date(2026, 3, 4)
     assert record.new_csp_processed_at is not None
+
+
+# ---- No. 270: ASM and DC are the same person ------------------------------
+
+def test_the_asm_is_always_the_dc(sync_db, authorized_rms, mock_sheet):
+    """The owner, 27 Nov 2026: "ASM and DC are the same". The BCP prints
+    the ASM; it must be the DC's name, email and number, whatever the ASM
+    columns say."""
+    mock_sheet([sheet_row(**{
+        "CSP Code": "C270", "CSP Name": "Asm Dc",
+        "Relationship Manager (RM)": "Rm One",
+        "DC": "Dc Person", "DC Email Id": "dc@example.com",
+        "DC Contact Number": "9800000001",
+        "ASM": "Someone Else", "ASM Email Id": "asm@example.com",
+        "ASM Contact Number": "9800000002"})])
+    run_sync()
+    record = sync_db.execute(select(CSPRecord)).scalar_one()
+    assert (record.asm_name, record.asm_email, record.asm_contact) == (
+        "Dc Person", "dc@example.com", "9800000001")
+    assert record.dc == "Dc Person"
+
+
+def test_with_no_dc_the_asm_is_left_alone(sync_db, authorized_rms,
+                                         mock_sheet):
+    mock_sheet([sheet_row(**{
+        "CSP Code": "C271", "CSP Name": "No Dc",
+        "Relationship Manager (RM)": "Rm One", "DC": "",
+        "ASM": "Asm Only", "ASM Email Id": "asm@example.com",
+        "ASM Contact Number": "9800000002"})])
+    run_sync()
+    record = sync_db.execute(select(CSPRecord)).scalar_one()
+    assert record.asm_name == "Asm Only"
+
+
+def test_asm_is_dc_can_be_switched_off(sync_db, authorized_rms, mock_sheet,
+                                       monkeypatch):
+    monkeypatch.setattr(get_settings(), "asm_from_dc", False)
+    mock_sheet([sheet_row(**{
+        "CSP Code": "C272", "CSP Name": "Off",
+        "Relationship Manager (RM)": "Rm One", "DC": "Dc Person",
+        "ASM": "Own Asm"})])
+    run_sync()
+    record = sync_db.execute(select(CSPRecord)).scalar_one()
+    assert record.asm_name == "Own Asm"

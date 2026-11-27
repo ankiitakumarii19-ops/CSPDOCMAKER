@@ -122,7 +122,8 @@ async def db(migrated_db):
         await session.execute(text(
             "TRUNCATE audit_logs, validation_results, sms_jobs, email_jobs, "
             "stored_documents, document_jobs, processing_jobs, csp_records, "
-            "users, authorization_records, workspace_members "
+            "users, authorization_records, workspace_members, "
+            "source_sheet_states "   # No. 271: decides the dashboard counts
             "RESTART IDENTITY CASCADE"
         ))
         await session.commit()

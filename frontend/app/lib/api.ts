@@ -2400,7 +2400,11 @@ class ApiClient {
   }
 
   // ---- Emails (No. 127; Admin + Super Admin) ----
-  async emailMessages(filter: { kind?: string; status?: string; q?: string; because?: string }) {
+  async emailMessages(filter: {
+    kind?: string; status?: string; q?: string; because?: string;
+    /** India days, inclusive (No. 272). */
+    date_from?: string; date_to?: string;
+  }) {
     const params = new URLSearchParams();
     Object.entries(filter).forEach(([k, v]) => v && params.set(k, v));
     const qs = params.toString();
@@ -3182,6 +3186,9 @@ class ApiClient {
     days?: number;
     include_tests?: boolean;
     q?: string;
+    /** India days, inclusive (No. 272); either one replaces `days`. */
+    date_from?: string;
+    date_to?: string;
   }) {
     const qs = new URLSearchParams();
     for (const [k, v] of Object.entries(params)) {
@@ -3574,6 +3581,9 @@ export interface DocumentsLeftParams {
   q?: string;
   /** "contacts" | "-contacts" | "last_contacted" | "name" */
   sort?: string;
+  /** Last contacted on these India days, inclusive (No. 272). */
+  date_from?: string;
+  date_to?: string;
   /** "rm" | "dc" | "state" | "district" */
   group_by?: string;
   page?: number;
