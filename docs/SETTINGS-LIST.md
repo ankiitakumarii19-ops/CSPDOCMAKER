@@ -25,6 +25,7 @@ fixed inside the code and are now settings are marked “(was in the code)”.
 | `ASKED_ONCE_FIELDS` | 'ao,rbo_name' | **Workspace setting now** | Setup → Settings → Records and words: “Office fields asked once” |
 | `AUTO_DOCUMENTS_NEW` | True | **Workspace setting now** | Setup → Settings → Records and words: “Make documents for new records by itself” |
 | `ASM_FROM_DC` | True (No. 270) | **Workspace setting now** | Setup → Settings → Records and words: “ASM is the DC” |
+| `NEW_CSP_MONTHS` | 3 (No. 273) | **Workspace setting now** | Setup → Settings → Records and words: “New CSPs stay new for” |
 | `CALLING_SHEET_UPDATES` | True (No. 270) | **Workspace setting now** | Setup → Settings → Records and words: “Take later changes from the Calling sheet” |
 | `BRAND_COLOR` | '#00B259' | **Workspace setting now** | Setup → Settings → Look and weekly email: “Main colour” |
 | `BRAND_COLOR_2` | '' | **Workspace setting now** | Setup → Display → Branding: “Second colour” (No. 240) |

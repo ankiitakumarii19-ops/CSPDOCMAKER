@@ -446,45 +446,72 @@ FILTER_FIELDS = {
 }
 
 
-def _month_before(moment: datetime) -> datetime:
-    """The same time one calendar month earlier (31 Mar -> 28/29 Feb)."""
+def _months_before(moment: datetime, months: int = 1) -> datetime:
+    """The same time `months` calendar months earlier (31 May, 3 -> 28/29
+    Feb)."""
     from calendar import monthrange
-    year, month = (moment.year, moment.month - 1) if moment.month > 1 \
-        else (moment.year - 1, 12)
+    total = moment.year * 12 + (moment.month - 1) - max(int(months), 0)
+    year, month = divmod(total, 12)
+    month += 1
     return moment.replace(year=year, month=month,
                           day=min(moment.day, monthrange(year, month)[1]))
 
 
 async def _counted_kind(session, now: datetime | None = None):
-    """What makes a CSP New or Existing on the dashboard (No. 271, 272).
+    """What makes a CSP New or Existing on the dashboard (No. 271-273).
 
-    The owner, 27 Nov 2026: count from the two sheets, each code once —
-      New      = "Go Live Done" in the Lead raw data sheet; one that is in
-                 the Calling sheet too stays New for one month after it went
-                 live, then it is old (No. 272). Live before the app started
-                 reading the sheets (21 Oct 2026): the day is not known, so
-                 old already;
-      Existing = "Active" in the Calling sheet and not New.
-    Every other CSP (Inactive, no status, a Lead not live yet, or only in
-    CSPDATA) is not counted. Returns a SQL expression giving 'new' /
-    'baseline' / NULL per CSPRecord, or None for a workspace without those
-    sheets — it keeps counting by the record's origin, as before."""
-    from sqlalchemy import case, or_
+    Counted at all: a code "Active" in the Calling sheet or "Go Live Done"
+    in the Lead raw data sheet - each code once (No. 271).
+      New      = a CSP the app took as NEW (it went live after the app began
+                 reading the sheets on 21 Oct 2026 - its documents went out
+                 as a new CSP's; the 15 the owner confirmed, No. 273). One
+                 that is in the Calling sheet too stays New for 3 months
+                 after it went live (No. 272 said one; the owner made it 3 -
+                 NEW_CSP_MONTHS, a workspace setting), then it is old.
+      Existing = every other counted code: Active in the Calling sheet, or
+                 Go Live Done before 21 Oct and not in the Calling sheet.
+                 An old one that is Inactive / blank in the Calling sheet is
+                 not counted.
+    Returns a SQL expression giving 'new' / 'baseline' / NULL per CSPRecord,
+    or None for a workspace without those sheets - it keeps counting by the
+    record's origin, as before."""
+    from sqlalchemy import case, not_, or_
 
     from app.models.source_sheet import SourceSheetState as St
     if not (await session.execute(
             select(func.count()).select_from(St))).scalar():
         return None
-    month_ago = _month_before(now or datetime.now(timezone.utc))
+    from app.config import get_settings
+    month_ago = _months_before(now or datetime.now(timezone.utc),
+                               getattr(get_settings(), "new_csp_months", 3))
     code = func.upper(func.trim(CSPRecord.csp_id))
-    new = select(func.upper(St.csp_code)).where(
-        St.lead_live.is_(True),
-        or_(St.in_calling.is_(False), St.went_live_at >= month_ago))
-    active = select(func.upper(St.csp_code)).where(
+
+    def codes(*where):
+        return code.in_(select(func.upper(St.csp_code)).where(*where))
+
+    live = codes(St.lead_live.is_(True))
+    active = codes(
         St.in_calling.is_(True),
         func.lower(func.trim(func.coalesce(St.calling_status, ""))) == "active")
-    return case((code.in_(new), "new"), (code.in_(active), "baseline"),
+    old_in_calling = codes(
+        St.in_calling.is_(True),
+        or_(St.went_live_at.is_(None), St.went_live_at < month_ago))
+    live_lead_only = codes(St.lead_live.is_(True), St.in_calling.is_(False))
+    is_new = and_(CSPRecord.origin == "new", or_(live, active),
+                  not_(old_in_calling))
+    return case((is_new, "new"), (or_(active, live_lead_only), "baseline"),
                 else_=None)
+
+
+async def _kinds_of(session, ids) -> dict:
+    """{csp_id: 'new' / 'baseline'} as the dashboard counts them - the TYPE
+    shown in the lists behind the cards (No. 273)."""
+    kind = await _counted_kind(session)
+    if kind is None or not ids:
+        return {}
+    return dict((await session.execute(
+        select(CSPRecord.csp_id, kind).where(CSPRecord.csp_id.in_(ids))
+    )).all())
 
 
 def _in_days(column, days):
@@ -846,11 +873,12 @@ async def _drill_rows(session, params: dict):
     return records, len(records)
 
 
-def _drill_row(csp) -> dict:
+def _drill_row(csp, kinds: dict | None = None) -> dict:
     return {
         "csp_id": csp.csp_id,
         "name": csp.name,
-        "origin": csp.origin,
+        # As the dashboard counts it (No. 273), else the record's own.
+        "origin": (kinds or {}).get(csp.csp_id) or csp.origin,
         "district": csp.district,
         "state": csp.state,
         "lho": csp.lho,
@@ -905,13 +933,14 @@ async def csp_list(
 
     window = (records if params.get("paged")
               else records[offset:offset + page_size])
+    kinds = await _kinds_of(session, [c.csp_id for c in window])
 
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
         "pages": max(1, -(-total // page_size)),
-        "csps": [_drill_row(c) for c in window],
+        "csps": [_drill_row(c, kinds) for c in window],
     }
 
 
@@ -953,9 +982,10 @@ async def csp_list_csv(
     buffer = io.StringIO()
     writer = csv.DictWriter(buffer, fieldnames=columns, extrasaction="ignore")
     writer.writeheader()
+    kinds = await _kinds_of(session, [c.csp_id for c in records])
     for csp in records:
         writer.writerow({k: (v if v is not None else "")
-                         for k, v in _drill_row(csp).items()})
+                         for k, v in _drill_row(csp, kinds).items()})
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M")
     logger.info("admin_router.csp_list_csv: exported %d row(s)", len(records))

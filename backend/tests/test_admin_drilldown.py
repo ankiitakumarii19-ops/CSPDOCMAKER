@@ -301,7 +301,7 @@ async def test_the_cards_count_active_and_go_live_done_each_code_once(
     rows = {
         # code: (in_calling, calling_status, in_lead, lead_live, origin)
         "1A971001": (True, "Active", False, False, "baseline"),
-        "1A971002": (True, "Active", True, True, "baseline"),   # both -> new
+        "1A971002": (True, "Active", True, True, "new"),        # both -> new
         "1A971003": (False, None, True, True, "new"),
         "1A971004": (True, "Inactive", False, False, "baseline"),
         "1A971005": (True, None, False, False, "baseline"),
@@ -348,19 +348,29 @@ async def _sheet_csp(db, code, *, in_calling=False, status=None, live=False,
                      name=f"Csp {code}"))
 
 
-async def test_a_lead_in_the_calling_sheet_is_old_after_a_month(
+def test_months_before_is_calendar_months():
+    from app.routers.admin_router import _months_before
+    assert _months_before(datetime(2026, 5, 31), 3) == datetime(2026, 2, 28)
+    assert _months_before(datetime(2026, 1, 15), 3) == datetime(2025, 10, 15)
+
+
+async def test_a_lead_in_the_calling_sheet_is_old_after_3_months(
         client, admin_headers, db):
     now = datetime.now(timezone.utc)
     await _sheet_csp(db, "1A972001", in_calling=True, status="Active",
-                     live=True, went_live=now - timedelta(days=10))
+                     live=True, went_live=now - timedelta(days=80),
+                     origin="new")      # under 3 months: still New
     await _sheet_csp(db, "1A972002", in_calling=True, status="Active",
-                     live=True, went_live=now - timedelta(days=40))
+                     live=True, went_live=now - timedelta(days=100),
+                     origin="new")
     await _sheet_csp(db, "1A972003", in_calling=True, status="Active",
                      live=True, went_live=None)        # live before 21 Oct
-    await _sheet_csp(db, "1A972004", live=True,
+    await _sheet_csp(db, "1A972004", live=True, origin="new",
                      went_live=now - timedelta(days=100))   # Lead only
     await _sheet_csp(db, "1A972005", in_calling=True, status="Inactive",
-                     live=True, went_live=now - timedelta(days=40))
+                     live=True, went_live=now - timedelta(days=100),
+                     origin="new")
+    await _sheet_csp(db, "1A972006", live=True)    # live before 21 Oct, Lead only
     await db.commit()
 
     async def ids(view):
@@ -369,19 +379,27 @@ async def test_a_lead_in_the_calling_sheet_is_old_after_a_month(
         return {c["csp_id"] for c in body["csps"]}
 
     assert await ids("new") == {"1A972001", "1A972004"}
-    assert await ids("existing") == {"1A972002", "1A972003"}, \
-        "a month after going live it is old; Inactive old ones not counted"
+    assert await ids("existing") == {"1A972002", "1A972003", "1A972006"}, \
+        "3 months after going live it is old; Inactive old ones not counted"
     totals = (await client.get("/api/admin/csp-metrics",
                                headers=admin_headers)).json()["totals"]
-    assert (totals["new"], totals["existing"]) == (2, 2)
+    assert (totals["new"], totals["existing"]) == (2, 3)
+
+    # No. 273: the TYPE in the list is the dashboard's, not the record's.
+    body = (await client.get("/api/admin/csp-list?view=existing",
+                             headers=admin_headers)).json()
+    assert {c["origin"] for c in body["csps"]} == {"baseline"}
+    body = (await client.get("/api/admin/csp-list?view=new",
+                             headers=admin_headers)).json()
+    assert {c["origin"] for c in body["csps"]} == {"new"}
 
 
 async def test_every_card_follows_the_day(client, admin_headers, db):
     from app.models.data_request import DataRequest
     now = datetime.now(timezone.utc)
     today = datetime.now(IST).date().isoformat()
-    await _sheet_csp(db, "1A972011", live=True, went_live=now)
-    await _sheet_csp(db, "1A972012", live=True,
+    await _sheet_csp(db, "1A972011", live=True, went_live=now, origin="new")
+    await _sheet_csp(db, "1A972012", live=True, origin="new",
                      went_live=now - timedelta(days=3))
     await _sheet_csp(db, "1A972013", in_calling=True, status="Active")
     await _sheet_csp(db, "1A972014", in_calling=True, status="Active")

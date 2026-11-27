@@ -425,6 +425,13 @@ SETTINGS += [
             "Off: the ASM is read from its own columns, blanks filled from "
             "the lookup table's ASM list.",
             kind=BOOL, words=("asm is dc", "asm dc same", "asm same as dc")),
+    Setting("new_csp_months", "data", "New CSPs stay new for",
+            "A new CSP that is also in the Calling sheet counts as New on "
+            "the dashboard for this many months after it went live; then it "
+            "counts as Existing.",
+            "More months = more CSPs counted as New.",
+            unit="months", min=1, max=24,
+            words=("new for", "months new", "new csp months")),
     Setting("calling_sheet_updates", "data",
             "Take later changes from the Calling sheet",
             "When a CSP's details change in the Calling sheet, the change is "

@@ -477,6 +477,9 @@ class Settings(BaseSettings):
     # No. 270: ASM and DC are the same person (Eko) - the ASM columns carry
     # the DC's name, email and number.
     asm_from_dc: bool = Field(default=True, alias="ASM_FROM_DC")
+    # No. 272/273: a new CSP that is in the Calling sheet too counts as New
+    # on the dashboard for this many months after it went live.
+    new_csp_months: int = Field(default=3, alias="NEW_CSP_MONTHS")
     # No. 270: a later change in the Calling sheet goes into CSPDATA (not a
     # field the CSP gave on their own form).
     calling_sheet_updates: bool = Field(default=True,
