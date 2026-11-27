@@ -458,49 +458,41 @@ def _months_before(moment: datetime, months: int = 1) -> datetime:
 
 
 async def _counted_kind(session, now: datetime | None = None):
-    """What makes a CSP New or Existing on the dashboard (No. 271-273).
+    """What makes a CSP New or Existing on the dashboard (No. 271-274).
 
-    Counted at all: a code "Active" in the Calling sheet or "Go Live Done"
-    in the Lead raw data sheet - each code once (No. 271).
-      New      = a CSP the app took as NEW (it went live after the app began
-                 reading the sheets on 21 Oct 2026 - its documents went out
-                 as a new CSP's; the 15 the owner confirmed, No. 273). One
-                 that is in the Calling sheet too stays New for 3 months
-                 after it went live (No. 272 said one; the owner made it 3 -
-                 NEW_CSP_MONTHS, a workspace setting), then it is old.
-      Existing = every other counted code: Active in the Calling sheet, or
-                 Go Live Done before 21 Oct and not in the Calling sheet.
-                 An old one that is Inactive / blank in the Calling sheet is
-                 not counted.
-    Returns a SQL expression giving 'new' / 'baseline' / NULL per CSPRecord,
-    or None for a workspace without those sheets - it keeps counting by the
-    record's origin, as before."""
-    from sqlalchemy import case, not_, or_
+    Settled with the owner on 27 Nov 2026 against the server's numbers
+    (Calling sheet 523 codes; the app's own new CSPs 15, all in it):
+      New      = a CSP the app took as NEW (origin "new": added after the
+                 app began, its documents sent as a new CSP's - the owner's
+                 "15 are correct"), for NEW_CSP_MONTHS (3) after the app
+                 added it; then it is old. Only codes in the Calling or Lead
+                 raw data sheet.
+      Existing = every other code in the Calling sheet, whatever its
+                 Terminal Status (Active, Inactive or blank) - so the total
+                 matches the Calling sheet.
+    A code only in the Lead raw data sheet (not live yet) is not counted.
+    Each code once. Returns a SQL expression giving 'new' / 'baseline' /
+    NULL per CSPRecord, or None for a workspace without those sheets - it
+    keeps counting by the record's origin, as before."""
+    from sqlalchemy import case, or_
 
+    from app.config import get_settings
     from app.models.source_sheet import SourceSheetState as St
     if not (await session.execute(
             select(func.count()).select_from(St))).scalar():
         return None
-    from app.config import get_settings
-    month_ago = _months_before(now or datetime.now(timezone.utc),
-                               getattr(get_settings(), "new_csp_months", 3))
+    since = _months_before(now or datetime.now(timezone.utc),
+                           getattr(get_settings(), "new_csp_months", 3))
     code = func.upper(func.trim(CSPRecord.csp_id))
 
     def codes(*where):
         return code.in_(select(func.upper(St.csp_code)).where(*where))
 
-    live = codes(St.lead_live.is_(True))
-    active = codes(
-        St.in_calling.is_(True),
-        func.lower(func.trim(func.coalesce(St.calling_status, ""))) == "active")
-    old_in_calling = codes(
-        St.in_calling.is_(True),
-        or_(St.went_live_at.is_(None), St.went_live_at < month_ago))
-    live_lead_only = codes(St.lead_live.is_(True), St.in_calling.is_(False))
-    is_new = and_(CSPRecord.origin == "new", or_(live, active),
-                  not_(old_in_calling))
-    return case((is_new, "new"), (or_(active, live_lead_only), "baseline"),
-                else_=None)
+    in_calling = codes(St.in_calling.is_(True))
+    in_sheets = codes(or_(St.in_calling.is_(True), St.in_lead.is_(True)))
+    is_new = and_(CSPRecord.origin == "new", CSPRecord.created_at >= since,
+                  in_sheets)
+    return case((is_new, "new"), (in_calling, "baseline"), else_=None)
 
 
 async def _kinds_of(session, ids) -> dict:
@@ -527,21 +519,16 @@ def _in_days(column, days):
 
 def _card_on_days(kind, sheets: bool, days):
     """No. 272: with a day chosen, every card counts what happened that day —
-    New: went live that day (Lead raw data; without those sheets, added to
-    the app that day); Existing: answered their verification / details form
-    that day. Returns a condition on CSPRecord, or None for all days."""
+    New: added to the app as a new CSP that day (No. 274: the same date the
+    3 months count from); Existing: answered their verification / details
+    form that day. Returns a condition on CSPRecord, or None for all days."""
     from sqlalchemy import or_
 
     from app.models.data_request import ANSWERED, DataRequest
-    from app.models.source_sheet import SourceSheetState as St
     if days == (None, None):
         return None
     code = func.upper(func.trim(CSPRecord.csp_id))
-    if sheets:
-        went_live = code.in_(select(func.upper(St.csp_code)).where(
-            _in_days(St.went_live_at, days)))
-    else:
-        went_live = _in_days(CSPRecord.created_at, days)
+    went_live = _in_days(CSPRecord.created_at, days)
     verified = code.in_(select(func.upper(DataRequest.csp_id)).where(
         DataRequest.status == ANSWERED,
         _in_days(DataRequest.answered_at, days)))

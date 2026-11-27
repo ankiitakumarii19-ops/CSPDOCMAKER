@@ -289,63 +289,17 @@ async def test_delivery_needs_a_document_type(client, admin_headers):
     assert r.status_code == 400
 
 
-# ---- No. 271: the cards count from the Calling and Lead raw data sheets -----
+# ---- No. 271-274: the cards count from the sheets and the app's new CSPs -----
 
-async def test_the_cards_count_active_and_go_live_done_each_code_once(
-        client, admin_headers, db):
-    """The owner, 27 Nov 2026: Existing = Active in the Calling sheet; New =
-    Go Live Done in the Lead raw data sheet; a code in both is New and
-    counted once; Inactive / no status / a Lead not live / only in CSPDATA
-    are not counted."""
-    from app.models.source_sheet import SourceSheetState as St
-    rows = {
-        # code: (in_calling, calling_status, in_lead, lead_live, origin)
-        "1A971001": (True, "Active", False, False, "baseline"),
-        "1A971002": (True, "Active", True, True, "new"),        # both -> new
-        "1A971003": (False, None, True, True, "new"),
-        "1A971004": (True, "Inactive", False, False, "baseline"),
-        "1A971005": (True, None, False, False, "baseline"),
-        "1A971006": (False, None, True, False, "baseline"),     # not live
-        "1A971007": (True, " active ", True, False, "baseline"),
-    }
-    for code, (in_c, status, in_l, live, origin) in rows.items():
-        db.add(St(csp_code=code, in_calling=in_c, calling_status=status,
-                  in_lead=in_l, lead_live=live,
-                  # went live this week: within No. 272's one month
-                  went_live_at=(datetime.now(timezone.utc) - timedelta(days=5)
-                                if live else None)))
-        db.add(CSPRecord(csp_id=code, source_row_identifier=code,
-                         origin=origin, name=f"Csp {code}"))
-    db.add(CSPRecord(csp_id="1A971008", source_row_identifier="1A971008",
-                     origin="baseline", name="Only In Cspdata"))
-    await db.commit()
-
-    totals = (await client.get("/api/admin/csp-metrics",
-                               headers=admin_headers)).json()["totals"]
-    assert (totals["csps"], totals["new"], totals["existing"]) == (4, 2, 2)
-
-    async def client_get(url):
-        return (await client.get(url, headers=admin_headers)).json()
-
-    assert {c["csp_id"] for c in (await client_get(
-        "/api/admin/csp-list?view=new"))["csps"]} == {"1A971002", "1A971003"}
-    assert {c["csp_id"] for c in (await client_get(
-        "/api/admin/csp-list?view=existing"))["csps"]} == {"1A971001",
-                                                            "1A971007"}
-    assert {c["csp_id"] for c in (await client_get(
-        "/api/admin/csp-list"))["csps"]} == {"1A971001", "1A971002",
-                                             "1A971003", "1A971007"}
-
-
-# ---- No. 272: one month, and every card follows the day ----------------------
-
-async def _sheet_csp(db, code, *, in_calling=False, status=None, live=False,
-                     went_live=None, origin="baseline"):
+async def _sheet_csp(db, code, *, in_calling=False, status=None, in_lead=False,
+                     live=False, origin="baseline", added_days_ago=1):
     from app.models.source_sheet import SourceSheetState as St
     db.add(St(csp_code=code, in_calling=in_calling, calling_status=status,
-              in_lead=live, lead_live=live, went_live_at=went_live))
+              in_lead=in_lead or live, lead_live=live))
     db.add(CSPRecord(csp_id=code, source_row_identifier=code, origin=origin,
-                     name=f"Csp {code}"))
+                     name=f"Csp {code}",
+                     created_at=datetime.now(timezone.utc)
+                     - timedelta(days=added_days_ago)))
 
 
 def test_months_before_is_calendar_months():
@@ -354,68 +308,79 @@ def test_months_before_is_calendar_months():
     assert _months_before(datetime(2026, 1, 15), 3) == datetime(2025, 10, 15)
 
 
-async def test_a_lead_in_the_calling_sheet_is_old_after_3_months(
+async def test_new_is_the_apps_new_csps_and_existing_is_the_calling_sheet(
         client, admin_headers, db):
-    now = datetime.now(timezone.utc)
-    await _sheet_csp(db, "1A972001", in_calling=True, status="Active",
-                     live=True, went_live=now - timedelta(days=80),
-                     origin="new")      # under 3 months: still New
-    await _sheet_csp(db, "1A972002", in_calling=True, status="Active",
-                     live=True, went_live=now - timedelta(days=100),
-                     origin="new")
-    await _sheet_csp(db, "1A972003", in_calling=True, status="Active",
-                     live=True, went_live=None)        # live before 21 Oct
-    await _sheet_csp(db, "1A972004", live=True, origin="new",
-                     went_live=now - timedelta(days=100))   # Lead only
-    await _sheet_csp(db, "1A972005", in_calling=True, status="Inactive",
-                     live=True, went_live=now - timedelta(days=100),
-                     origin="new")
-    await _sheet_csp(db, "1A972006", live=True)    # live before 21 Oct, Lead only
+    """The owner, 27 Nov 2026 (No. 274): New = the app's own new CSPs ("the
+    15 are correct"), for 3 months after the app added them; Existing =
+    every other Calling-sheet code, any status; each code once."""
+    await _sheet_csp(db, "1A974001", in_calling=True, status="Active",
+                     origin="new", added_days_ago=10)
+    await _sheet_csp(db, "1A974002", in_calling=True, status="Active",
+                     in_lead=True, origin="new", added_days_ago=80)
+    await _sheet_csp(db, "1A974003", in_calling=True, status="Active",
+                     live=True, origin="new", added_days_ago=100)  # > 3 months
+    await _sheet_csp(db, "1A974004", in_calling=True, status="Active")
+    await _sheet_csp(db, "1A974005", in_calling=True, status="Inactive")
+    await _sheet_csp(db, "1A974006", in_calling=True, status=None)
+    await _sheet_csp(db, "1A974007", in_calling=True, status="Active",
+                     live=True)                     # Go Live Done, not new
+    await _sheet_csp(db, "1A974008", in_lead=True)  # Lead only, not live
+    await _sheet_csp(db, "1A974009", live=True)     # Lead only, live before
+    db.add(CSPRecord(csp_id="1A974010", source_row_identifier="1A974010",
+                     origin="baseline", name="Only In Cspdata"))
     await db.commit()
 
-    async def ids(view):
-        body = (await client.get(f"/api/admin/csp-list?view={view}",
-                                 headers=admin_headers)).json()
-        return {c["csp_id"] for c in body["csps"]}
-
-    assert await ids("new") == {"1A972001", "1A972004"}
-    assert await ids("existing") == {"1A972002", "1A972003", "1A972006"}, \
-        "3 months after going live it is old; Inactive old ones not counted"
     totals = (await client.get("/api/admin/csp-metrics",
                                headers=admin_headers)).json()["totals"]
-    assert (totals["new"], totals["existing"]) == (2, 3)
+    assert (totals["csps"], totals["new"], totals["existing"]) == (7, 2, 5)
 
-    # No. 273: the TYPE in the list is the dashboard's, not the record's.
-    body = (await client.get("/api/admin/csp-list?view=existing",
-                             headers=admin_headers)).json()
-    assert {c["origin"] for c in body["csps"]} == {"baseline"}
-    body = (await client.get("/api/admin/csp-list?view=new",
-                             headers=admin_headers)).json()
-    assert {c["origin"] for c in body["csps"]} == {"new"}
+    async def listed(view):
+        body = (await client.get(f"/api/admin/csp-list?view={view}",
+                                 headers=admin_headers)).json()
+        return {c["csp_id"]: c["origin"] for c in body["csps"]}
+
+    assert await listed("new") == {"1A974001": "new", "1A974002": "new"}
+    assert await listed("existing") == {
+        c: "baseline" for c in ("1A974003", "1A974004", "1A974005",
+                                "1A974006", "1A974007")}, \
+        "the TYPE shown is the card's, not the record's"
+
+
+async def test_new_csps_stay_new_for_the_months_set(client, admin_headers, db,
+                                                    monkeypatch):
+    from app.config import get_settings
+    monkeypatch.setattr(get_settings(), "new_csp_months", 1)
+    await _sheet_csp(db, "1A974011", in_calling=True, status="Active",
+                     origin="new", added_days_ago=40)
+    await db.commit()
+    totals = (await client.get("/api/admin/csp-metrics",
+                               headers=admin_headers)).json()["totals"]
+    assert (totals["new"], totals["existing"]) == (0, 1)
 
 
 async def test_every_card_follows_the_day(client, admin_headers, db):
     from app.models.data_request import DataRequest
     now = datetime.now(timezone.utc)
     today = datetime.now(IST).date().isoformat()
-    await _sheet_csp(db, "1A972011", live=True, went_live=now, origin="new")
-    await _sheet_csp(db, "1A972012", live=True, origin="new",
-                     went_live=now - timedelta(days=3))
-    await _sheet_csp(db, "1A972013", in_calling=True, status="Active")
-    await _sheet_csp(db, "1A972014", in_calling=True, status="Active")
+    await _sheet_csp(db, "1A974021", in_calling=True, status="Active",
+                     origin="new", added_days_ago=0)
+    await _sheet_csp(db, "1A974022", in_calling=True, status="Active",
+                     origin="new", added_days_ago=3)
+    await _sheet_csp(db, "1A974023", in_calling=True, status="Active")
+    await _sheet_csp(db, "1A974024", in_calling=True, status="Inactive")
     await db.flush()
-    db.add(DataRequest(csp_id="1A972013", token_hash="t-272-a",
+    db.add(DataRequest(csp_id="1A974023", token_hash="t-274-a",
                        fields=["address"], status="answered",
                        expires_at=now + timedelta(days=3), answered_at=now,
                        answered_values={"address": "x"}))
-    db.add(DataRequest(csp_id="1A972014", token_hash="t-272-b",
+    db.add(DataRequest(csp_id="1A974024", token_hash="t-274-b",
                        fields=["address"], status="answered",
                        expires_at=now + timedelta(days=3),
                        answered_at=now - timedelta(days=3),
                        answered_values={"address": "x"}))
-    db.add(RMAlert(csp_id="1A972011", kind=MISSING_DATA, status=OPEN,
+    db.add(RMAlert(csp_id="1A974021", kind=MISSING_DATA, status=OPEN,
                    message="No photo", created_at=now))
-    db.add(RMAlert(csp_id="1A972012", kind=MISSING_DATA, status=OPEN,
+    db.add(RMAlert(csp_id="1A974022", kind=MISSING_DATA, status=OPEN,
                    message="No photo", created_at=now - timedelta(days=3)))
     await db.commit()
     try:
@@ -429,9 +394,9 @@ async def test_every_card_follows_the_day(client, admin_headers, db):
             body = (await client.get(f"/api/admin/csp-list?view={view}&{day}",
                                      headers=admin_headers)).json()
             return {c["csp_id"] for c in body["csps"]}
-        assert await ids("new") == {"1A972011"}
-        assert await ids("existing") == {"1A972013"}
-        assert await ids("awaiting_rm") == {"1A972011"}
+        assert await ids("new") == {"1A974021"}
+        assert await ids("existing") == {"1A974023"}
+        assert await ids("awaiting_rm") == {"1A974021"}
 
         all_days = (await client.get("/api/admin/csp-metrics",
                                      headers=admin_headers)).json()["totals"]
@@ -439,5 +404,5 @@ async def test_every_card_follows_the_day(client, admin_headers, db):
     finally:
         from sqlalchemy import text
         await db.execute(text("DELETE FROM data_requests WHERE token_hash "
-                              "IN ('t-272-a', 't-272-b')"))
+                              "IN ('t-274-a', 't-274-b')"))
         await db.commit()

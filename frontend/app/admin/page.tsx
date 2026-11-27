@@ -914,9 +914,9 @@ export default function AdminDashboard() {
                   {dateLabel && (
                     <span
                       className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
-                      title="New = went live that day · Existing = confirmed their details that day · Data Missing = raised that day · Documents = made that day"
+                      title="New = added as a new CSP that day · Existing = confirmed their details that day · Data Missing = raised that day · Documents = made that day"
                     >
-                      Day: {dateLabel} — New went live, Existing confirmed details, Data Missing raised, documents made
+                      Day: {dateLabel} — New added, Existing confirmed details, Data Missing raised, documents made
                     </span>
                   )}
                   {activeFilters.map(([key, value]) => (
